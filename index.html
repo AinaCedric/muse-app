@@ -87,6 +87,14 @@ dialog input{width:100%;margin:4px 0 12px}
 dialog label{font-size:14px;color:var(--mut)}
 dialog::backdrop{background:#000a}
 .hint{color:var(--mut);font-size:14px;margin-top:0}
+#plusWrap{position:relative;flex:none}
+#plusMenu{position:absolute;bottom:52px;left:0;background:var(--panel2);border:1px solid var(--bd);border-radius:14px;padding:6px;min-width:250px;box-shadow:0 10px 30px #000a;z-index:15}
+#plusMenu[hidden]{display:none}
+#plusMenu button{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;width:100%;text-align:left;background:none;border:0;border-radius:10px;padding:10px 12px}
+#plusMenu button:hover{background:var(--panel)}
+#plusMenu small{color:var(--mut);font-size:12px}
+#plusMenu p{margin:4px 12px 6px;font-size:12px;color:var(--mut)}
+#plusBtn{font-size:26px;line-height:1}
 @media(max-width:480px){.lbl{display:none}.ico{width:40px}}
 @media(max-width:760px){#side{position:fixed;inset:0 auto 0 0;transform:translateX(-100%)}#side.open{transform:none}#menu{display:block}}
 </style>
@@ -118,11 +126,21 @@ dialog::backdrop{background:#000a}
   <div id="msgs"></div>
   <div id="pending" hidden></div>
   <form id="f">
-    <button type="button" class="ghost ico" id="attBtn" title="Joindre une photo ou un fichier">📎</button>
-    <button type="button" class="ghost ico" id="camBtn" title="Prendre une photo">📷</button>
+    <div id="plusWrap">
+      <button type="button" class="ghost ico" id="plusBtn" title="Joindre des fichiers, photos ou un dossier">＋</button>
+      <div id="plusMenu" hidden>
+        <button type="button" id="optFile">📎 Fichiers <small>PDF, Word, Excel, code…</small></button>
+        <button type="button" id="optPhoto">🖼️ Photos</button>
+        <button type="button" id="optCam">📷 Appareil photo</button>
+        <button type="button" id="optDir">📁 Dossier <small>envoyé en .zip</small></button>
+        <p>Sur téléphone : compresse ton dossier en .zip puis choisis « Fichiers ».</p>
+      </div>
+    </div>
     <textarea id="in" rows="1" placeholder="Écris à Muse…"></textarea>
     <button class="btn" id="send"><span class="lbl">Envoyer </span>🚀</button>
-    <input type="file" id="fileIn" multiple hidden accept="image/*,application/pdf,text/*,.md,.csv,.tsv,.json,.js,.mjs,.ts,.tsx,.jsx,.py,.xml,.html,.css,.sql,.log,.yml,.yaml,.sh,.php,.java,.c,.cpp,.cs,.go,.rs,.ini,.conf">
+    <input type="file" id="fileIn" multiple hidden>
+    <input type="file" id="photoIn" multiple hidden accept="image/*">
+    <input type="file" id="dirIn" hidden webkitdirectory multiple>
     <input type="file" id="camIn" hidden accept="image/*" capture="environment">
   </form>
 </main>
@@ -148,6 +166,7 @@ dialog::backdrop{background:#000a}
     <button class="ghost" id="memCancel" type="button">Fermer</button><button class="btn" id="memSave" type="button">Enregistrer</button>
   </div>
 </dialog>
+<script src="./vendor/jszip.min.js"></script>
 <script src="./vendor/three.min.js"></script>
 <script src="./avatar.js"></script>
 <script src="./app.js"></script>

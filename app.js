@@ -131,8 +131,57 @@ async function send() {
 }
 
 // ---- Pièces jointes
-const MAX_FILES = 5, MAX_IMG = 4.5e6, MAX_FILE = 10e6;
-const OK_EXT = /\.(jpe?g|png|webp|gif|pdf|txt|md|csv|tsv|json|js|mjs|ts|tsx|jsx|py|xml|html|css|sql|log|ya?ml|sh|php|java|c|cpp|cs|go|rs|ini|conf)$/i;
+const MAX_FILES = 5, MAX_IMG = 4.5e6, MAX_FILE = 20e6, ZIP_ENTRY = 8e6;
+const ZIP_IGNORE = /(^|\/)(node_modules|\.git|\.venv|venv|__pycache__|dist|build|\.next|\.cache|\.idea|\.vscode|__MACOSX|\.DS_Store)(\/|$)/i;
+const ZIP_SECRET = /(^|\/)(\.env(\.[^/]*)?|id_rsa[^/]*|[^/]*\.(pem|key|p12|pfx|kdbx))$/i;
+const iconOf = (name, kind) => {
+  if (kind === 'img') return '🖼️';
+  const e = (name.match(/\.(\w+)$/) || [])[1]?.toLowerCase() || '';
+  if (e === 'pdf') return '📕';
+  if (/^docx?$/.test(e)) return '📝';
+  if (/^(xlsx?|ods|csv|tsv)$/.test(e)) return '📊';
+  if (/^pptx?$/.test(e)) return '📽️';
+  if (e === 'zip') return '📦';
+  if (/^(js|mjs|ts|tsx|jsx|py|php|java|c|cpp|cs|go|rs|sh|sql|html|css|json|xml|ya?ml)$/.test(e)) return '💻';
+  return '📄';
+};
+// Dossier -> .zip (dans le navigateur) ; items = [{ path, file }]
+async function zipFolder(items) {
+  if (!window.JSZip) { toast('⚠️ Module dossier indisponible, recharge la page'); return null; }
+  const root = (items[0]?.path.split('/')[0]) || 'dossier';
+  const z = new JSZip(); let n = 0, skipped = 0, total = 0;
+  for (const { path, file } of items) {
+    if (ZIP_IGNORE.test(path) || ZIP_SECRET.test(path) && !/\.example$/i.test(path)) { skipped++; continue; }
+    if (file.size > ZIP_ENTRY || total + file.size > MAX_FILE) { skipped++; continue; }
+    z.file(path, file); n++; total += file.size;
+  }
+  if (!n) { toast('📁 Aucun fichier utilisable dans ce dossier'); return null; }
+  const blob = await z.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  toast(`📁 « ${root} » : ${n} fichiers${skipped ? ` (${skipped} ignorés : node_modules, secrets, gros fichiers…)` : ''}`);
+  return new File([blob], safeName(root) + '.zip', { type: 'application/zip' });
+}
+async function addFolder(fileList) {
+  const items = [...fileList].map((f) => ({ path: f.webkitRelativePath || f.name, file: f }));
+  if (!items.length) return;
+  const zf = await zipFolder(items); if (zf) addFiles([zf]);
+}
+async function readEntry(en, base = '') {
+  if (en.isFile) return [await new Promise((ok, ko) => en.file((f) => ok({ path: base + en.name, file: f }), ko))];
+  if (!en.isDirectory || ZIP_IGNORE.test(base + en.name + '/')) return [];
+  const rd = en.createReader(), out = [];
+  for (;;) { const batch = await new Promise((ok, ko) => rd.readEntries(ok, ko)); if (!batch.length) break; for (const c of batch) { out.push(...await readEntry(c, base + en.name + '/')); if (out.length > 3000) return out; } }
+  return out;
+}
+async function handleDrop(dt) {
+  const entries = [...(dt.items || [])].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
+  if (!entries.some((e) => e.isDirectory)) { addFiles(dt.files); return; }
+  const loose = [];
+  for (const en of entries) {
+    if (en.isDirectory) { const zf = await zipFolder(await readEntry(en)); if (zf) loose.push(zf); }
+    else loose.push(await new Promise((ok) => en.file(ok)));
+  }
+  addFiles(loose);
+}
 let pending = []; // { name, type, blob, url, kind }
 const blobCache = new Map();
 const safeName = (n) => (n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.\-]+/g, '_').replace(/^\.+/, '').slice(-60)) || 'fichier';
@@ -154,9 +203,8 @@ async function addFiles(list) {
   for (const f0 of [...list]) {
     if (pending.length >= MAX_FILES) { toast(`📎 Maximum ${MAX_FILES} fichiers par message`); break; }
     const isImg = /^image\//i.test(f0.type) || /\.(jpe?g|png|webp|gif)$/i.test(f0.name);
-    if (!isImg && !OK_EXT.test(f0.name)) { toast(`📎 Format non pris en charge : ${f0.name}`); continue; }
     const f = isImg ? await shrink(f0) : f0;
-    if (f.size > (isImg ? MAX_IMG : MAX_FILE)) { toast(`📎 « ${f0.name} » est trop lourd (${fmtSize(f.size)})`); continue; }
+    if (f.size > (isImg ? MAX_IMG : MAX_FILE)) { toast(`📎 « ${f0.name} » est trop lourd (${fmtSize(f.size)}, max ${isImg ? '4,5' : '20'} Mo)`); continue; }
     pending.push({ name: label(f.name || f0.name || 'photo.jpg'), type: f.type || 'application/octet-stream', blob: f, url: URL.createObjectURL(f), kind: isImg ? 'img' : 'file' });
   }
   renderPending();
@@ -165,7 +213,7 @@ function renderPending() {
   const box = $('#pending'); box.innerHTML = ''; box.hidden = !pending.length;
   pending.forEach((p, i) => {
     const d = document.createElement('div'); d.className = 'pchip';
-    d.innerHTML = (p.kind === 'img' ? `<img src="${p.url}" alt="">` : `<span class="pfile">📄 ${esc(p.name)}<small>${fmtSize(p.blob.size)}</small></span>`) + '<button type="button" title="Retirer">✕</button>';
+    d.innerHTML = (p.kind === 'img' ? `<img src="${p.url}" alt="">` : `<span class="pfile">${iconOf(p.name)} ${esc(p.name)}<small>${fmtSize(p.blob.size)}</small></span>`) + '<button type="button" title="Retirer">✕</button>';
     d.querySelector('button').onclick = () => { URL.revokeObjectURL(p.url); pending.splice(i, 1); renderPending(); };
     box.appendChild(d);
   });
@@ -199,7 +247,7 @@ function addUser(text, atts = []) {
         const im = document.createElement('img'); im.alt = a.name; im.title = a.name; im.onclick = open; box.appendChild(im);
         if (a.url) im.src = a.url; else fetchBlob(a.path).then((u) => (im.src = u)).catch(() => { im.replaceWith(Object.assign(document.createElement('span'), { className: 'fchip', textContent: '🖼️ ' + a.name })); });
       } else {
-        const s = document.createElement('span'); s.className = 'fchip'; s.textContent = '📄 ' + a.name; s.onclick = open; box.appendChild(s);
+        const s = document.createElement('span'); s.className = 'fchip'; s.textContent = iconOf(a.name) + ' ' + a.name; s.onclick = open; box.appendChild(s);
       }
     });
     d.appendChild(box);
@@ -241,11 +289,19 @@ $('#memSave').onclick = async () => {
 };
 
 // ---- Divers
-$('#attBtn').onclick = () => $('#fileIn').click();
-$('#camBtn').onclick = () => $('#camIn').click();
-['#fileIn', '#camIn'].forEach((id) => { $(id).onchange = (e) => { addFiles(e.target.files); e.target.value = ''; }; });
+const pop = $('#plusMenu');
+const closePop = () => { pop.hidden = true; };
+$('#plusBtn').onclick = (e) => { e.stopPropagation(); pop.hidden = !pop.hidden; };
+document.addEventListener('click', (e) => { if (!pop.hidden && !pop.contains(e.target)) closePop(); });
+if (/Android|iPhone|iPad/i.test(navigator.userAgent)) $('#optDir').hidden = true; // pas de sélecteur de dossier sur mobile : zipper
+$('#optFile').onclick = () => { closePop(); $('#fileIn').click(); };
+$('#optPhoto').onclick = () => { closePop(); $('#photoIn').click(); };
+$('#optCam').onclick = () => { closePop(); $('#camIn').click(); };
+$('#optDir').onclick = () => { closePop(); $('#dirIn').click(); };
+['#fileIn', '#photoIn', '#camIn'].forEach((id) => { $(id).onchange = (e) => { addFiles(e.target.files); e.target.value = ''; }; });
+$('#dirIn').onchange = (e) => { addFolder(e.target.files); e.target.value = ''; };
 document.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
-document.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); addFiles(e.dataTransfer.files); } });
+document.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length || e.dataTransfer?.items?.length) { e.preventDefault(); handleDrop(e.dataTransfer); } });
 input.addEventListener('paste', (e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
 $('#f').onsubmit = (e) => { e.preventDefault(); send(); };
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !/Android|iPhone|iPad/i.test(navigator.userAgent)) { e.preventDefault(); send(); } });
