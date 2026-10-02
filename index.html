@@ -65,9 +65,21 @@ select,input{background:var(--panel2);color:var(--txt);border:1px solid var(--bd
 #empty{margin:auto;text-align:center;color:var(--mut);padding:0 12px}
 #empty h1{font-size:34px;margin:0 0 6px;background:linear-gradient(135deg,var(--acc),var(--acc2));-webkit-background-clip:text;color:transparent}
 .chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px}
-form{display:flex;gap:10px;padding:12px 14px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--bd)}
+form{display:flex;align-items:flex-end;gap:8px;padding:12px 14px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--bd)}
 textarea{flex:1;resize:none;max-height:180px;background:var(--panel);color:var(--txt);border:1px solid var(--bd);border-radius:14px;padding:12px 14px;font:inherit;outline:none}
 textarea:focus,input:focus{border-color:var(--acc);outline:none}
+.ico{width:44px;height:44px;padding:0;font-size:20px;flex:none;border-radius:12px}
+#pending{display:flex;gap:8px;padding:8px 14px 0;overflow-x:auto}
+#pending[hidden]{display:none}
+.pchip{position:relative;flex:none}
+.pchip img{height:60px;width:60px;object-fit:cover;border-radius:10px;border:1px solid var(--bd);display:block}
+.pchip .pfile{display:flex;flex-direction:column;justify-content:center;height:60px;max-width:160px;padding:0 12px;background:var(--panel2);border:1px solid var(--bd);border-radius:10px;font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pchip .pfile small{color:var(--mut)}
+.pchip button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid var(--bd);background:var(--bg);color:var(--txt);font-size:11px;line-height:1;padding:0}
+.atts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:flex-start}
+.m.user:has(.atts){white-space:normal}
+.atts img{max-width:200px;max-height:200px;min-width:60px;min-height:60px;border-radius:12px;cursor:pointer;background:#0003;object-fit:cover}
+.fchip{background:#0003;border-radius:10px;padding:6px 10px;font-size:14px;cursor:pointer}
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--acc);padding:8px 14px;border-radius:12px;font-size:14px;z-index:20}
 dialog{background:var(--panel);color:var(--txt);border:1px solid var(--bd);border-radius:16px;width:min(560px,92vw)}
 dialog textarea{width:100%;height:260px}
@@ -75,6 +87,7 @@ dialog input{width:100%;margin:4px 0 12px}
 dialog label{font-size:14px;color:var(--mut)}
 dialog::backdrop{background:#000a}
 .hint{color:var(--mut);font-size:14px;margin-top:0}
+@media(max-width:480px){.lbl{display:none}.ico{width:40px}}
 @media(max-width:760px){#side{position:fixed;inset:0 auto 0 0;transform:translateX(-100%)}#side.open{transform:none}#menu{display:block}}
 </style>
 </head>
@@ -103,9 +116,14 @@ dialog::backdrop{background:#000a}
     <div></div>
   </div>
   <div id="msgs"></div>
+  <div id="pending" hidden></div>
   <form id="f">
+    <button type="button" class="ghost ico" id="attBtn" title="Joindre une photo ou un fichier">📎</button>
+    <button type="button" class="ghost ico" id="camBtn" title="Prendre une photo">📷</button>
     <textarea id="in" rows="1" placeholder="Écris à Muse…"></textarea>
-    <button class="btn" id="send">Envoyer 🚀</button>
+    <button class="btn" id="send"><span class="lbl">Envoyer </span>🚀</button>
+    <input type="file" id="fileIn" multiple hidden accept="image/*,application/pdf,text/*,.md,.csv,.tsv,.json,.js,.mjs,.ts,.tsx,.jsx,.py,.xml,.html,.css,.sql,.log,.yml,.yaml,.sh,.php,.java,.c,.cpp,.cs,.go,.rs,.ini,.conf">
+    <input type="file" id="camIn" hidden accept="image/*" capture="environment">
   </form>
 </main>
 

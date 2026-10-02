@@ -70,7 +70,8 @@ async function fetchComments(n, since) {
 function show(c) {
   if (c.body.includes(REPLY)) return add('bot', strip(c.body));
   if (c.body.includes(ERROR)) return add('bot', strip(c.body), 'err');
-  return add('user', strip(c.body));
+  const atts = [...c.body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)-->/g)].map((m) => ({ path: m[1].trim(), name: m[2].trim(), type: m[3].trim() }));
+  return addUser(strip(c.body), atts);
 }
 
 async function openConv(n) {
@@ -108,17 +109,102 @@ async function wait(n, since) {
 }
 
 async function send() {
-  const message = input.value.trim(); if (!message || busy || !need()) return;
+  const message = input.value.trim();
+  if ((!message && !pending.length) || busy || !need()) return;
+  const files = pending.splice(0); renderPending();
   input.value = ''; input.style.height = 'auto'; busy = true; $('#send').disabled = true;
   try {
     if (!issueNo) {
-      const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: message.slice(0, 60), body: '💬 Discussion Muse' }) });
+      const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: (message || '📎 ' + files[0].name).slice(0, 60), body: '💬 Discussion Muse' }) });
       issueNo = i.number; msgs.innerHTML = '';
     }
-    add('user', message);
-    const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message}\n\n<!--mode:${modeSel.value}-->` }) });
+    addUser(message, files.map((f) => ({ name: f.name, type: f.type, url: f.url })));
+    let markers = '';
+    if (files.length) {
+      const up = add('bot', '📤 Envoi des pièces jointes…', 'wait');
+      markers = await upload(issueNo, files, (k) => { up.textContent = `📤 Envoi des pièces jointes… ${k}/${files.length}`; });
+      up.remove();
+    }
+    const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->` }) });
     wait(issueNo, c.created_at);
   } catch (e) { add('bot', '⚠️ ' + e.message, 'err'); busy = false; $('#send').disabled = false; avatar('sad'); }
+}
+
+// ---- Pièces jointes
+const MAX_FILES = 5, MAX_IMG = 4.5e6, MAX_FILE = 10e6;
+const OK_EXT = /\.(jpe?g|png|webp|gif|pdf|txt|md|csv|tsv|json|js|mjs|ts|tsx|jsx|py|xml|html|css|sql|log|ya?ml|sh|php|java|c|cpp|cs|go|rs|ini|conf)$/i;
+let pending = []; // { name, type, blob, url, kind }
+const blobCache = new Map();
+const safeName = (n) => (n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.\-]+/g, '_').replace(/^\.+/, '').slice(-60)) || 'fichier';
+const label = (n) => n.replace(/[|<>\r\n]+/g, ' ').trim().slice(0, 80) || 'fichier';
+const fmtSize = (n) => (n > 1e6 ? (n / 1e6).toFixed(1) + ' Mo' : Math.max(1, Math.round(n / 1e3)) + ' Ko');
+
+async function shrink(file) {
+  if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) return file; // gif / autres : tel quel
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+    return blob ? new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
+  } catch { return file; }
+}
+async function addFiles(list) {
+  for (const f0 of [...list]) {
+    if (pending.length >= MAX_FILES) { toast(`📎 Maximum ${MAX_FILES} fichiers par message`); break; }
+    const isImg = /^image\//i.test(f0.type) || /\.(jpe?g|png|webp|gif)$/i.test(f0.name);
+    if (!isImg && !OK_EXT.test(f0.name)) { toast(`📎 Format non pris en charge : ${f0.name}`); continue; }
+    const f = isImg ? await shrink(f0) : f0;
+    if (f.size > (isImg ? MAX_IMG : MAX_FILE)) { toast(`📎 « ${f0.name} » est trop lourd (${fmtSize(f.size)})`); continue; }
+    pending.push({ name: label(f.name || f0.name || 'photo.jpg'), type: f.type || 'application/octet-stream', blob: f, url: URL.createObjectURL(f), kind: isImg ? 'img' : 'file' });
+  }
+  renderPending();
+}
+function renderPending() {
+  const box = $('#pending'); box.innerHTML = ''; box.hidden = !pending.length;
+  pending.forEach((p, i) => {
+    const d = document.createElement('div'); d.className = 'pchip';
+    d.innerHTML = (p.kind === 'img' ? `<img src="${p.url}" alt="">` : `<span class="pfile">📄 ${esc(p.name)}<small>${fmtSize(p.blob.size)}</small></span>`) + '<button type="button" title="Retirer">✕</button>';
+    d.querySelector('button').onclick = () => { URL.revokeObjectURL(p.url); pending.splice(i, 1); renderPending(); };
+    box.appendChild(d);
+  });
+}
+const toB64 = (blob) => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = ko; r.readAsDataURL(blob); });
+async function upload(n, files, progress) {
+  let markers = '';
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i], p = `uploads/${n}/${Date.now()}-${i}-${safeName(f.name)}`;
+    await gh(`/repos/${cfg.repo}/contents/${p}`, { method: 'PUT', body: JSON.stringify({ message: '📎 pièce jointe', content: await toB64(f.blob) }) });
+    markers += `\n<!--att:${p}|${label(f.name)}|${f.type}-->`;
+    progress(i + 1);
+  }
+  return markers;
+}
+async function fetchBlob(p) {
+  if (blobCache.has(p)) return blobCache.get(p);
+  const r = await fetch(`${API}/repos/${cfg.repo}/contents/${p.split('/').map(encodeURIComponent).join('/')}`, { headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github.raw+json' } });
+  if (!r.ok) throw new Error('GitHub ' + r.status);
+  const url = URL.createObjectURL(await r.blob()); blobCache.set(p, url); return url;
+}
+function addUser(text, atts = []) {
+  const d = add('user', text);
+  if (!text) d.innerHTML = '';
+  if (atts.length) {
+    const box = document.createElement('div'); box.className = 'atts';
+    atts.forEach((a) => {
+      const isImg = /^image\//i.test(a.type) || /\.(jpe?g|png|webp|gif)$/i.test(a.name);
+      const open = async () => { try { const u = a.url || await fetchBlob(a.path); window.open(u, '_blank'); } catch { toast('⚠️ Fichier introuvable'); } };
+      if (isImg) {
+        const im = document.createElement('img'); im.alt = a.name; im.title = a.name; im.onclick = open; box.appendChild(im);
+        if (a.url) im.src = a.url; else fetchBlob(a.path).then((u) => (im.src = u)).catch(() => { im.replaceWith(Object.assign(document.createElement('span'), { className: 'fchip', textContent: '🖼️ ' + a.name })); });
+      } else {
+        const s = document.createElement('span'); s.className = 'fchip'; s.textContent = '📄 ' + a.name; s.onclick = open; box.appendChild(s);
+      }
+    });
+    d.appendChild(box);
+  }
+  msgs.scrollTop = msgs.scrollHeight; return d;
 }
 
 // ---- Réglages
@@ -155,6 +241,12 @@ $('#memSave').onclick = async () => {
 };
 
 // ---- Divers
+$('#attBtn').onclick = () => $('#fileIn').click();
+$('#camBtn').onclick = () => $('#camIn').click();
+['#fileIn', '#camIn'].forEach((id) => { $(id).onchange = (e) => { addFiles(e.target.files); e.target.value = ''; }; });
+document.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
+document.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); addFiles(e.dataTransfer.files); } });
+input.addEventListener('paste', (e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
 $('#f').onsubmit = (e) => { e.preventDefault(); send(); };
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !/Android|iPhone|iPad/i.test(navigator.userAgent)) { e.preventDefault(); send(); } });
 input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; });
