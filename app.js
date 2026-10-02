@@ -20,6 +20,7 @@ function add(role, text, cls = '') {
   d.className = `m ${role} ${cls}`; d.innerHTML = render(text);
   msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d;
 }
+const avatar = (s) => { try { window.MuseAvatar && window.MuseAvatar.setState(s); } catch {} };
 const toast = (t) => { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2800); };
 
 async function gh(path, opts = {}) {
@@ -74,7 +75,7 @@ function show(c) {
 
 async function openConv(n) {
   if (!need()) return;
-  pollId++; busy = false; issueNo = n; msgs.innerHTML = ''; $('#side').classList.remove('open');
+  pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = n; msgs.innerHTML = ''; $('#side').classList.remove('open');
   try {
     const cs = await fetchComments(n);
     cs.forEach(show);
@@ -86,10 +87,10 @@ async function openConv(n) {
   } catch (e) { add('bot', '⚠️ ' + e.message, 'err'); }
   loadList();
 }
-function newChat() { pollId++; busy = false; issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
+function newChat() { pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
 
 async function wait(n, since) {
-  const my = ++pollId; busy = true; $('#send').disabled = true;
+  const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
   const bubble = add('bot', '🧠 Muse réfléchit…', 'wait'); const t0 = Date.now();
   while (my === pollId && Date.now() - t0 < 5 * 60 * 1000) {
     await new Promise((r) => setTimeout(r, 3000));
@@ -97,11 +98,11 @@ async function wait(n, since) {
     bubble.textContent = `🧠 Muse réfléchit… ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
       const cs = (await fetchComments(n, since)).filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
-      if (cs.length) { bubble.remove(); cs.forEach(show); break; }
+      if (cs.length) { bubble.remove(); cs.forEach(show); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }
   if (my === pollId) {
-    if (Date.now() - t0 >= 5 * 60 * 1000) { bubble.className = 'm bot err'; bubble.textContent = '⏳ Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; }
+    if (Date.now() - t0 >= 5 * 60 * 1000) { bubble.className = 'm bot err'; bubble.textContent = '⏳ Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
     busy = false; $('#send').disabled = false; loadList();
   }
 }
@@ -117,7 +118,7 @@ async function send() {
     add('user', message);
     const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message}\n\n<!--mode:${modeSel.value}-->` }) });
     wait(issueNo, c.created_at);
-  } catch (e) { add('bot', '⚠️ ' + e.message, 'err'); busy = false; $('#send').disabled = false; }
+  } catch (e) { add('bot', '⚠️ ' + e.message, 'err'); busy = false; $('#send').disabled = false; avatar('sad'); }
 }
 
 // ---- Réglages
