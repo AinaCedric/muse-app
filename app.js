@@ -25,6 +25,7 @@ const toast = (t) => { const d = document.createElement('div'); d.className = 't
 
 async function gh(path, opts = {}) {
   const r = await fetch(API + path, {
+    cache: 'no-store', // GitHub impose max-age=60 : sans ça, la réponse de Muse n'apparaît qu'après 60 s
     ...opts,
     headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
   });
