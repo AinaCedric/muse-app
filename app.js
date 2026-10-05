@@ -94,7 +94,7 @@ async function wait(n, since) {
   const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
   const bubble = add('bot', '🧠 Muse réfléchit…', 'wait'); const t0 = Date.now();
   while (my === pollId && Date.now() - t0 < 5 * 60 * 1000) {
-    await new Promise((r) => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, 2000));
     if (my !== pollId) return;
     bubble.textContent = `🧠 Muse réfléchit… ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
