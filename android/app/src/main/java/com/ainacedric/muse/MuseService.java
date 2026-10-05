@@ -1,6 +1,7 @@
 package com.ainacedric.muse;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityButtonController;
 import android.accessibilityservice.GestureDescription;
 import android.app.KeyguardManager;
 import android.app.Notification;
@@ -60,6 +61,13 @@ public class MuseService extends AccessibilityService {
         try {
             startForegroundService(new Intent(this, KeepAlive.class));
         } catch (Throwable ignore) { }
+        // Bouton flottant d'accessibilité (la petite bulle Muse) : un toucher ouvre le chat Muse (le PWA).
+        try {
+            getAccessibilityButtonController().registerAccessibilityButtonCallback(new AccessibilityButtonController.AccessibilityButtonCallback() {
+                @Override
+                public void onClicked(AccessibilityButtonController c) { Chat.open(MuseService.this); }
+            });
+        } catch (Throwable t) { Bus.log("Bouton d'accessibilité : " + t.getMessage()); }
     }
 
     @Override

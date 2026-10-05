@@ -136,6 +136,11 @@ public class MainActivity extends Activity {
             }
         }));
 
+        root.addView(button("💬  Ouvrir le chat Muse", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { Chat.open(MainActivity.this); }
+        }));
+
         // Test + pause
         sTest = text("", 15, true, Color.parseColor("#1a1a2e"));
         LinearLayout.LayoutParams tl = (LinearLayout.LayoutParams) sTest.getLayoutParams();
