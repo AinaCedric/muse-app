@@ -79,6 +79,7 @@ textarea:focus,input:focus{border-color:var(--acc);outline:none}
 .atts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:flex-start}
 .m.user:has(.atts){white-space:normal}
 .atts img{max-width:200px;max-height:200px;min-width:60px;min-height:60px;border-radius:12px;cursor:pointer;background:#0003;object-fit:cover}
+.m.bot .atts img{max-width:min(420px,100%);max-height:320px}
 .fchip{background:#0003;border-radius:10px;padding:6px 10px;font-size:14px;cursor:pointer}
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--acc);padding:8px 14px;border-radius:12px;font-size:14px;z-index:20}
 dialog{background:var(--panel);color:var(--txt);border:1px solid var(--bd);border-radius:16px;width:min(560px,92vw)}
@@ -115,6 +116,7 @@ dialog::backdrop{background:#000a}
         <option value="compagnon">💬 Compagnon</option>
         <option value="creatif">🎨 Création (GYOO)</option>
         <option value="dev">💻 Dev / Odoo</option>
+        <option value="ordi">🖥️ Ordinateur (navigateur + code)</option>
       </select>
     </div>
     <div id="who" data-state="idle">

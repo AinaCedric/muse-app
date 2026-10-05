@@ -68,11 +68,11 @@ async function fetchComments(n, since) {
   }
   return out;
 }
+const attsIn = (body) => [...body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)-->/g)].map((m) => ({ path: m[1].trim(), name: m[2].trim(), type: m[3].trim() }));
 function show(c) {
-  if (c.body.includes(REPLY)) return add('bot', strip(c.body));
+  if (c.body.includes(REPLY)) { const d = add('bot', strip(c.body)); const a = attsIn(c.body); if (a.length) { d.appendChild(attsBox(a)); d.classList.add('hasAtts'); } return d; }
   if (c.body.includes(ERROR)) return add('bot', strip(c.body), 'err');
-  const atts = [...c.body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)-->/g)].map((m) => ({ path: m[1].trim(), name: m[2].trim(), type: m[3].trim() }));
-  return addUser(strip(c.body), atts);
+  return addUser(strip(c.body), attsIn(c.body));
 }
 
 async function openConv(n) {
@@ -85,7 +85,7 @@ async function openConv(n) {
     if (mode) modeSel.value = mode;
     const last = cs[cs.length - 1];
     // Une réponse est peut-être encore en préparation : on reprend l'attente.
-    if (last && !last.body.includes(REPLY) && !last.body.includes(ERROR) && Date.now() - new Date(last.created_at) < 10 * 60 * 1000) wait(n, last.created_at);
+    if (last && !last.body.includes(REPLY) && !last.body.includes(ERROR) && Date.now() - new Date(last.created_at) < 20 * 60 * 1000) wait(n, last.created_at);
   } catch (e) { add('bot', '⚠️ ' + e.message, 'err'); }
   loadList();
 }
@@ -93,18 +93,19 @@ function newChat() { pollId++; busy = false; $('#send').disabled = false; avatar
 
 async function wait(n, since) {
   const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
-  const bubble = add('bot', '🧠 Muse réfléchit…', 'wait'); const t0 = Date.now();
-  while (my === pollId && Date.now() - t0 < 5 * 60 * 1000) {
+  const ordi = modeSel.value === 'ordi', MAXW = (ordi ? 18 : 5) * 60 * 1000, label = ordi ? '🖥️ Muse travaille sur son ordinateur…' : '🧠 Muse réfléchit…';
+  const bubble = add('bot', label, 'wait'); const t0 = Date.now();
+  while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
     if (my !== pollId) return;
-    bubble.textContent = `🧠 Muse réfléchit… ${Math.round((Date.now() - t0) / 1000)} s`;
+    bubble.textContent = `${label} ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
       const cs = (await fetchComments(n, since)).filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
       if (cs.length) { bubble.remove(); cs.forEach(show); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }
   if (my === pollId) {
-    if (Date.now() - t0 >= 5 * 60 * 1000) { bubble.className = 'm bot err'; bubble.textContent = '⏳ Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
+    if (Date.now() - t0 >= MAXW) { bubble.className = 'm bot err'; bubble.textContent = '⏳ Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
     busy = false; $('#send').disabled = false; loadList();
   }
 }
@@ -236,23 +237,30 @@ async function fetchBlob(p) {
   if (!r.ok) throw new Error('GitHub ' + r.status);
   const url = URL.createObjectURL(await r.blob()); blobCache.set(p, url); return url;
 }
+function attsBox(atts) {
+  const box = document.createElement('div'); box.className = 'atts';
+  atts.forEach((a) => {
+    const isImg = /^image\//i.test(a.type) || /\.(jpe?g|png|webp|gif)$/i.test(a.name);
+    const open = async () => {
+      try {
+        const u = a.url || await fetchBlob(a.path);
+        if (isImg) window.open(u, '_blank');
+        else { const l = document.createElement('a'); l.href = u; l.download = a.name.split('/').pop(); document.body.appendChild(l); l.click(); l.remove(); }
+      } catch { toast('⚠️ Fichier introuvable'); }
+    };
+    if (isImg) {
+      const im = document.createElement('img'); im.alt = a.name; im.title = a.name; im.onclick = open; box.appendChild(im);
+      if (a.url) im.src = a.url; else fetchBlob(a.path).then((u) => (im.src = u)).catch(() => { im.replaceWith(Object.assign(document.createElement('span'), { className: 'fchip', textContent: '🖼️ ' + a.name })); });
+    } else {
+      const s = document.createElement('span'); s.className = 'fchip'; s.textContent = iconOf(a.name) + ' ' + a.name + ' ⬇'; s.title = 'Télécharger'; s.onclick = open; box.appendChild(s);
+    }
+  });
+  return box;
+}
 function addUser(text, atts = []) {
   const d = add('user', text);
   if (!text) d.innerHTML = '';
-  if (atts.length) {
-    const box = document.createElement('div'); box.className = 'atts';
-    atts.forEach((a) => {
-      const isImg = /^image\//i.test(a.type) || /\.(jpe?g|png|webp|gif)$/i.test(a.name);
-      const open = async () => { try { const u = a.url || await fetchBlob(a.path); window.open(u, '_blank'); } catch { toast('⚠️ Fichier introuvable'); } };
-      if (isImg) {
-        const im = document.createElement('img'); im.alt = a.name; im.title = a.name; im.onclick = open; box.appendChild(im);
-        if (a.url) im.src = a.url; else fetchBlob(a.path).then((u) => (im.src = u)).catch(() => { im.replaceWith(Object.assign(document.createElement('span'), { className: 'fchip', textContent: '🖼️ ' + a.name })); });
-      } else {
-        const s = document.createElement('span'); s.className = 'fchip'; s.textContent = iconOf(a.name) + ' ' + a.name; s.onclick = open; box.appendChild(s);
-      }
-    });
-    d.appendChild(box);
-  }
+  if (atts.length) d.appendChild(attsBox(atts));
   msgs.scrollTop = msgs.scrollHeight; return d;
 }
 
