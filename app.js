@@ -70,7 +70,12 @@ async function fetchComments(n, since) {
 }
 const attsIn = (body) => [...body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)-->/g)].map((m) => ({ path: m[1].trim(), name: m[2].trim(), type: m[3].trim() }));
 function show(c) {
-  if (c.body.includes(REPLY)) { const d = add('bot', strip(c.body)); const a = attsIn(c.body); if (a.length) { d.appendChild(attsBox(a)); d.classList.add('hasAtts'); } return d; }
+  if (c.body.includes(REPLY)) { const d = add('bot', strip(c.body));
+    if (/Code de confirmation\s*:\s*[0-9a-f]{6}/i.test(c.body)) { // boutons de validation humaine
+      const row = document.createElement('div'); row.className = 'confirm';
+      const mk = (label, cls, text) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost ' + cls; b.textContent = label; b.onclick = () => { row.remove(); input.value = text; send(); }; row.appendChild(b); };
+      mk('✅ OUI, confirme', 'yes', 'OUI'); mk('❌ Non, annule', 'no', 'Non, annule'); d.appendChild(row);
+    } const a = attsIn(c.body); if (a.length) { d.appendChild(attsBox(a)); d.classList.add('hasAtts'); } return d; }
   if (c.body.includes(ERROR)) return add('bot', strip(c.body), 'err');
   return addUser(strip(c.body), attsIn(c.body));
 }
@@ -93,7 +98,7 @@ function newChat() { pollId++; busy = false; $('#send').disabled = false; avatar
 
 async function wait(n, since) {
   const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
-  const ordi = modeSel.value === 'ordi', MAXW = (ordi ? 18 : 5) * 60 * 1000, label = ordi ? '🖥️ Muse travaille sur son ordinateur…' : '🧠 Muse réfléchit…';
+  const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', MAXW = (ordi ? 18 : 5) * 60 * 1000, label = ordi ? '🖥️ Muse travaille sur son ordinateur…' : perso ? '📬 Muse consulte tes outils…' : '🧠 Muse réfléchit…';
   const bubble = add('bot', label, 'wait'); const t0 = Date.now();
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
