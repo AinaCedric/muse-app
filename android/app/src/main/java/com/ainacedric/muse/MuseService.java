@@ -18,7 +18,11 @@ import android.graphics.Rect;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
+import android.graphics.PixelFormat;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.View;
 import android.os.PowerManager;
 import android.util.Base64;
 import android.util.DisplayMetrics;
@@ -65,9 +69,37 @@ public class MuseService extends AccessibilityService {
         try {
             getAccessibilityButtonController().registerAccessibilityButtonCallback(new AccessibilityButtonController.AccessibilityButtonCallback() {
                 @Override
-                public void onClicked(AccessibilityButtonController c) { Chat.open(MuseService.this); }
+                public void onClicked(AccessibilityButtonController c) { openChat(); }
             });
         } catch (Throwable t) { Bus.log("Bouton d'accessibilité : " + t.getMessage()); }
+    }
+
+    /**
+     * Ouvre le chat Muse depuis n'importe où. Android (et surtout MIUI) bloque l'ouverture d'une appli depuis l'arrière-plan,
+     * sauf si l'appli a une fenêtre visible : on pose donc une fenêtre invisible de 1 pixel (calque d'accessibilité) pendant l'ouverture.
+     */
+    private void openChat() {
+        Bus.log("Bulle touchée : ouverture du chat");
+        final WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+        final View v = new View(this);
+        boolean added = false;
+        try {
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(1, 1,
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    PixelFormat.TRANSLUCENT);
+            wm.addView(v, lp);
+            added = true;
+        } catch (Throwable t) {
+            Bus.log("Calque invisible impossible : " + t.getMessage());
+        }
+        Chat.open(this);
+        if (added) {
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override
+                public void run() { try { wm.removeView(v); } catch (Throwable ignore) { } }
+            }, 3000);
+        }
     }
 
     @Override
