@@ -18,7 +18,7 @@
     </queries>
 
     <application
-        android:label="Muse"
+        android:label="Muse Tél."
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
