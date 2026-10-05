@@ -1,0 +1,42 @@
+name: Build APK Muse Telephone
+
+# Compile l'appli Android (dossier android/) et la publie en « Release » : lien de téléchargement stable
+# https://github.com/AinaCedric/muse-app/releases/latest/download/muse-phone.apk
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android/**'
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Compiler l'APK
+        working-directory: android
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Publier l'APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk muse-phone.apk
+          gh release create "phone-${{ github.run_number }}" muse-phone.apk \
+            --title "Muse Téléphone (build ${{ github.run_number }})" \
+            --notes "APK de l'appli Muse Téléphone. À installer sur le téléphone Android." \
+            --latest

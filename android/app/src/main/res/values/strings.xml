@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Muse</string>
+    <string name="a11y_desc">Permet à Muse, ton assistante personnelle, de lire l\'écran et de toucher, glisser et écrire à ta place quand tu le lui demandes dans l\'appli Muse. Les actions sensibles (envoyer, appeler, payer, supprimer) exigent ta confirmation et les applis d\'argent sont interdites.</string>
+</resources>

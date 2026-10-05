@@ -98,7 +98,7 @@ function newChat() { pollId++; busy = false; $('#send').disabled = false; avatar
 
 async function wait(n, since) {
   const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
-  const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', MAXW = (ordi ? 18 : 5) * 60 * 1000, label = ordi ? '🖥️ Muse travaille sur son ordinateur…' : perso ? '📬 Muse consulte tes outils…' : '🧠 Muse réfléchit…';
+  const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', MAXW = (ordi || phone ? 18 : 5) * 60 * 1000, label = ordi ? '🖥️ Muse travaille sur son ordinateur…' : perso ? '📬 Muse consulte tes outils…' : phone ? '📱 Muse utilise ton téléphone…' : '🧠 Muse réfléchit…';
   const bubble = add('bot', label, 'wait'); const t0 = Date.now();
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
