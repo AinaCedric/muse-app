@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     private LinearLayout root;
     private TextView sLink, sAcc, sOver, sBat, sNot, sTest, logv;
     private String testMsg = "";
+    private TextView sStat;
     private final Handler h = new Handler(Looper.getMainLooper());
     private final Runnable tick = new Runnable() {
         @Override
@@ -80,6 +81,12 @@ public class MainActivity extends Activity {
 
         root.addView(text("Muse · Téléphone", 26, true, Color.parseColor("#6c4bd8")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les 5 étapes ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
+
+        // Voyant d'état en direct
+        sStat = text("", 13, true, Color.parseColor("#1a1a2e"));
+        root.addView(sStat);
+        Bus.ensureLoop(getApplicationContext());
+        startKeepAlive();
 
         // 1. Liaison
         sLink = step(1, "Lier ce téléphone à ton Muse", "Colle le code de liaison (qui commence par MUSE1.) fourni par ton PC. Astuce : envoie-le toi à toi-même (e-mail, WhatsApp, Telegram), copie-le, puis touche le bouton.");
@@ -174,6 +181,14 @@ public class MainActivity extends Activity {
         root.addView(logv);
     }
 
+    private void startKeepAlive() {
+        try {
+            startForegroundService(new Intent(this, KeepAlive.class));
+        } catch (Throwable t) {
+            Bus.log("Service permanent non démarré : " + t.getMessage());
+        }
+    }
+
     private void open(Intent i) {
         try {
             startActivity(i);
@@ -219,6 +234,9 @@ public class MainActivity extends Activity {
         String link = Store.linked(this) ? "Lié à " + Store.repo(this) : "Pas encore lié";
         String acc = MuseService.inst != null ? "service actif" : "service inactif";
         sTest.setText(testMsg.isEmpty() ? link + " · " + acc : testMsg);
+        long ago = Bus.lastPoll == 0 ? -1 : (System.currentTimeMillis() - Bus.lastPoll) / 1000;
+        sStat.setText("Accessibilité : " + (MuseService.inst != null ? "✅ active" : "❌ INACTIVE (réactive Muse dans les réglages d'accessibilité)")
+                + "\nRelève des ordres : " + (ago < 0 ? "pas encore" : "il y a " + ago + " s (HTTP " + Bus.lastCode + ")"));
         logv.setText(Bus.logText());
     }
 

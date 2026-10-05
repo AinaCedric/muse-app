@@ -46,27 +46,20 @@ import java.util.regex.Pattern;
  */
 public class MuseService extends AccessibilityService {
     static volatile MuseService inst;
-    private volatile boolean run;
-    private Thread th;
-    private boolean shown;
 
     static final Pattern DENY = Pattern.compile(
             "(bank|banque|bni|bfv|boa\\.|wallet|pay(pal|ment|ments)?\\b|finance|fintech|crypto|binance|coinbase|revolut|mvola|orange.?money|airtel.?money|moneygram|western.?union|authenticator|bitwarden|keepass|lastpass|1password|dashlane|vending|packageinstaller|permissioncontroller|devicepolicy|deviceadmin|findmydevice|\\.pass\\b|securefolder)",
             Pattern.CASE_INSENSITIVE);
 
-    // ---------- Cycle de vie
+    // ---------- Cycle de vie (la relève des ordres tourne dans Bus / KeepAlive, pas ici)
     @Override
     protected void onServiceConnected() {
         inst = this;
         Bus.log("Service d'accessibilité actif");
-        if (th == null || !th.isAlive()) {
-            run = true;
-            th = new Thread(new Runnable() {
-                @Override
-                public void run() { loop(); }
-            }, "muse-bus");
-            th.start();
-        }
+        Bus.ensureLoop(getApplicationContext());
+        try {
+            startForegroundService(new Intent(this, KeepAlive.class));
+        } catch (Throwable ignore) { }
     }
 
     @Override
@@ -77,53 +70,15 @@ public class MuseService extends AccessibilityService {
 
     @Override
     public boolean onUnbind(Intent intent) {
-        run = false;
         inst = null;
-        notif(false);
+        Bus.log("Service d'accessibilité arrêté");
         return super.onUnbind(intent);
     }
 
     @Override
     public void onDestroy() {
-        run = false;
         inst = null;
         super.onDestroy();
-    }
-
-    private void loop() {
-        while (run) {
-            try {
-                Bus.poll(this);
-            } catch (Throwable t) {
-                Bus.log("Erreur : " + t.getMessage());
-            }
-            boolean active = System.currentTimeMillis() < Bus.activeUntil;
-            try { notif(active); } catch (Throwable ignore) { }
-            try {
-                Thread.sleep(active ? 1000 : 6000);
-            } catch (InterruptedException e) {
-                return;
-            }
-        }
-    }
-
-    private void notif(boolean on) {
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm == null) return;
-        if (!on) {
-            if (shown) { nm.cancel(1); shown = false; }
-            return;
-        }
-        if (shown) return;
-        nm.createNotificationChannel(new NotificationChannel("muse", "Muse", NotificationManager.IMPORTANCE_LOW));
-        Notification.Builder b = new Notification.Builder(this, "muse");
-        b.setSmallIcon(R.mipmap.ic_launcher);
-        b.setContentTitle("Muse utilise ton téléphone");
-        b.setContentText("Touche pour ouvrir Muse (bouton Pause pour l'arrêter)");
-        b.setOngoing(true);
-        b.setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE));
-        nm.notify(1, b.build());
-        shown = true;
     }
 
     // ---------- Aides

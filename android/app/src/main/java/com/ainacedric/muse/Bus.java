@@ -1,6 +1,7 @@
 package com.ainacedric.muse;
 
 import android.content.Context;
+import android.os.Build;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -21,11 +22,15 @@ import java.util.TimeZone;
 /**
  * Relais entre le cerveau de Muse et le téléphone : une issue d'un dépôt GitHub PRIVÉ.
  * Le cerveau écrit un commentaire "<!--cmd:ID-->{json}", le téléphone l'exécute et répond "<!--res:ID-->{json}".
+ * La relève tourne dans un fil indépendant (service permanent KeepAlive), même si l'accessibilité est coupée.
  */
 class Bus {
     static final LinkedList<String> LOG = new LinkedList<>();
     static volatile long activeUntil = 0;
+    static volatile long lastPoll = 0;
+    static volatile int lastCode = 0;
     private static String etag = null;
+    private static Thread loopT = null;
 
     static synchronized void log(String s) {
         LOG.addFirst(new SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(new Date()) + "  " + s);
@@ -101,13 +106,53 @@ class Bus {
         }
     }
 
+    /** Démarre (une seule fois) la boucle de relève. */
+    static synchronized void ensureLoop(final Context app) {
+        if (loopT != null && loopT.isAlive()) return;
+        loopT = new Thread(new Runnable() {
+            @Override
+            public void run() { loop(app); }
+        }, "muse-bus");
+        loopT.start();
+    }
+
+    private static void loop(Context app) {
+        log("Relève démarrée");
+        while (true) {
+            try {
+                poll(app);
+            } catch (Throwable t) {
+                log("Erreur : " + t.getMessage());
+            }
+            boolean active = System.currentTimeMillis() < activeUntil;
+            try { KeepAlive.refresh(app, active); } catch (Throwable ignore) { }
+            try {
+                Thread.sleep(active ? 1000 : 6000);
+            } catch (InterruptedException e) {
+                return;
+            }
+        }
+    }
+
+    private static JSONObject ping() throws Exception {
+        JSONObject o = new JSONObject();
+        o.put("model", Build.MODEL);
+        o.put("android", Build.VERSION.RELEASE);
+        o.put("sdk", Build.VERSION.SDK_INT);
+        o.put("app", "1.1");
+        o.put("a11y", MuseService.inst != null);
+        return o;
+    }
+
     /** Une relève : exécute les ordres en attente et poste les résultats. */
-    static void poll(MuseService svc) throws Exception {
-        if (!Store.linked(svc)) return;
-        String repo = Store.repo(svc);
-        int issue = Store.issue(svc);
+    static void poll(Context c) throws Exception {
+        if (!Store.linked(c)) return;
+        String repo = Store.repo(c);
+        int issue = Store.issue(c);
         String list = "/repos/" + repo + "/issues/" + issue + "/comments?per_page=100";
-        Resp r = req(svc, "GET", list, null, etag);
+        Resp r = req(c, "GET", list, null, etag);
+        lastPoll = System.currentTimeMillis();
+        lastCode = r.code;
         if (r.code == 304) return;
         if (r.code != 200) {
             log("Relais GitHub : erreur " + r.code + (r.code == 401 ? " (jeton refusé)" : ""));
@@ -116,7 +161,7 @@ class Bus {
         etag = r.etag;
         long now = r.date > 0 ? r.date : System.currentTimeMillis();
         JSONArray a = new JSONArray(r.body);
-        long last = Store.lastId(svc);
+        long last = Store.lastId(c);
         for (int i = 0; i < a.length(); i++) {
             JSONObject m = a.getJSONObject(i);
             long id = m.getLong("id");
@@ -124,7 +169,7 @@ class Bus {
             long age = now - ts(m.getString("created_at"));
             boolean mine = b.startsWith("<!--cmd:") || b.startsWith("<!--res:");
             if (mine && age > 15 * 60 * 1000) {
-                try { req(svc, "DELETE", "/repos/" + repo + "/issues/comments/" + id, null, null); } catch (Exception ignore) { }
+                try { req(c, "DELETE", "/repos/" + repo + "/issues/comments/" + id, null, null); } catch (Exception ignore) { }
                 continue;
             }
             if (!b.startsWith("<!--cmd:") || id <= last) continue;
@@ -132,7 +177,7 @@ class Bus {
             if (end < 0) continue;
             String cid = b.substring(8, end);
             if (age > 4 * 60 * 1000) {          // ordre périmé : on ne l'exécute jamais
-                Store.setLastId(svc, id);
+                Store.setLastId(c, id);
                 continue;
             }
             JSONObject res = new JSONObject();
@@ -141,10 +186,15 @@ class Bus {
                 JSONObject cmd = new JSONObject(b.substring(end + 3).trim());
                 opName = cmd.optString("op", "?");
                 activeUntil = System.currentTimeMillis() + 3 * 60 * 1000;
-                if (Store.paused(svc) && !opName.equals("ping")) {
-                    throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
+                JSONObject out;
+                if (opName.equals("ping")) {
+                    out = ping();
+                } else {
+                    if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
+                    MuseService s = MuseService.inst;
+                    if (s == null) throw new Exception("Le service d'accessibilité de Muse est désactivé sur le téléphone : va dans Réglages → Accessibilité → Muse et réactive-le (Xiaomi le coupe parfois : active aussi « Démarrage automatique » et verrouille l'appli dans les récentes).");
+                    out = s.exec(cmd);
                 }
-                JSONObject out = svc.exec(cmd);
                 res.put("ok", true);
                 res.put("data", out);
                 log("✓ " + opName);
@@ -154,9 +204,9 @@ class Bus {
                 log("✗ " + opName + " : " + e.getMessage());
             }
             String text = "<!--res:" + cid + "-->\n" + res.toString();
-            req(svc, "POST", "/repos/" + repo + "/issues/" + issue + "/comments",
+            req(c, "POST", "/repos/" + repo + "/issues/" + issue + "/comments",
                     new JSONObject().put("body", text).toString(), null);
-            Store.setLastId(svc, id);
+            Store.setLastId(c, id);
             etag = null;
         }
     }
