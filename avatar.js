@@ -7,7 +7,7 @@
   const statusEl = document.getElementById('status');
   if (!wrap || !canvas) return;
 
-  const LABELS = { idle: '✨ en ligne', thinking: '🧠 réfléchit', happy: '💜 voilà !', sad: '😕 oups' };
+  const LABELS = { idle: 'en ligne', thinking: 'réfléchit', happy: 'en ligne', sad: 'souci de connexion' };
   let state = 'idle', until = 0;
   const publish = (s) => { wrap.dataset.state = s; if (statusEl) statusEl.textContent = LABELS[s] || ''; };
   publish('idle');

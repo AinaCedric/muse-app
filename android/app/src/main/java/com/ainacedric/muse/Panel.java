@@ -34,15 +34,21 @@ import java.util.Locale;
 /**
  * Le panneau « assistant » de Muse : s'ouvre quand on touche la bulle (bouton d'accessibilité), par-dessus n'importe quelle appli.
  * Micro + waveform, 3 actions rapides, champ de saisie. Tirer le panneau vers le haut (ou toucher ⤢) ouvre le chat Muse en grand.
- * Les demandes partent directement à Muse ; la réponse s'affiche dans le panneau et est lue à voix haute (réglable avec 🔊/🔇).
+ * Les demandes partent directement à Muse ; la réponse s'affiche dans le panneau et est lue à voix haute (réglable avec le haut-parleur).
  * Si le code « Cerveau » n'est pas collé dans l'appli, la demande est transmise au chat (PWA) comme avant.
  */
 class Panel {
     static Panel cur;
 
-    private static final int INDIGO = Color.rgb(91, 63, 214);
-    private static final int INK = Color.rgb(28, 26, 46);
-    private static final int GREY = Color.rgb(108, 106, 128);
+    // Palette « papier » commune avec le chat
+    private static final int ACC = Color.rgb(196, 83, 45);     // terracotta
+    private static final int INK = Color.rgb(28, 27, 25);
+    private static final int GREY = Color.rgb(110, 106, 98);
+    private static final int FAINT = Color.rgb(156, 151, 141);
+    private static final int PAPER = Color.rgb(246, 243, 238);
+    private static final int CARD = Color.rgb(255, 253, 249);
+    private static final int SOFT = Color.rgb(236, 230, 220);
+    private static final int LINE = Color.rgb(227, 221, 210);
 
     private final MuseService svc;
     private final WindowManager wm;
@@ -50,7 +56,8 @@ class Panel {
     private LinearLayout card;
     private WindowManager.LayoutParams lp;
     private Wave wave;
-    private TextView status, hint, micBtn, spk, answer;
+    private TextView status, hint, answer;
+    private Ico micBtn, spk;
     private ScrollView answerScroll;
     private LinearLayout chipsRow;
     private Ask ask;
@@ -133,7 +140,7 @@ class Panel {
         card = new LinearLayout(svc);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(8), dp(16), dp(14));
-        card.setBackground(shape(Color.rgb(248, 247, 255), 28, Color.rgb(224, 220, 245)));
+        card.setBackground(shape(PAPER, 22, LINE));
 
         // Poignée + en-tête (zone qu'on tire vers le haut pour agrandir vers le chat)
         LinearLayout top = new LinearLayout(svc);
@@ -141,7 +148,7 @@ class Panel {
         LinearLayout gripRow = new LinearLayout(svc);
         gripRow.setGravity(Gravity.CENTER);
         View grip = new View(svc);
-        grip.setBackground(shape(Color.rgb(200, 196, 224), 3, 0));
+        grip.setBackground(shape(Color.rgb(214, 207, 194), 3, 0));
         grip.setLayoutParams(new LinearLayout.LayoutParams(dp(44), dp(5)));
         gripRow.addView(grip);
         gripRow.setPadding(0, dp(4), 0, dp(8));
@@ -149,13 +156,21 @@ class Panel {
 
         LinearLayout head = new LinearLayout(svc);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView badge = circle("✦", INDIGO, Color.WHITE, 34, 16);
-        head.addView(badge);
-        TextView title = label("Muse", 20, INK, true);
+        View dot = new View(svc);
+        GradientDrawable dg = new GradientDrawable();
+        dg.setShape(GradientDrawable.OVAL);
+        dg.setColor(ACC);
+        dot.setBackground(dg);
+        LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(dp(8), dp(8));
+        dl.leftMargin = dp(4);
+        dot.setLayoutParams(dl);
+        head.addView(dot);
+        TextView title = label("Muse", 22, INK, false);
+        title.setTypeface(android.graphics.Typeface.SERIF);
         title.setPadding(dp(10), 0, 0, 0);
         head.addView(title, lpw(0, -2, 1f));
-        spk = label(Store.speak(svc) ? "🔊" : "🔇", 20, GREY, false);
-        spk.setPadding(dp(10), dp(4), dp(8), dp(4));
+        spk = new Ico(svc, Store.speak(svc) ? Ico.SPEAKER : Ico.MUTE, Store.speak(svc) ? ACC : GREY);
+        spk.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
         spk.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) { toggleSpeak(); }
@@ -200,16 +215,17 @@ class Panel {
 
         // Waveform
         LinearLayout waveBox = new LinearLayout(svc);
-        waveBox.setBackground(shape(Color.rgb(236, 233, 251), 18, 0));
+        waveBox.setBackground(shape(CARD, 14, LINE));
         waveBox.setPadding(dp(10), dp(6), dp(10), dp(6));
         wave = new Wave(svc);
-        waveBox.addView(wave, new LinearLayout.LayoutParams(-1, dp(78)));
+        waveBox.addView(wave, new LinearLayout.LayoutParams(-1, dp(56)));
         LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-1, -2);
         wl.topMargin = dp(10);
         waveBox.setLayoutParams(wl);
         card.addView(waveBox);
 
-        status = label("Touche le micro pour parler", 18, INDIGO, true);
+        status = label("Touche le micro pour parler", 19, INK, false);
+        status.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SERIF, android.graphics.Typeface.ITALIC));
         status.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
         sl.topMargin = dp(10);
@@ -227,7 +243,7 @@ class Panel {
             public void onClick(View v) { if (!lastSpeech.isEmpty()) speak(lastSpeech); }
         });
         answerScroll.addView(answer);
-        answerScroll.setBackground(shape(Color.WHITE, 16, Color.rgb(214, 210, 238)));
+        answerScroll.setBackground(shape(CARD, 14, LINE));
         LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, dp(190));
         al.topMargin = dp(8);
         answerScroll.setLayoutParams(al);
@@ -240,17 +256,17 @@ class Panel {
         cl.topMargin = dp(12);
         chips.setLayoutParams(cl);
         chipsRow = chips;
-        chips.addView(chip("✨", "Résumer\ncet écran", new View.OnClickListener() {
+        chips.addView(chip("Résumer", "cet écran", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 ask("Résume en quelques lignes ce qui était affiché sur l'écran de mon téléphone quand j'ai ouvert l'assistant (lis-le avec l'outil phone_screen_before, sans rien toucher).", "phone");
             }
         }), lpw(0, -2, 1f));
-        chips.addView(chip("✏️", "Écrire\nun message", new View.OnClickListener() {
+        chips.addView(chip("Écrire", "un message", new View.OnClickListener() {
             @Override
             public void onClick(View v) { writeMessage(); }
         }), lpw(0, -2, 1f));
-        chips.addView(chip("📅", "Mon programme\ndu jour", new View.OnClickListener() {
+        chips.addView(chip("Programme", "du jour", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 ask("Qu'ai-je à mon agenda aujourd'hui ? Ajoute les e-mails importants non lus, en bref.", "auto");
@@ -261,12 +277,13 @@ class Panel {
         // Saisie : micro · champ · envoyer
         LinearLayout row = new LinearLayout(svc);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackground(shape(Color.WHITE, 26, Color.rgb(214, 210, 238)));
+        row.setBackground(shape(CARD, 14, Color.rgb(214, 207, 194)));
         row.setPadding(dp(6), dp(4), dp(6), dp(4));
         LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
         rl.topMargin = dp(12);
         row.setLayoutParams(rl);
-        micBtn = circle("🎤", Color.rgb(236, 233, 251), INDIGO, 40, 18);
+        micBtn = new Ico(svc, Ico.MIC, GREY);
+        micBtn.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
         micBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) { toggleMic(); }
@@ -295,7 +312,9 @@ class Panel {
             }
         });
         row.addView(field, lpw(0, -2, 1f));
-        TextView send = circle("➤", INDIGO, Color.WHITE, 40, 16);
+        Ico send = new Ico(svc, Ico.UP, Color.WHITE);
+        send.setBackground(shape(INK, 10, 0));
+        send.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
         send.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) { sendTyped(); }
@@ -323,11 +342,12 @@ class Panel {
         Bus.log("Panneau assistant ouvert");
     }
 
-    private View chip(String icon, String text, View.OnClickListener l) {
-        TextView t = label(icon + "\n" + text, 12, INK, false);
+    private View chip(String first, String second, View.OnClickListener l) {
+        TextView t = label(first + "\n" + second, 13, INK, false);
         t.setGravity(Gravity.CENTER);
+        t.setLineSpacing(0f, 1.05f);
         t.setPadding(dp(4), dp(10), dp(4), dp(10));
-        t.setBackground(shape(Color.WHITE, 16, Color.rgb(214, 210, 238)));
+        t.setBackground(shape(CARD, 12, LINE));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
         p.leftMargin = dp(3);
         p.rightMargin = dp(3);
@@ -451,7 +471,8 @@ class Panel {
     private void toggleSpeak() {
         boolean on = !Store.speak(svc);
         Store.setSpeak(svc, on);
-        spk.setText(on ? "🔊" : "🔇");
+        spk.set(on ? Ico.SPEAKER : Ico.MUTE);
+        spk.color(on ? ACC : GREY);
         if (!on) stopSpeaking();
         else if (answerScroll.getVisibility() == View.VISIBLE && !lastSpeech.isEmpty()) speak(lastSpeech);
         Bus.log("Lecture à voix haute : " + (on ? "oui" : "non"));
@@ -580,17 +601,17 @@ class Panel {
                     @Override public void onBeginningOfSpeech() { }
                     @Override public void onRmsChanged(float rms) { wave.feed(Math.max(0f, Math.min(1f, (rms + 2f) / 12f))); }
                     @Override public void onBufferReceived(byte[] buf) { }
-                    @Override public void onEndOfSpeech() { listening = false; micBtn.setText("🎤"); status.setText("Je réfléchis…"); }
+                    @Override public void onEndOfSpeech() { listening = false; micBtn.set(Ico.MIC); micBtn.color(GREY); micBtn.setBackground(null); status.setText("Je réfléchis…"); }
                     @Override public void onError(int code) {
                         listening = false;
-                        micBtn.setText("🎤");
+                        micBtn.set(Ico.MIC); micBtn.color(GREY); micBtn.setBackground(null);
                         if (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) status.setText("Je n'ai rien entendu : retouche le micro");
                         else if (code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) status.setText("Micro non autorisé");
                         else status.setText("Micro indisponible (code " + code + ") : écris ta demande");
                     }
                     @Override public void onResults(Bundle b) {
                         listening = false;
-                        micBtn.setText("🎤");
+                        micBtn.set(Ico.MIC); micBtn.color(GREY); micBtn.setBackground(null);
                         ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                         String q = (r == null || r.isEmpty()) ? "" : r.get(0).trim();
                         if (q.isEmpty()) { status.setText("Je n'ai rien compris : retouche le micro"); return; }
@@ -610,7 +631,7 @@ class Panel {
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR");
             i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
             listening = true;
-            micBtn.setText("⏹");
+            micBtn.set(Ico.STOP); micBtn.color(Color.WHITE); micBtn.setBackground(shape(Color.rgb(180, 53, 31), 10, 0));
             status.setText("J'écoute…");
             hint.setText("Parle, je t'écoute");
             sr.startListening(i);
@@ -624,7 +645,7 @@ class Panel {
     private void stopListening() {
         if (!listening) return;
         listening = false;
-        try { micBtn.setText("🎤"); sr.stopListening(); } catch (Throwable ignore) { }
+        try { micBtn.set(Ico.MIC); micBtn.color(GREY); micBtn.setBackground(null); sr.stopListening(); } catch (Throwable ignore) { }
     }
 
     // ---------- Waveform
@@ -658,10 +679,11 @@ class Panel {
         @Override
         protected void onDraw(Canvas cv) {
             float w = getWidth(), hh = getHeight();
-            float slot = w / N, bw = slot * 0.55f, mid = hh / 2f;
+            float slot = w / N, bw = slot * 0.32f, mid = hh / 2f;
             for (int i = 0; i < N; i++) {
                 float t = i / (float) (N - 1);
-                p.setColor(Color.rgb((int) (79 + 89 * t), (int) (70 + 15 * t), (int) (229 + 18 * t)));
+                p.setColor(ACC);
+                p.setAlpha(i % 3 == 0 ? 110 : 220);
                 float half = Math.max(bw / 2f, lv[i] * hh * 0.5f);
                 float x = i * slot + (slot - bw) / 2f;
                 cv.drawRoundRect(x, mid - half, x + bw, mid + half, bw / 2f, bw / 2f, p);

@@ -1,5 +1,27 @@
 // Muse — PWA : le chat vit dans les issues d'un dépôt privé GitHub ; une GitHub Action répond.
 const $ = (s) => document.querySelector(s);
+// Icônes au trait (pas d'emojis dans l'interface)
+const ICON = {
+  menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  edit: '<path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  book: '<path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2.5Z"/><path d="M8 7h7"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  stop: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  speaker: '<path d="M11 5 6 9H3v6h3l5 4Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
+  mute: '<path d="M11 5 6 9H3v6h3l5 4Z"/><path d="m16 9 5 6M21 9l-5 6"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/>',
+  folder: '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/>',
+};
+const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
+document.querySelectorAll('[data-icon]').forEach((e) => { e.outerHTML = ic(e.dataset.icon); });
 const msgs = $('#msgs'), input = $('#in'), modeSel = $('#mode');
 const REPLY = '<!--muse-reply-->', ERROR = '<!--muse-error-->';
 const API = localStorage.getItem('muse_api') || 'https://api.github.com';
@@ -12,6 +34,7 @@ function render(text) {
   let h = esc(text);
   h = h.replace(/```(\w*)\n([\s\S]*?)(```|$)/g, (_, l, c) => `<pre><code>${c}</code></pre>`);
   h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/(^|\n)#{1,4} ([^\n]+)/g, '$1<b>$2</b>');
+  h = h.replace(/(^|\n)[ \t]*[-*•][ \t]+([^\n]*)/g, '$1<span class="li">$2</span>').replace(/(<span class="li">[^\n]*<\/span>)\n/g, '$1');
   h = h.replace(/\b(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   return h;
 }
@@ -35,9 +58,10 @@ async function gh(path, opts = {}) {
 const need = () => { if (!cfg.repo || !cfg.token) { openCfg(); return false; } return true; };
 
 function empty() {
-  msgs.innerHTML = `<div id="empty"><h1>✨ Salut Cédric</h1><div>Je suis Muse, propulsée par Claude. Je te réponds dès que tu es connecté, même PC éteint.</div>
-  <div class="chips">${[['💡', 'Idées de contenu pour GYOO'], ['💻', 'Aide-moi sur un module Odoo'], ['🎯', 'Planifie ma semaine'], ['💬', 'Juste discuter un peu']]
-    .map(([i, t]) => `<button class="chip" data-q="${t}"><span>${i}</span>${t}</button>`).join('')}</div></div>`;
+  const h = new Date().getHours(), hello = h < 5 ? 'Encore debout' : h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
+  msgs.innerHTML = `<div id="empty"><h1>${hello}, <em>Cédric</em>.</h1><p>Demande-moi n’importe quoi : je m’occupe de ton agenda, de tes e-mails, de ton téléphone ou de ton code.</p>
+  <div class="chips">${[['Mon programme du jour', 'Agenda et e-mails importants', 'Qu’ai-je à faire aujourd’hui ? Ajoute les e-mails importants non lus.'], ['Un module Odoo', 'Développement, revue, migration', 'Aide-moi sur un module Odoo'], ['Des idées pour GYOO', 'Contenus et publications', 'Idées de contenu pour GYOO cette semaine'], ['Planifier ma semaine', 'Priorités et créneaux', 'Planifie ma semaine']]
+    .map(([t, sub, q]) => `<button class="chip" data-q="${q}"><span>${t}<small>${sub}</small></span>${ic('arrow')}</button>`).join('')}</div></div>`;
   document.querySelectorAll('.chip').forEach((b) => (b.onclick = () => { input.value = b.dataset.q; send(); }));
 }
 
@@ -57,7 +81,7 @@ async function loadList() {
       };
       $('#list').appendChild(d);
     });
-  } catch (e) { toast('⚠️ ' + e.message); }
+  } catch (e) { toast('' + e.message); }
 }
 
 async function fetchComments(n, since) {
@@ -70,11 +94,16 @@ async function fetchComments(n, since) {
 }
 const attsIn = (body) => [...body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)-->/g)].map((m) => ({ path: m[1].trim(), name: m[2].trim(), type: m[3].trim() }));
 function show(c) {
-  if (c.body.includes(REPLY)) { const d = add('bot', strip(c.body)); d.dataset.raw = strip(c.body); addTts(d);
+  if (c.body.includes(REPLY)) {
+    let txt = strip(c.body), meta = '';
+    txt = txt.replace(/^[ \t]*🧭[^\n]*?Mode choisi\s*:\s*([^\n]*)$/m, (_, m) => { meta = m.replace(/[_*]/g, '').replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim(); return ''; }).trim();
+    const d = add('bot', txt); d.dataset.raw = txt;
+    if (meta) { const s = document.createElement('span'); s.className = 'meta'; s.textContent = 'Mode : ' + meta; d.appendChild(s); }
+    addTts(d);
     if (/Code de confirmation\s*:\s*[0-9a-f]{6}/i.test(c.body)) { // boutons de validation humaine
       const row = document.createElement('div'); row.className = 'confirm';
       const mk = (label, cls, text) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost ' + cls; b.textContent = label; b.onclick = () => { row.remove(); input.value = text; send(); }; row.appendChild(b); };
-      mk('✅ OUI, confirme', 'yes', 'OUI'); mk('❌ Non, annule', 'no', 'Non, annule'); d.appendChild(row);
+      mk('Confirmer', 'yes', 'OUI'); mk('Annuler', 'no', 'Non, annule'); d.appendChild(row);
     } const a = attsIn(c.body); if (a.length) { d.appendChild(attsBox(a)); d.classList.add('hasAtts'); } return d; }
   if (c.body.includes(ERROR)) return add('bot', strip(c.body), 'err');
   return addUser(strip(c.body), attsIn(c.body));
@@ -91,26 +120,26 @@ async function openConv(n) {
     const last = cs[cs.length - 1];
     // Une réponse est peut-être encore en préparation : on reprend l'attente.
     if (last && !last.body.includes(REPLY) && !last.body.includes(ERROR) && Date.now() - new Date(last.created_at) < 20 * 60 * 1000) wait(n, last.created_at);
-  } catch (e) { add('bot', '⚠️ ' + e.message, 'err'); }
+  } catch (e) { add('bot', '' + e.message, 'err'); }
   loadList();
 }
 function newChat() { stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
 
 async function wait(n, since) {
   const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
-  const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? '🖥️ Muse travaille sur son ordinateur…' : perso ? '📬 Muse consulte tes outils…' : phone ? '📱 Muse utilise ton téléphone…' : auto ? '✨ Muse choisit ses outils et réfléchit…' : '🧠 Muse réfléchit…';
+  const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
   const bubble = add('bot', label, 'wait'); const t0 = Date.now();
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
     if (my !== pollId) return;
-    bubble.textContent = `${label} ${Math.round((Date.now() - t0) / 1000)} s`;
+    bubble.textContent = `${label} · ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
       const cs = (await fetchComments(n, since)).filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
       if (cs.length) { bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }
   if (my === pollId) {
-    if (Date.now() - t0 >= MAXW) { bubble.className = 'm bot err'; bubble.textContent = '⏳ Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
+    if (Date.now() - t0 >= MAXW) { bubble.className = 'm bot err'; bubble.textContent = 'Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
     busy = false; $('#send').disabled = false; loadList();
   }
 }
@@ -122,39 +151,29 @@ async function send() {
   input.value = ''; input.style.height = 'auto'; busy = true; $('#send').disabled = true;
   try {
     if (!issueNo) {
-      const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: (message || '📎 ' + files[0].name).slice(0, 60), body: '💬 Discussion Muse' }) });
+      const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: (message || files[0].name).slice(0, 60), body: 'Discussion Muse' }) });
       issueNo = i.number; msgs.innerHTML = '';
     }
     addUser(message, files.map((f) => ({ name: f.name, type: f.type, url: f.url })));
     let markers = '';
     if (files.length) {
-      const up = add('bot', '📤 Envoi des pièces jointes…', 'wait');
-      markers = await upload(issueNo, files, (k) => { up.textContent = `📤 Envoi des pièces jointes… ${k}/${files.length}`; });
+      const up = add('bot', 'Envoi des pièces jointes', 'wait');
+      markers = await upload(issueNo, files, (k) => { up.textContent = `Envoi des pièces jointes · ${k}/${files.length}`; });
       up.remove();
     }
     const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->` }) });
     wait(issueNo, c.created_at);
-  } catch (e) { add('bot', '⚠️ ' + e.message, 'err'); busy = false; $('#send').disabled = false; avatar('sad'); }
+  } catch (e) { add('bot', '' + e.message, 'err'); busy = false; $('#send').disabled = false; avatar('sad'); }
 }
 
 // ---- Pièces jointes
 const MAX_FILES = 5, MAX_IMG = 4.5e6, MAX_FILE = 20e6, ZIP_ENTRY = 8e6;
 const ZIP_IGNORE = /(^|\/)(node_modules|\.git|\.venv|venv|__pycache__|dist|build|\.next|\.cache|\.idea|\.vscode|__MACOSX|\.DS_Store)(\/|$)/i;
 const ZIP_SECRET = /(^|\/)(\.env(\.[^/]*)?|id_rsa[^/]*|[^/]*\.(pem|key|p12|pfx|kdbx))$/i;
-const iconOf = (name, kind) => {
-  if (kind === 'img') return '🖼️';
-  const e = (name.match(/\.(\w+)$/) || [])[1]?.toLowerCase() || '';
-  if (e === 'pdf') return '📕';
-  if (/^docx?$/.test(e)) return '📝';
-  if (/^(xlsx?|ods|csv|tsv)$/.test(e)) return '📊';
-  if (/^pptx?$/.test(e)) return '📽️';
-  if (e === 'zip') return '📦';
-  if (/^(js|mjs|ts|tsx|jsx|py|php|java|c|cpp|cs|go|rs|sh|sql|html|css|json|xml|ya?ml)$/.test(e)) return '💻';
-  return '📄';
-};
+const iconOf = (name, kind) => { if (kind === 'img') return '<span class="ext">IMG</span>'; const e = (String(name).split('.').pop() || '').toLowerCase().slice(0, 4); return `<span class="ext">${esc(e.toUpperCase() || 'FICHIER')}</span>`; };
 // Dossier -> .zip (dans le navigateur) ; items = [{ path, file }]
 async function zipFolder(items) {
-  if (!window.JSZip) { toast('⚠️ Module dossier indisponible, recharge la page'); return null; }
+  if (!window.JSZip) { toast('Module dossier indisponible, recharge la page'); return null; }
   const root = (items[0]?.path.split('/')[0]) || 'dossier';
   const z = new JSZip(); let n = 0, skipped = 0, total = 0;
   for (const { path, file } of items) {
@@ -162,9 +181,9 @@ async function zipFolder(items) {
     if (file.size > ZIP_ENTRY || total + file.size > MAX_FILE) { skipped++; continue; }
     z.file(path, file); n++; total += file.size;
   }
-  if (!n) { toast('📁 Aucun fichier utilisable dans ce dossier'); return null; }
+  if (!n) { toast('Aucun fichier utilisable dans ce dossier'); return null; }
   const blob = await z.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-  toast(`📁 « ${root} » : ${n} fichiers${skipped ? ` (${skipped} ignorés : node_modules, secrets, gros fichiers…)` : ''}`);
+  toast(`« ${root} » : ${n} fichiers${skipped ? ` (${skipped} ignorés : node_modules, secrets, gros fichiers…)` : ''}`);
   return new File([blob], safeName(root) + '.zip', { type: 'application/zip' });
 }
 async function addFolder(fileList) {
@@ -208,10 +227,10 @@ async function shrink(file) {
 }
 async function addFiles(list) {
   for (const f0 of [...list]) {
-    if (pending.length >= MAX_FILES) { toast(`📎 Maximum ${MAX_FILES} fichiers par message`); break; }
+    if (pending.length >= MAX_FILES) { toast(`Maximum ${MAX_FILES} fichiers par message`); break; }
     const isImg = /^image\//i.test(f0.type) || /\.(jpe?g|png|webp|gif)$/i.test(f0.name);
     const f = isImg ? await shrink(f0) : f0;
-    if (f.size > (isImg ? MAX_IMG : MAX_FILE)) { toast(`📎 « ${f0.name} » est trop lourd (${fmtSize(f.size)}, max ${isImg ? '4,5' : '20'} Mo)`); continue; }
+    if (f.size > (isImg ? MAX_IMG : MAX_FILE)) { toast(`« ${f0.name} » est trop lourd (${fmtSize(f.size)}, max ${isImg ? '4,5' : '20'} Mo)`); continue; }
     pending.push({ name: label(f.name || f0.name || 'photo.jpg'), type: f.type || 'application/octet-stream', blob: f, url: URL.createObjectURL(f), kind: isImg ? 'img' : 'file' });
   }
   renderPending();
@@ -220,7 +239,7 @@ function renderPending() {
   const box = $('#pending'); box.innerHTML = ''; box.hidden = !pending.length;
   pending.forEach((p, i) => {
     const d = document.createElement('div'); d.className = 'pchip';
-    d.innerHTML = (p.kind === 'img' ? `<img src="${p.url}" alt="">` : `<span class="pfile">${iconOf(p.name)} ${esc(p.name)}<small>${fmtSize(p.blob.size)}</small></span>`) + '<button type="button" title="Retirer">✕</button>';
+    d.innerHTML = (p.kind === 'img' ? `<img src="${p.url}" alt="">` : `<span class="pfile"><span>${iconOf(p.name)}${esc(p.name)}</span><small>${fmtSize(p.blob.size)}</small></span>`) + '<button type="button" title="Retirer">✕</button>';
     d.querySelector('button').onclick = () => { URL.revokeObjectURL(p.url); pending.splice(i, 1); renderPending(); };
     box.appendChild(d);
   });
@@ -230,7 +249,7 @@ async function upload(n, files, progress) {
   let markers = '';
   for (let i = 0; i < files.length; i++) {
     const f = files[i], p = `uploads/${n}/${Date.now()}-${i}-${safeName(f.name)}`;
-    await gh(`/repos/${cfg.repo}/contents/${p}`, { method: 'PUT', body: JSON.stringify({ message: '📎 pièce jointe', content: await toB64(f.blob) }) });
+    await gh(`/repos/${cfg.repo}/contents/${p}`, { method: 'PUT', body: JSON.stringify({ message: 'pièce jointe', content: await toB64(f.blob) }) });
     markers += `\n<!--att:${p}|${label(f.name)}|${f.type}-->`;
     progress(i + 1);
   }
@@ -251,13 +270,13 @@ function attsBox(atts) {
         const u = a.url || await fetchBlob(a.path);
         if (isImg) window.open(u, '_blank');
         else { const l = document.createElement('a'); l.href = u; l.download = a.name.split('/').pop(); document.body.appendChild(l); l.click(); l.remove(); }
-      } catch { toast('⚠️ Fichier introuvable'); }
+      } catch { toast('Fichier introuvable'); }
     };
     if (isImg) {
       const im = document.createElement('img'); im.alt = a.name; im.title = a.name; im.onclick = open; box.appendChild(im);
-      if (a.url) im.src = a.url; else fetchBlob(a.path).then((u) => (im.src = u)).catch(() => { im.replaceWith(Object.assign(document.createElement('span'), { className: 'fchip', textContent: '🖼️ ' + a.name })); });
+      if (a.url) im.src = a.url; else fetchBlob(a.path).then((u) => (im.src = u)).catch(() => { im.replaceWith(Object.assign(document.createElement('span'), { className: 'fchip', textContent: a.name })); });
     } else {
-      const s = document.createElement('span'); s.className = 'fchip'; s.textContent = iconOf(a.name) + ' ' + a.name + ' ⬇'; s.title = 'Télécharger'; s.onclick = open; box.appendChild(s);
+      const s = document.createElement('span'); s.className = 'fchip'; s.innerHTML = iconOf(a.name) + esc(a.name) + ' ↓'; s.title = 'Télécharger'; s.onclick = open; box.appendChild(s);
     }
   });
   return box;
@@ -272,11 +291,11 @@ function addUser(text, atts = []) {
 // ---- Réglages
 function openCfg() { $('#cfgRepo').value = cfg.repo; $('#cfgTok').value = cfg.token; $('#cfgMsg').textContent = ''; $('#cfg').showModal(); }
 $('#phoneCode').onclick = async () => {
-  if (!cfg.repo || !cfg.token) { $('#cfgMsg').textContent = '⚠️ Renseigne d\'abord le dépôt et le token ci-dessus, puis enregistre.'; return; }
+  if (!cfg.repo || !cfg.token) { $('#cfgMsg').textContent = 'Renseigne d\'abord le dépôt et le token ci-dessus, puis enregistre.'; return; }
   const bytes = new TextEncoder().encode(JSON.stringify({ r: cfg.repo, t: cfg.token }));
   let bin = ''; bytes.forEach((c) => (bin += String.fromCharCode(c)));
   const code = 'MUSEB.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  try { await navigator.clipboard.writeText(code); $('#cfgMsg').textContent = '✅ Code copié. Ouvre l\'appli Muse Tél. → étape 7 → « Coller le code Cerveau ».'; }
+  try { await navigator.clipboard.writeText(code); $('#cfgMsg').textContent = 'Code copié. Ouvre l\'appli Muse Tél. → étape 7 → « Coller le code Cerveau ».'; }
   catch { window.prompt('Copie ce code :', code); }
 };
 $('#cfgBtn').onclick = openCfg; $('#cfgCancel').onclick = () => $('#cfg').close();
@@ -285,10 +304,10 @@ $('#cfgSave').onclick = async () => {
   const prev = cfg; cfg = { repo, token };
   try {
     const r = await gh(`/repos/${repo}`);
-    if (!r.private) { $('#cfgMsg').textContent = '⚠️ Ce dépôt est public : tes discussions seraient visibles par tout le monde. Utilise un dépôt privé.'; cfg = prev; return; }
+    if (!r.private) { $('#cfgMsg').textContent = 'Ce dépôt est public : tes discussions seraient visibles par tout le monde. Utilise un dépôt privé.'; cfg = prev; return; }
     localStorage.setItem('muse_repo', repo); localStorage.setItem('muse_token', token);
-    $('#cfg').close(); toast('✅ Connecté'); loadList();
-  } catch (e) { cfg = prev; $('#cfgMsg').textContent = '⚠️ ' + e.message; }
+    $('#cfg').close(); toast('Connecté.'); loadList();
+  } catch (e) { cfg = prev; $('#cfgMsg').textContent = '' + e.message; }
 };
 
 // ---- Mémoire (data/memory.md dans le dépôt)
@@ -299,15 +318,15 @@ $('#memBtn').onclick = async () => {
   if (!need()) return;
   try {
     const f = await gh(`/repos/${cfg.repo}/contents/data/memory.md`); memSha = f.sha; $('#memTxt').value = b64d(f.content);
-  } catch (e) { if (e.status === 404) { memSha = null; $('#memTxt').value = ''; } else return toast('⚠️ ' + e.message); }
+  } catch (e) { if (e.status === 404) { memSha = null; $('#memTxt').value = ''; } else return toast('' + e.message); }
   $('#dlg').showModal(); $('#side').classList.remove('open');
 };
 $('#memCancel').onclick = () => $('#dlg').close();
 $('#memSave').onclick = async () => {
   try {
-    await gh(`/repos/${cfg.repo}/contents/data/memory.md`, { method: 'PUT', body: JSON.stringify({ message: '🧠 Mémoire modifiée depuis l’app', content: b64e($('#memTxt').value), ...(memSha ? { sha: memSha } : {}) }) });
-    $('#dlg').close(); toast('🧠 Mémoire enregistrée');
-  } catch (e) { toast('⚠️ ' + (e.status === 409 || e.status === 422 ? 'La mémoire a changé entre-temps, rouvre-la' : e.message)); }
+    await gh(`/repos/${cfg.repo}/contents/data/memory.md`, { method: 'PUT', body: JSON.stringify({ message: 'Mémoire modifiée depuis l’app', content: b64e($('#memTxt').value), ...(memSha ? { sha: memSha } : {}) }) });
+    $('#dlg').close(); toast('Mémoire enregistrée');
+  } catch (e) { toast('' + (e.status === 409 || e.status === 422 ? 'La mémoire a changé entre-temps, rouvre-la' : e.message)); }
 };
 
 // ---- Divers
@@ -335,7 +354,7 @@ empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
 // ---- Thème clair (comme le panneau de la bulle) / sombre
 (() => {
   const root = document.documentElement, meta = document.querySelector('meta[name=theme-color]'), btn = $('#themeBtn');
-  const apply = (t) => { root.dataset.theme = t; if (meta) meta.content = t === 'dark' ? '#14121f' : '#F8F7FF'; btn.textContent = t === 'dark' ? '☀️' : '🌙'; };
+  const apply = (t) => { root.dataset.theme = t; if (meta) meta.content = t === 'dark' ? '#161513' : '#F6F3EE'; btn.innerHTML = ic(t === 'dark' ? 'sun' : 'moon'); };
   apply(root.dataset.theme === 'dark' ? 'dark' : 'light');
   btn.onclick = () => { const t = root.dataset.theme === 'dark' ? 'light' : 'dark'; apply(t); try { localStorage.setItem('muse_theme', t); } catch { /* stockage indisponible */ } };
 })();
@@ -377,12 +396,12 @@ const TTS = (() => {
   };
   T.voices = () => syn.getVoices().filter((v) => /^fr/i.test(v.lang));
   T.pick = () => { const v = T.voices(); return v.find((x) => x.name === T.voice) || v.find((x) => /fr[-_]FR/i.test(x.lang) && x.localService) || v.find((x) => /fr[-_]FR/i.test(x.lang)) || v[0] || null; };
-  T.setBtn = (b, on) => { if (!b) return; b.classList.toggle('on', on); b.textContent = on ? '⏹ Arrêter' : '🔊 Écouter'; };
+  T.setBtn = (b, on) => { if (!b) return; b.classList.toggle('on', on); b.innerHTML = on ? ic('stop') + 'Arrêter' : ic('speaker') + 'Écouter'; };
   T.stop = () => { T.id++; try { syn.cancel(); } catch { /* rien */ } T.setBtn(T.btn, false); T.btn = null; };
   T.speak = (text, btn) => {
     T.stop();
     const parts = T.chunks(T.clean(text));
-    if (!parts.length) { toast('🔇 Rien à lire dans ce message.'); return; }
+    if (!parts.length) { toast('Rien à lire dans ce message.'); return; }
     const my = ++T.id; T.btn = btn || null; T.setBtn(btn, true);
     let i = 0;
     const next = () => {
@@ -391,14 +410,14 @@ const TTS = (() => {
       const u = new SpeechSynthesisUtterance(parts[i++]);
       u.lang = 'fr-FR'; u.rate = T.rate; const v = T.pick(); if (v) { u.voice = v; u.lang = v.lang; }
       u.onend = next;
-      u.onerror = (e) => { if (my !== T.id) return; if (e.error === 'not-allowed') { toast('🔇 Touche d’abord l’écran puis réessaie (le navigateur bloque le son automatique).'); T.setBtn(btn, false); } else if (e.error !== 'interrupted' && e.error !== 'canceled') next(); };
+      u.onerror = (e) => { if (my !== T.id) return; if (e.error === 'not-allowed') { toast('Touche d’abord l’écran puis réessaie (le navigateur bloque le son automatique).'); T.setBtn(btn, false); } else if (e.error !== 'interrupted' && e.error !== 'canceled') next(); };
       syn.speak(u);
     };
     next();
   };
-  T.setAuto = (on) => { T.auto = on; set('muse_tts_auto', on ? '1' : '0'); const b = $('#ttsBtn'); b.classList.toggle('on', on); b.textContent = on ? '🔊' : '🔇'; b.title = 'Lecture à voix haute des réponses de Muse (' + (on ? 'activée' : 'désactivée') + ')'; };
+  T.setAuto = (on) => { T.auto = on; set('muse_tts_auto', on ? '1' : '0'); const b = $('#ttsBtn'); b.classList.toggle('on', on); b.innerHTML = ic(on ? 'speaker' : 'mute'); b.title = 'Lecture à voix haute des réponses de Muse (' + (on ? 'activée' : 'désactivée') + ')'; };
   T.setAuto(T.auto);
-  $('#ttsBtn').onclick = () => { const on = !T.auto; T.setAuto(on); if (!on) T.stop(); toast(on ? '🔊 Muse lira ses réponses à voix haute.' : '🔇 Lecture à voix haute désactivée.'); };
+  $('#ttsBtn').onclick = () => { const on = !T.auto; T.setAuto(on); if (!on) T.stop(); toast(on ? 'Muse lira ses réponses à voix haute.' : 'Lecture à voix haute coupée.'); };
 
   // Réglages : voix, vitesse, test
   const fill = () => {
@@ -410,14 +429,14 @@ const TTS = (() => {
   $('#ttsVoice').onchange = (e) => { T.voice = e.target.value; set('muse_tts_voice', T.voice); };
   $('#ttsRate').value = T.rate; $('#ttsRateV').textContent = T.rate.toFixed(2).replace(/0$/, '') + '×';
   $('#ttsRate').oninput = (e) => { T.rate = parseFloat(e.target.value); set('muse_tts_rate', String(T.rate)); $('#ttsRateV').textContent = T.rate.toFixed(2).replace(/0$/, '') + '×'; };
-  $('#ttsTest').onclick = () => T.speak('Salut Cédric, je suis Muse. Voilà comment je lis mes réponses à voix haute.');
+  $('#ttsTest').onclick = () => T.speak('Bonjour Cédric. Voici comment je lis mes réponses.');
   return T;
 })();
 function stopTts() { if (TTS) TTS.stop(); }
 function addTts(d) {
   if (!TTS) return;
   const row = document.createElement('div'); row.className = 'tools';
-  const b = document.createElement('button'); b.type = 'button'; b.className = 'tts'; b.textContent = '🔊 Écouter';
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'tts'; b.innerHTML = ic('speaker') + 'Écouter';
   b.onclick = () => { if (b.classList.contains('on')) TTS.stop(); else TTS.speak(d.dataset.raw || d.textContent, b); };
   row.appendChild(b); d.appendChild(row);
 }
@@ -434,21 +453,22 @@ function autoRead(cs) {
 // ---- Micro : dicter sa demande (reconnaissance vocale du navigateur, en français) ; la phrase est envoyée à la fin
 (() => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#micBtn');
+  mic.innerHTML = ic('mic');
   if (!SR) { mic.hidden = true; return; }
   let rec = null, base = '', heard = false;
   const ERR = {
-    'not-allowed': '🎤 Micro refusé : autorise-le pour ce site (cadenas de la barre d’adresse, ou Réglages → Applis → Muse → Autorisations).',
-    'service-not-allowed': '🎤 La dictée est désactivée sur ce navigateur.',
-    'no-speech': '🎤 Je n’ai rien entendu : réessaie.',
-    'audio-capture': '🎤 Aucun micro détecté.',
-    network: '🎤 La dictée a besoin d’internet.',
+    'not-allowed': 'Micro refusé : autorise-le pour ce site (cadenas de la barre d’adresse, ou Réglages → Applis → Muse → Autorisations).',
+    'service-not-allowed': 'La dictée est désactivée sur ce navigateur.',
+    'no-speech': 'Je n’ai rien entendu : réessaie.',
+    'audio-capture': 'Aucun micro détecté.',
+    network: 'La dictée a besoin d’internet.',
   };
   const panel = $('#listen'), wave = $('#wave'), hint = $('#listenHint');
   wave.innerHTML = Array.from({ length: 36 }, () => `<i style="--h:${25 + Math.random() * 70}%;--d:${(0.55 + Math.random() * 0.8).toFixed(2)}s;--l:-${(Math.random() * 1.2).toFixed(2)}s"></i>`).join('');
-  const reset = () => { rec = null; mic.classList.remove('on'); mic.textContent = '🎤'; mic.title = 'Parler à Muse'; panel.classList.remove('on'); };
+  const reset = () => { rec = null; mic.classList.remove('on'); mic.innerHTML = ic('mic'); mic.title = 'Parler à Muse'; panel.classList.remove('on'); };
   mic.onclick = () => {
     if (rec) { try { rec.stop(); } catch { /* déjà arrêté */ } return; }
-    if (busy) { toast('⏳ Muse travaille encore, attends sa réponse.'); return; }
+    if (busy) { toast('Muse travaille encore, attends sa réponse.'); return; }
     if (!need()) return;
     rec = new SR();
     rec.lang = 'fr-FR'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
@@ -457,10 +477,10 @@ function autoRead(cs) {
       let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
       heard = !!t.trim(); input.value = base + t; input.dispatchEvent(new Event('input')); if (t.trim()) hint.textContent = t;
     };
-    rec.onerror = (e) => { if (ERR[e.error]) toast(ERR[e.error]); else if (e.error !== 'aborted') toast('🎤 Micro : ' + e.error); };
+    rec.onerror = (e) => { if (ERR[e.error]) toast(ERR[e.error]); else if (e.error !== 'aborted') toast('Micro : ' + e.error); };
     rec.onend = () => { reset(); avatar('idle'); if (heard && input.value.trim() && !busy) { readNext = true; send(); } };
-    try { rec.start(); hint.textContent = 'Parle, je t’écoute'; panel.classList.add('on'); mic.classList.add('on'); mic.textContent = '⏹'; mic.title = 'Arrêter et envoyer'; avatar('thinking'); }
-    catch (e) { reset(); toast('🎤 Impossible de démarrer le micro : ' + e.message); }
+    try { rec.start(); hint.textContent = 'Parle quand tu veux'; panel.classList.add('on'); mic.classList.add('on'); mic.innerHTML = ic('stop'); mic.title = 'Arrêter et envoyer'; avatar('thinking'); }
+    catch (e) { reset(); toast('Impossible de démarrer le micro : ' + e.message); }
   };
 })();
 
