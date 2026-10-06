@@ -324,6 +324,37 @@ $('#new').onclick = newChat; $('#menu').onclick = () => $('#side').classList.tog
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
 
+// ---- Micro : dicter sa demande (reconnaissance vocale du navigateur, en français) ; la phrase est envoyée à la fin
+(() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#micBtn');
+  if (!SR) { mic.hidden = true; return; }
+  let rec = null, base = '', heard = false;
+  const ERR = {
+    'not-allowed': '🎤 Micro refusé : autorise-le pour ce site (cadenas de la barre d’adresse, ou Réglages → Applis → Muse → Autorisations).',
+    'service-not-allowed': '🎤 La dictée est désactivée sur ce navigateur.',
+    'no-speech': '🎤 Je n’ai rien entendu : réessaie.',
+    'audio-capture': '🎤 Aucun micro détecté.',
+    network: '🎤 La dictée a besoin d’internet.',
+  };
+  const reset = () => { rec = null; mic.classList.remove('on'); mic.textContent = '🎤'; mic.title = 'Parler à Muse'; };
+  mic.onclick = () => {
+    if (rec) { try { rec.stop(); } catch { /* déjà arrêté */ } return; }
+    if (busy) { toast('⏳ Muse travaille encore, attends sa réponse.'); return; }
+    if (!need()) return;
+    rec = new SR();
+    rec.lang = 'fr-FR'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+    base = input.value.trim() ? input.value.replace(/\s*$/, ' ') : ''; heard = false;
+    rec.onresult = (e) => {
+      let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      heard = !!t.trim(); input.value = base + t; input.dispatchEvent(new Event('input'));
+    };
+    rec.onerror = (e) => { if (ERR[e.error]) toast(ERR[e.error]); else if (e.error !== 'aborted') toast('🎤 Micro : ' + e.error); };
+    rec.onend = () => { reset(); avatar('idle'); if (heard && input.value.trim() && !busy) send(); };
+    try { rec.start(); mic.classList.add('on'); mic.textContent = '⏹'; mic.title = 'Arrêter et envoyer'; avatar('thinking'); }
+    catch (e) { reset(); toast('🎤 Impossible de démarrer le micro : ' + e.message); }
+  };
+})();
+
 // ---- Demande venue de la bulle Muse du téléphone (?ask=…&mode=…) : nouvelle discussion + envoi automatique
 (() => {
   const u = new URL(location.href), q = u.searchParams.get('ask'), m = u.searchParams.get('mode');
