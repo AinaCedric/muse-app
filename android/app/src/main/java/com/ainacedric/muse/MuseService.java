@@ -23,6 +23,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import android.widget.Toast;
 import android.os.PowerManager;
 import android.util.Base64;
 import android.util.DisplayMetrics;
@@ -69,7 +70,15 @@ public class MuseService extends AccessibilityService {
         try {
             getAccessibilityButtonController().registerAccessibilityButtonCallback(new AccessibilityButtonController.AccessibilityButtonCallback() {
                 @Override
-                public void onClicked(AccessibilityButtonController c) { Panel.toggle(MuseService.this); }
+                public void onClicked(AccessibilityButtonController c) {
+                    lastClick = System.currentTimeMillis();
+                    Bus.log("Bulle touchée");
+                    try {
+                        Panel.toggle(MuseService.this);
+                    } catch (Throwable t) {
+                        failOpen(t);
+                    }
+                }
             });
         } catch (Throwable t) { Bus.log("Bouton d'accessibilité : " + t.getMessage()); }
     }
@@ -78,7 +87,7 @@ public class MuseService extends AccessibilityService {
      * Ouvre le chat Muse depuis n'importe où. Android (et surtout MIUI) bloque l'ouverture d'une appli depuis l'arrière-plan,
      * sauf si l'appli a une fenêtre visible : on pose donc une fenêtre invisible de 1 pixel (calque d'accessibilité) pendant l'ouverture.
      */
-    private void openChat() {
+    void openChat() {
         Bus.log("Bulle touchée : ouverture du chat");
         final WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         final View v = new View(this);
@@ -100,6 +109,21 @@ public class MuseService extends AccessibilityService {
                 public void run() { try { wm.removeView(v); } catch (Throwable ignore) { } }
             }, 3000);
         }
+    }
+
+    static volatile long lastClick = 0;
+
+    static String why(Throwable t) {
+        StackTraceElement[] st = t.getStackTrace();
+        return t.getClass().getSimpleName() + ": " + t.getMessage() + (st.length > 0 ? " @ " + st[0].getFileName() + ":" + st[0].getLineNumber() : "");
+    }
+
+    /** Si le panneau ne peut pas s'afficher : on le dit (message + journal) et on ouvre quand même le chat. */
+    void failOpen(Throwable t) {
+        String w = why(t);
+        Bus.log("Panneau impossible → " + w);
+        try { Toast.makeText(this, "Panneau indisponible, ouverture du chat (" + w + ")", Toast.LENGTH_LONG).show(); } catch (Throwable ignore) { }
+        openChat();
     }
 
     // Écran tel qu'il était quand on a touché la bulle (avant l'ouverture du panneau) : sert à « Résumer cet écran ».
@@ -420,7 +444,7 @@ public class MuseService extends AccessibilityService {
                 out.put("model", Build.MODEL);
                 out.put("android", Build.VERSION.RELEASE);
                 out.put("sdk", Build.VERSION.SDK_INT);
-                out.put("app", "1.5");
+                out.put("app", "1.6");
                 return out;
             }
             case "state": {

@@ -10,8 +10,8 @@ android {
         applicationId 'com.ainacedric.muse'
         minSdk 26
         targetSdk 34
-        versionCode 6
-        versionName '1.5'
+        versionCode 7
+        versionName '1.6'
     }
 
     // Clé de signature "sideload" : sert uniquement à ce que les mises à jour de l'appli s'installent par-dessus l'ancienne.

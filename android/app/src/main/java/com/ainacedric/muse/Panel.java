@@ -69,9 +69,8 @@ class Panel {
             p.show();
             cur = p;
         } catch (Throwable t) {
-            Bus.log("Panneau impossible (" + t.getMessage() + ") : ouverture du chat à la place");
             cur = null;
-            Chat.open(s);
+            s.failOpen(t);
         }
     }
 
@@ -268,7 +267,14 @@ class Panel {
         lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         lp.y = dp(26);
         lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
-        wm.addView(card, lp);
+        try {
+            wm.addView(card, lp);
+        } catch (Throwable first) {
+            // 2e essai : fenêtre « par-dessus les autres applis » (autorisation de l'étape 3)
+            Bus.log("Fenêtre d'accessibilité refusée (" + MuseService.why(first) + ") : 2e essai");
+            lp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+            wm.addView(card, lp);
+        }
         h.post(tick);
         Bus.log("Panneau assistant ouvert");
     }
