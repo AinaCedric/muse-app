@@ -113,6 +113,13 @@ dialog::backdrop{background:#0008}
 #plusMenu p{margin:4px 12px 6px;font-size:12px;color:var(--mut)}
 #plusBtn{font-size:26px;line-height:1}
 #micBtn{font-size:19px;line-height:1}
+.tr{display:flex;justify-content:flex-end;padding-top:6px}
+#ttsBtn{font-size:18px}
+#ttsBtn.on{background:var(--acc);color:#fff}
+.m .tools{display:flex;justify-content:flex-end;margin-top:8px}
+.tts{border:0;background:var(--panel2);color:var(--acc);border-radius:999px;padding:4px 12px;font-size:13px}
+.tts.on{background:var(--acc);color:#fff}
+input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10px;accent-color:var(--acc)}
 #micBtn.on{background:#e5484d;color:#fff;animation:micpulse 1.1s ease-in-out infinite}
 @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(229,72,77,.55)}50%{box-shadow:0 0 0 9px rgba(229,72,77,0)}}
 /* Panneau d'écoute (comme le panneau de la bulle) */
@@ -154,7 +161,7 @@ dialog::backdrop{background:#0008}
       <div id="avatarWrap"><span class="glow"></span><canvas id="avatar" width="88" height="88" title="Dis bonjour à Muse"></canvas></div>
       <div id="whoName"><b>Muse</b><small id="status">✨ en ligne</small></div>
     </div>
-    <div></div>
+    <div class="tr"><button type="button" class="ghost ico" id="ttsBtn" title="Lecture à voix haute des réponses de Muse (désactivée)" aria-label="Lecture à voix haute">🔇</button></div>
   </div>
   <div id="msgs"></div>
   <div id="pending" hidden></div>
@@ -188,6 +195,12 @@ dialog::backdrop{background:#0008}
   <label>Token GitHub (fine-grained : Issues + Contents en lecture/écriture sur ce dépôt)</label>
   <input id="cfgTok" type="password" placeholder="github_pat_…" autocomplete="off">
   <div id="cfgMsg" class="hint"></div>
+  <hr style="border:0;border-top:1px solid var(--bd);margin:14px 0">
+  <label>🔊 Voix de Muse (lecture à voix haute)</label>
+  <select id="ttsVoice" style="width:100%;margin:4px 0 12px"></select>
+  <label>Vitesse : <b id="ttsRateV">1×</b></label>
+  <input id="ttsRate" type="range" min="0.7" max="1.5" step="0.05" value="1">
+  <div style="margin-bottom:14px"><button class="ghost" id="ttsTest" type="button">▶️ Tester la voix</button></div>
   <div style="display:flex;gap:8px;justify-content:flex-end">
     <button class="ghost" id="cfgCancel" type="button">Fermer</button><button class="btn" id="cfgSave" type="button">Tester et enregistrer</button>
   </div>

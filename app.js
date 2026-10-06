@@ -70,7 +70,7 @@ async function fetchComments(n, since) {
 }
 const attsIn = (body) => [...body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)-->/g)].map((m) => ({ path: m[1].trim(), name: m[2].trim(), type: m[3].trim() }));
 function show(c) {
-  if (c.body.includes(REPLY)) { const d = add('bot', strip(c.body));
+  if (c.body.includes(REPLY)) { const d = add('bot', strip(c.body)); d.dataset.raw = strip(c.body); addTts(d);
     if (/Code de confirmation\s*:\s*[0-9a-f]{6}/i.test(c.body)) { // boutons de validation humaine
       const row = document.createElement('div'); row.className = 'confirm';
       const mk = (label, cls, text) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost ' + cls; b.textContent = label; b.onclick = () => { row.remove(); input.value = text; send(); }; row.appendChild(b); };
@@ -82,7 +82,7 @@ function show(c) {
 
 async function openConv(n) {
   if (!need()) return;
-  pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = n; msgs.innerHTML = ''; $('#side').classList.remove('open');
+  stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = n; msgs.innerHTML = ''; $('#side').classList.remove('open');
   try {
     const cs = await fetchComments(n);
     cs.forEach(show);
@@ -94,7 +94,7 @@ async function openConv(n) {
   } catch (e) { add('bot', '⚠️ ' + e.message, 'err'); }
   loadList();
 }
-function newChat() { pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
+function newChat() { stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
 
 async function wait(n, since) {
   const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
@@ -106,7 +106,7 @@ async function wait(n, since) {
     bubble.textContent = `${label} ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
       const cs = (await fetchComments(n, since)).filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
-      if (cs.length) { bubble.remove(); cs.forEach(show); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
+      if (cs.length) { bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }
   if (my === pollId) {
@@ -118,7 +118,7 @@ async function wait(n, since) {
 async function send() {
   const message = input.value.trim();
   if ((!message && !pending.length) || busy || !need()) return;
-  const files = pending.splice(0); renderPending();
+  stopTts(); const files = pending.splice(0); renderPending();
   input.value = ''; input.style.height = 'auto'; busy = true; $('#send').disabled = true;
   try {
     if (!issueNo) {
@@ -332,6 +332,97 @@ empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
   btn.onclick = () => { const t = root.dataset.theme === 'dark' ? 'light' : 'dark'; apply(t); try { localStorage.setItem('muse_theme', t); } catch { /* stockage indisponible */ } };
 })();
 
+// ---- Lecture à voix haute des réponses de Muse (synthèse vocale du navigateur, hors-ligne, en français)
+let readNext = false;
+const TTS = (() => {
+  const syn = window.speechSynthesis;
+  if (!syn || !window.SpeechSynthesisUtterance) return null;
+  const ls = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+  const set = (k, v) => { try { localStorage.setItem(k, v); } catch { /* stockage indisponible */ } };
+  const T = { auto: ls('muse_tts_auto', '0') === '1', rate: parseFloat(ls('muse_tts_rate', '1')) || 1, voice: ls('muse_tts_voice', ''), id: 0, btn: null };
+
+  // Texte « parlable » : sans markdown, emojis, liens, code ni lignes techniques
+  T.clean = (md) => {
+    let t = String(md || '')
+      .replace(/<!--[\s\S]*?-->/g, ' ').replace(/\[\[REMEMBER:[\s\S]*?\]\]/g, ' ')
+      .replace(/^[ \t]*(🧭|ℹ️|🧠|📎)[^\n]*$/gm, ' ')
+      .replace(/^[ \t]*Code de confirmation\s*:[^\n]*$/gim, ' ')
+      .replace(/^[ \t]*Sources?\s*:[\s\S]*$/im, ' ')
+      .replace(/```[\s\S]*?(```|$)/g, ' (bloc de code) ')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/\bhttps?:\/\/\S+/g, ' lien ')
+      .replace(/`([^`]*)`/g, '$1').replace(/(\*\*|__|\*|~~)/g, '').replace(/(^|\s)_([^_\n]+)_(?=\s|$|[.,;:!?])/g, '$1$2')
+      .replace(/^[ \t]*#{1,6}[ \t]*/gm, '').replace(/^[ \t]*>[ \t]?/gm, '').replace(/^[ \t]*[-*•][ \t]+/gm, '').replace(/^[ \t]*\|?[-: |]{3,}\|?[ \t]*$/gm, ' ')
+      .replace(/\|/g, ', ')
+      .replace(/[\p{Extended_Pictographic}‍️⃣]/gu, '')
+      .replace(/([^.!?…:;,\s])[ \t]*\n+/g, '$1. ').replace(/\n+/g, ' ')
+      .replace(/\s{2,}/g, ' ').replace(/\.\s*\./g, '.').trim();
+    return t;
+  };
+  T.chunks = (t) => {
+    const out = []; let cur = '';
+    for (const s of t.split(/(?<=[.!?…:;])\s+/)) {
+      if ((cur + ' ' + s).length > 220 && cur) { out.push(cur.trim()); cur = s; } else cur += ' ' + s;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out.flatMap((c) => (c.length > 260 ? c.match(/.{1,240}(\s|$)/g).map((x) => x.trim()) : [c])).filter(Boolean);
+  };
+  T.voices = () => syn.getVoices().filter((v) => /^fr/i.test(v.lang));
+  T.pick = () => { const v = T.voices(); return v.find((x) => x.name === T.voice) || v.find((x) => /fr[-_]FR/i.test(x.lang) && x.localService) || v.find((x) => /fr[-_]FR/i.test(x.lang)) || v[0] || null; };
+  T.setBtn = (b, on) => { if (!b) return; b.classList.toggle('on', on); b.textContent = on ? '⏹ Arrêter' : '🔊 Écouter'; };
+  T.stop = () => { T.id++; try { syn.cancel(); } catch { /* rien */ } T.setBtn(T.btn, false); T.btn = null; };
+  T.speak = (text, btn) => {
+    T.stop();
+    const parts = T.chunks(T.clean(text));
+    if (!parts.length) { toast('🔇 Rien à lire dans ce message.'); return; }
+    const my = ++T.id; T.btn = btn || null; T.setBtn(btn, true);
+    let i = 0;
+    const next = () => {
+      if (my !== T.id) return;
+      if (i >= parts.length) { T.setBtn(btn, false); if (T.btn === btn) T.btn = null; return; }
+      const u = new SpeechSynthesisUtterance(parts[i++]);
+      u.lang = 'fr-FR'; u.rate = T.rate; const v = T.pick(); if (v) { u.voice = v; u.lang = v.lang; }
+      u.onend = next;
+      u.onerror = (e) => { if (my !== T.id) return; if (e.error === 'not-allowed') { toast('🔇 Touche d’abord l’écran puis réessaie (le navigateur bloque le son automatique).'); T.setBtn(btn, false); } else if (e.error !== 'interrupted' && e.error !== 'canceled') next(); };
+      syn.speak(u);
+    };
+    next();
+  };
+  T.setAuto = (on) => { T.auto = on; set('muse_tts_auto', on ? '1' : '0'); const b = $('#ttsBtn'); b.classList.toggle('on', on); b.textContent = on ? '🔊' : '🔇'; b.title = 'Lecture à voix haute des réponses de Muse (' + (on ? 'activée' : 'désactivée') + ')'; };
+  T.setAuto(T.auto);
+  $('#ttsBtn').onclick = () => { const on = !T.auto; T.setAuto(on); if (!on) T.stop(); toast(on ? '🔊 Muse lira ses réponses à voix haute.' : '🔇 Lecture à voix haute désactivée.'); };
+
+  // Réglages : voix, vitesse, test
+  const fill = () => {
+    const sel = $('#ttsVoice'), v = T.voices(); const cur = T.pick();
+    sel.innerHTML = v.length ? v.map((x) => `<option value="${x.name.replace(/"/g, '&quot;')}">${x.name} (${x.lang})</option>`).join('') : '<option value="">Voix du téléphone (par défaut)</option>';
+    if (cur) sel.value = cur.name;
+  };
+  fill(); syn.addEventListener?.('voiceschanged', fill);
+  $('#ttsVoice').onchange = (e) => { T.voice = e.target.value; set('muse_tts_voice', T.voice); };
+  $('#ttsRate').value = T.rate; $('#ttsRateV').textContent = T.rate.toFixed(2).replace(/0$/, '') + '×';
+  $('#ttsRate').oninput = (e) => { T.rate = parseFloat(e.target.value); set('muse_tts_rate', String(T.rate)); $('#ttsRateV').textContent = T.rate.toFixed(2).replace(/0$/, '') + '×'; };
+  $('#ttsTest').onclick = () => T.speak('Salut Cédric, je suis Muse. Voilà comment je lis mes réponses à voix haute.');
+  return T;
+})();
+function stopTts() { if (TTS) TTS.stop(); }
+function addTts(d) {
+  if (!TTS) return;
+  const row = document.createElement('div'); row.className = 'tools';
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'tts'; b.textContent = '🔊 Écouter';
+  b.onclick = () => { if (b.classList.contains('on')) TTS.stop(); else TTS.speak(d.dataset.raw || d.textContent, b); };
+  row.appendChild(b); d.appendChild(row);
+}
+// Réponse reçue en direct : lue si la lecture automatique est active, ou si la demande a été dictée au micro
+function autoRead(cs) {
+  const want = TTS && (TTS.auto || readNext); readNext = false;
+  if (!want) return;
+  const last = [...cs].reverse().find((c) => c.body.includes(REPLY));
+  if (!last) return;
+  const bubbles = [...msgs.querySelectorAll('.m.bot[data-raw]')], d = bubbles[bubbles.length - 1];
+  TTS.speak(strip(last.body), d && d.querySelector('.tts'));
+}
+
 // ---- Micro : dicter sa demande (reconnaissance vocale du navigateur, en français) ; la phrase est envoyée à la fin
 (() => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#micBtn');
@@ -359,7 +450,7 @@ empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
       heard = !!t.trim(); input.value = base + t; input.dispatchEvent(new Event('input')); if (t.trim()) hint.textContent = t;
     };
     rec.onerror = (e) => { if (ERR[e.error]) toast(ERR[e.error]); else if (e.error !== 'aborted') toast('🎤 Micro : ' + e.error); };
-    rec.onend = () => { reset(); avatar('idle'); if (heard && input.value.trim() && !busy) send(); };
+    rec.onend = () => { reset(); avatar('idle'); if (heard && input.value.trim() && !busy) { readNext = true; send(); } };
     try { rec.start(); hint.textContent = 'Parle, je t’écoute'; panel.classList.add('on'); mic.classList.add('on'); mic.textContent = '⏹'; mic.title = 'Arrêter et envoyer'; avatar('thinking'); }
     catch (e) { reset(); toast('🎤 Impossible de démarrer le micro : ' + e.message); }
   };
