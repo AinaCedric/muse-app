@@ -28,7 +28,8 @@ import android.widget.Toast;
 /** Assistant de configuration : chaque réglage nécessaire, avec un bouton qui ouvre la bonne page Android. */
 public class MainActivity extends Activity {
     private LinearLayout root;
-    private TextView sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
+    private Button wakeBtn, notifBtn;
+    private TextView sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -79,7 +80,7 @@ public class MainActivity extends Activity {
         sv.addView(root);
         setContentView(sv);
 
-        root.addView(text("Muse · Téléphone  v1.8", 26, true, Color.parseColor("#C4532D")));
+        root.addView(text("Muse · Téléphone  v1.9", 26, true, Color.parseColor("#5B3FD6")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
@@ -150,6 +151,22 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) { pasteBrain(); }
         }));
+
+        // 8. Mot d'activation
+        sWake = step(8, "Dire « Muse » pour lui parler", "Optionnel : le téléphone écoute le seul mot « Muse » (reconnaissance 100 % hors ligne, rien n'est envoyé). Dis « Muse », puis ta demande : elle répond à voix haute et le micro se rouvre pour enchaîner. Dis « merci » pour terminer. Le voyant micro d'Android reste allumé et la batterie s'use un peu plus.");
+        wakeBtn = button("", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { toggleWake(); }
+        });
+        root.addView(wakeBtn);
+        notifBtn = button("", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Store.setNotify(MainActivity.this, !Store.notify(MainActivity.this));
+                refresh();
+            }
+        });
+        root.addView(notifBtn);
 
         root.addView(button("🫧  Tester le panneau (comme la bulle)", new View.OnClickListener() {
             @Override
@@ -248,6 +265,25 @@ public class MainActivity extends Activity {
         refresh();
     }
 
+    private void toggleWake() {
+        boolean on = !Store.wake(this);
+        Store.setWake(this, on);
+        if (on && checkSelfPermission("android.permission.RECORD_AUDIO") != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{"android.permission.RECORD_AUDIO"}, 3);
+        } else {
+            startKeepAlive();
+        }
+        Toast.makeText(this, on ? "Dis « Muse » pour lui parler" : "Écoute de « Muse » coupée", Toast.LENGTH_SHORT).show();
+        refresh();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(code, perms, res);
+        startKeepAlive();
+        refresh();
+    }
+
     private void pasteBrain() {
         try {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -277,6 +313,9 @@ public class MainActivity extends Activity {
     private void refresh() {
         mark(sLink, Store.linked(this));
         mark(sBrain, Store.brainLinked(this));
+        mark(sWake, Store.wake(this));
+        wakeBtn.setText(Store.wake(this) ? "🔕  Arrêter l'écoute de « Muse »" : "🗣️  Activer « Muse » à la voix");
+        notifBtn.setText(Store.notify(this) ? "🔔  Notifications des réponses : activées" : "🔕  Notifications des réponses : coupées");
         mark(sAcc, accessibilityOn());
         mark(sOver, Settings.canDrawOverlays(this));
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
@@ -289,6 +328,7 @@ public class MainActivity extends Activity {
         long ago = Bus.lastPoll == 0 ? -1 : (System.currentTimeMillis() - Bus.lastPoll) / 1000;
         sStat.setText("Accessibilité : " + (MuseService.inst != null ? "✅ active" : "❌ INACTIVE (réactive Muse dans les réglages d'accessibilité)")
                 + "\nDernier toucher de la bulle : " + (MuseService.lastClick == 0 ? "aucun" : "il y a " + (System.currentTimeMillis() - MuseService.lastClick) / 1000 + " s")
+                + "\nMot d'activation : " + Wake.state
                 + "\nRelève des ordres : " + (ago < 0 ? "pas encore" : "il y a " + ago + " s (HTTP " + Bus.lastCode + ")"));
         logv.setText(Bus.logText());
     }

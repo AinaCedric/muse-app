@@ -169,7 +169,7 @@ public class MuseService extends AccessibilityService {
         return Normalizer.normalize(s == null ? "" : s, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase().trim();
     }
 
-    private String pkg() {
+    String pkg() {
         AccessibilityNodeInfo r = getRootInActiveWindow();
         if (r == null) return "";
         return str(r.getPackageName());
@@ -444,7 +444,7 @@ public class MuseService extends AccessibilityService {
                 out.put("model", Build.MODEL);
                 out.put("android", Build.VERSION.RELEASE);
                 out.put("sdk", Build.VERSION.SDK_INT);
-                out.put("app", "1.8");
+                out.put("app", "1.9");
                 return out;
             }
             case "state": {

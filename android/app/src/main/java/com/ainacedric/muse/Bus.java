@@ -143,7 +143,7 @@ class Bus {
         o.put("model", Build.MODEL);
         o.put("android", Build.VERSION.RELEASE);
         o.put("sdk", Build.VERSION.SDK_INT);
-        o.put("app", "1.8");
+        o.put("app", "1.9");
         o.put("a11y", MuseService.inst != null);
         return o;
     }
@@ -189,10 +189,12 @@ class Bus {
             try {
                 JSONObject cmd = new JSONObject(b.substring(end + 3).trim());
                 opName = cmd.optString("op", "?");
-                activeUntil = System.currentTimeMillis() + 3 * 60 * 1000;
+                if (!opName.equals("notify") && !opName.equals("ping")) activeUntil = System.currentTimeMillis() + 3 * 60 * 1000;
                 JSONObject out;
                 if (opName.equals("ping")) {
                     out = ping();
+                } else if (opName.equals("notify")) {
+                    out = Notif.show(c, cmd);
                 } else {
                     if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
                     MuseService s = MuseService.inst;

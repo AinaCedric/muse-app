@@ -7,6 +7,7 @@ on:
   push:
     paths:
       - 'android/**'
+      - '.github/workflows/android.yml'
 
 permissions:
   contents: write
@@ -26,6 +27,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
+
+      # Mot d'activation « Muse » : petit modèle vocal français hors ligne (Vosk, ~40 Mo), mis en cache entre deux compilations
+      - name: Cache du modèle vocal
+        id: vmodel
+        uses: actions/cache@v4
+        with:
+          path: vosk-model-small-fr-0.22
+          key: vosk-small-fr-0.22
+
+      - name: Télécharger le modèle vocal
+        if: steps.vmodel.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL --retry 3 -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
+          unzip -q model.zip
+          rm model.zip
+
+      - name: Ajouter le modèle à l'appli
+        run: |
+          mkdir -p android/app/src/main/assets
+          rm -rf android/app/src/main/assets/model-fr
+          cp -r vosk-model-small-fr-0.22 android/app/src/main/assets/model-fr
+          echo "vosk-small-fr-0.22" > android/app/src/main/assets/model-fr/uuid
+          du -sh android/app/src/main/assets/model-fr
 
       - name: Compiler l'APK
         working-directory: android

@@ -10,8 +10,8 @@ android {
         applicationId 'com.ainacedric.muse'
         minSdk 26
         targetSdk 34
-        versionCode 9
-        versionName '1.8'
+        versionCode 10
+        versionName '1.9'
     }
 
     // Clé de signature "sideload" : sert uniquement à ce que les mises à jour de l'appli s'installent par-dessus l'ancienne.
@@ -40,4 +40,10 @@ android {
         abortOnError false
         checkReleaseBuilds false
     }
+}
+
+dependencies {
+    // Mot d'activation « Muse » : reconnaissance vocale hors ligne
+    implementation 'com.alphacephei:vosk-android:0.3.47@aar'
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
 }

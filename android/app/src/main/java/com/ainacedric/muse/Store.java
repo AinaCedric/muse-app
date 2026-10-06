@@ -27,6 +27,10 @@ class Store {
     static void setPanelIssue(Context c, int n, long at) { p(c).edit().putInt("pIssue", n).putLong("pAt", at).apply(); }
     static boolean speak(Context c) { return p(c).getBoolean("speak", true); }
     static void setSpeak(Context c, boolean v) { p(c).edit().putBoolean("speak", v).apply(); }
+    static boolean notify(Context c) { return p(c).getBoolean("notify", true); }
+    static void setNotify(Context c, boolean v) { p(c).edit().putBoolean("notify", v).apply(); }
+    static boolean wake(Context c) { return p(c).getBoolean("wake", false); }
+    static void setWake(Context c, boolean v) { p(c).edit().putBoolean("wake", v).apply(); }
     static boolean linked(Context c) { return !repo(c).isEmpty() && !token(c).isEmpty(); }
 
     /** Code de liaison : "MUSE1." + base64url({"r":"user/depot","t":"jeton","i":1}) */

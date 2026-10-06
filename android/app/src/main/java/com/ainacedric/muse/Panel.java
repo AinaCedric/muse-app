@@ -40,15 +40,15 @@ import java.util.Locale;
 class Panel {
     static Panel cur;
 
-    // Palette « papier » commune avec le chat
-    private static final int ACC = Color.rgb(196, 83, 45);     // terracotta
-    private static final int INK = Color.rgb(28, 27, 25);
-    private static final int GREY = Color.rgb(110, 106, 98);
-    private static final int FAINT = Color.rgb(156, 151, 141);
-    private static final int PAPER = Color.rgb(246, 243, 238);
-    private static final int CARD = Color.rgb(255, 253, 249);
-    private static final int SOFT = Color.rgb(236, 230, 220);
-    private static final int LINE = Color.rgb(227, 221, 210);
+    // Palette commune avec le chat : lavande clair, cartes blanches, accent indigo
+    private static final int ACC = Color.rgb(91, 63, 214);     // #5B3FD6
+    private static final int INK = Color.rgb(28, 26, 46);
+    private static final int GREY = Color.rgb(108, 106, 128);
+    private static final int FAINT = Color.rgb(154, 151, 176);
+    private static final int PAPER = Color.rgb(248, 247, 255); // #F8F7FF
+    private static final int CARD = Color.WHITE;
+    private static final int SOFT = Color.rgb(239, 236, 252);
+    private static final int LINE = Color.rgb(232, 228, 247);
 
     private final MuseService svc;
     private final WindowManager wm;
@@ -69,6 +69,10 @@ class Panel {
     private EditText field;
     private SpeechRecognizer sr;
     private boolean listening = false, closed = false, focusable = false;
+    private boolean convo = false;   // conversation à la voix : après chaque réponse lue, le micro se rouvre
+    private final Runnable relisten = new Runnable() {
+        @Override public void run() { if (!closed && convo && !listening && !speaking) startListening(); }
+    };
     private float downY;
     private boolean dragged;
     private final Runnable tick = new Runnable() {
@@ -93,6 +97,19 @@ class Panel {
             cur = null;
             s.failOpen(t);
         }
+    }
+
+    /** Ouverture par le mot d'activation « Muse » : panneau + micro tout de suite, en mode conversation. */
+    static void voice(MuseService s) {
+        if (cur == null) {
+            toggle(s);
+            if (cur == null) return;
+        }
+        final Panel p = cur;
+        p.convo = true;
+        p.h.postDelayed(new Runnable() {
+            @Override public void run() { if (!p.closed && !p.listening) p.startListening(); }
+        }, 350);
     }
 
     private Panel(MuseService s) {
@@ -140,7 +157,7 @@ class Panel {
         card = new LinearLayout(svc);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(8), dp(16), dp(14));
-        card.setBackground(shape(PAPER, 22, LINE));
+        card.setBackground(shape(PAPER, 30, LINE));
 
         // Poignée + en-tête (zone qu'on tire vers le haut pour agrandir vers le chat)
         LinearLayout top = new LinearLayout(svc);
@@ -148,7 +165,7 @@ class Panel {
         LinearLayout gripRow = new LinearLayout(svc);
         gripRow.setGravity(Gravity.CENTER);
         View grip = new View(svc);
-        grip.setBackground(shape(Color.rgb(214, 207, 194), 3, 0));
+        grip.setBackground(shape(Color.rgb(218, 213, 241), 3, 0));
         grip.setLayoutParams(new LinearLayout.LayoutParams(dp(44), dp(5)));
         gripRow.addView(grip);
         gripRow.setPadding(0, dp(4), 0, dp(8));
@@ -215,7 +232,7 @@ class Panel {
 
         // Waveform
         LinearLayout waveBox = new LinearLayout(svc);
-        waveBox.setBackground(shape(CARD, 14, LINE));
+        waveBox.setBackground(shape(SOFT, 22, 0));
         waveBox.setPadding(dp(10), dp(6), dp(10), dp(6));
         wave = new Wave(svc);
         waveBox.addView(wave, new LinearLayout.LayoutParams(-1, dp(56)));
@@ -224,7 +241,7 @@ class Panel {
         waveBox.setLayoutParams(wl);
         card.addView(waveBox);
 
-        status = label("Touche le micro pour parler", 19, INK, false);
+        status = label("Touche le micro pour parler", 19, ACC, false);
         status.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SERIF, android.graphics.Typeface.ITALIC));
         status.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
@@ -243,7 +260,7 @@ class Panel {
             public void onClick(View v) { if (!lastSpeech.isEmpty()) speak(lastSpeech); }
         });
         answerScroll.addView(answer);
-        answerScroll.setBackground(shape(CARD, 14, LINE));
+        answerScroll.setBackground(shape(CARD, 22, LINE));
         LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, dp(190));
         al.topMargin = dp(8);
         answerScroll.setLayoutParams(al);
@@ -277,12 +294,12 @@ class Panel {
         // Saisie : micro · champ · envoyer
         LinearLayout row = new LinearLayout(svc);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackground(shape(CARD, 14, Color.rgb(214, 207, 194)));
+        row.setBackground(shape(CARD, 28, LINE));
         row.setPadding(dp(6), dp(4), dp(6), dp(4));
         LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
         rl.topMargin = dp(12);
         row.setLayoutParams(rl);
-        micBtn = new Ico(svc, Ico.MIC, GREY);
+        micBtn = new Ico(svc, Ico.MIC, ACC);
         micBtn.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
         micBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -313,7 +330,10 @@ class Panel {
         });
         row.addView(field, lpw(0, -2, 1f));
         Ico send = new Ico(svc, Ico.UP, Color.WHITE);
-        send.setBackground(shape(INK, 10, 0));
+        GradientDrawable sg = new GradientDrawable();
+        sg.setShape(GradientDrawable.OVAL);
+        sg.setColor(ACC);
+        send.setBackground(sg);
         send.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
         send.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -339,6 +359,7 @@ class Panel {
             wm.addView(card, lp);
         }
         h.post(tick);
+        Wake.pause(true);   // le panneau prend le micro
         Bus.log("Panneau assistant ouvert");
     }
 
@@ -347,7 +368,7 @@ class Panel {
         t.setGravity(Gravity.CENTER);
         t.setLineSpacing(0f, 1.05f);
         t.setPadding(dp(4), dp(10), dp(4), dp(10));
-        t.setBackground(shape(CARD, 12, LINE));
+        t.setBackground(shape(CARD, 20, LINE));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
         p.leftMargin = dp(3);
         p.rightMargin = dp(3);
@@ -393,6 +414,7 @@ class Panel {
     private void sendTyped() {
         String q = typed();
         if (q.isEmpty()) { status.setText("Écris ou dis ta demande"); return; }
+        convo = false;
         ask(q, "auto");
     }
 
@@ -453,6 +475,7 @@ class Panel {
         chipsRow.setVisibility(View.GONE);
         lastSpeech = err ? "" : Ask.plain(raw, true);
         if (!err && Store.speak(svc)) speak(lastSpeech);
+        else if (convo) h.postDelayed(relisten, 900);
     }
 
     private void newConversation() {
@@ -513,7 +536,12 @@ class Panel {
         if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) Bus.log("Voix française absente : voix par défaut du téléphone");
         tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
             @Override public void onStart(String id) { speaking = true; }
-            @Override public void onDone(String id) { if (id != null && id.equals(lastUtt)) speaking = false; }
+            @Override public void onDone(String id) {
+                if (id != null && id.equals(lastUtt)) {
+                    speaking = false;
+                    if (convo) h.postDelayed(relisten, 450);
+                }
+            }
             @Override public void onError(String id) { if (id != null && id.equals(lastUtt)) speaking = false; }
         });
         String t = pendingSpeech;
@@ -568,11 +596,13 @@ class Panel {
         h.removeCallbacksAndMessages(null);
         try { wm.removeView(card); } catch (Throwable ignore) { }
         if (cur == this) cur = null;
+        Wake.pause(false);
     }
 
     // ---------- Voix
     private void toggleMic() {
-        if (listening) { stopListening(); status.setText("Touche le micro pour parler"); return; }
+        if (listening) { convo = false; stopListening(); status.setText("Touche le micro pour parler"); return; }
+        convo = true;      // parler au micro = conversation à la voix (réponse lue, puis le micro se rouvre)
         startListening();
     }
 
@@ -601,20 +631,31 @@ class Panel {
                     @Override public void onBeginningOfSpeech() { }
                     @Override public void onRmsChanged(float rms) { wave.feed(Math.max(0f, Math.min(1f, (rms + 2f) / 12f))); }
                     @Override public void onBufferReceived(byte[] buf) { }
-                    @Override public void onEndOfSpeech() { listening = false; micBtn.set(Ico.MIC); micBtn.color(GREY); micBtn.setBackground(null); status.setText("Je réfléchis…"); }
+                    @Override public void onEndOfSpeech() { listening = false; micBtn.set(Ico.MIC); micBtn.color(ACC); micBtn.setBackground(null); status.setText("Je réfléchis…"); }
                     @Override public void onError(int code) {
                         listening = false;
-                        micBtn.set(Ico.MIC); micBtn.color(GREY); micBtn.setBackground(null);
-                        if (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) status.setText("Je n'ai rien entendu : retouche le micro");
+                        micBtn.set(Ico.MIC); micBtn.color(ACC); micBtn.setBackground(null);
+                        if (convo && (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
+                            convo = false;
+                            status.setText("À plus tard");
+                            closeLater();
+                        } else if (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) status.setText("Je n'ai rien entendu : retouche le micro");
                         else if (code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) status.setText("Micro non autorisé");
                         else status.setText("Micro indisponible (code " + code + ") : écris ta demande");
                     }
                     @Override public void onResults(Bundle b) {
                         listening = false;
-                        micBtn.set(Ico.MIC); micBtn.color(GREY); micBtn.setBackground(null);
+                        micBtn.set(Ico.MIC); micBtn.color(ACC); micBtn.setBackground(null);
                         ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                         String q = (r == null || r.isEmpty()) ? "" : r.get(0).trim();
                         if (q.isEmpty()) { status.setText("Je n'ai rien compris : retouche le micro"); return; }
+                        if (convo && q.toLowerCase(Locale.FRANCE).matches("^(merci|stop|arrête|arrete|c'est tout|au revoir|ferme|ça ira|ca ira|non merci)\\b.*")) {
+                            convo = false;
+                            status.setText("À plus tard");
+                            speak("À plus tard, Cédric.");
+                            h.postDelayed(new Runnable() { @Override public void run() { close(); } }, 2600);
+                            return;
+                        }
                         field.setText(q);
                         status.setText("« " + q + " »");
                         ask(q, "auto");
@@ -631,7 +672,7 @@ class Panel {
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR");
             i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
             listening = true;
-            micBtn.set(Ico.STOP); micBtn.color(Color.WHITE); micBtn.setBackground(shape(Color.rgb(180, 53, 31), 10, 0));
+            micBtn.set(Ico.STOP); micBtn.color(Color.WHITE); micBtn.setBackground(shape(Color.rgb(214, 69, 61), 20, 0));
             status.setText("J'écoute…");
             hint.setText("Parle, je t'écoute");
             sr.startListening(i);
@@ -645,7 +686,7 @@ class Panel {
     private void stopListening() {
         if (!listening) return;
         listening = false;
-        try { micBtn.set(Ico.MIC); micBtn.color(GREY); micBtn.setBackground(null); sr.stopListening(); } catch (Throwable ignore) { }
+        try { micBtn.set(Ico.MIC); micBtn.color(ACC); micBtn.setBackground(null); sr.stopListening(); } catch (Throwable ignore) { }
     }
 
     // ---------- Waveform

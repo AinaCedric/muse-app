@@ -354,7 +354,7 @@ empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
 // ---- Thème clair (comme le panneau de la bulle) / sombre
 (() => {
   const root = document.documentElement, meta = document.querySelector('meta[name=theme-color]'), btn = $('#themeBtn');
-  const apply = (t) => { root.dataset.theme = t; if (meta) meta.content = t === 'dark' ? '#161513' : '#F6F3EE'; btn.innerHTML = ic(t === 'dark' ? 'sun' : 'moon'); };
+  const apply = (t) => { root.dataset.theme = t; if (meta) meta.content = t === 'dark' ? '#13111D' : '#F8F7FF'; btn.innerHTML = ic(t === 'dark' ? 'sun' : 'moon'); };
   apply(root.dataset.theme === 'dark' ? 'dark' : 'light');
   btn.onclick = () => { const t = root.dataset.theme === 'dark' ? 'light' : 'dark'; apply(t); try { localStorage.setItem('muse_theme', t); } catch { /* stockage indisponible */ } };
 })();
@@ -486,7 +486,8 @@ function autoRead(cs) {
 
 // ---- Demande venue de la bulle Muse du téléphone (?ask=…&mode=…) : nouvelle discussion + envoi automatique
 (() => {
-  const u = new URL(location.href), q = u.searchParams.get('ask'), m = u.searchParams.get('mode');
+  const u = new URL(location.href), q = u.searchParams.get('ask'), m = u.searchParams.get('mode'), conv = parseInt(u.searchParams.get('c') || '', 10);
+  if (conv > 0) { history.replaceState(null, '', u.pathname); if (cfg.repo && cfg.token) openConv(conv); return; } // touché depuis une notification
   if (!q) return;
   history.replaceState(null, '', u.pathname);
   if (!(cfg.repo && cfg.token)) return;

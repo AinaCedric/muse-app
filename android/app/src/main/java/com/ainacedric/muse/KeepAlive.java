@@ -7,6 +7,9 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
 import android.os.IBinder;
 
 /**
@@ -23,14 +26,50 @@ public class KeepAlive extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         running = true;
-        startForeground(2, build(this, false));
+        boolean wantMic = Store.wake(this) && checkSelfPermission("android.permission.RECORD_AUDIO") == PackageManager.PERMISSION_GRANTED;
+        boolean mic = startFg(wantMic);
         Bus.ensureLoop(getApplicationContext());
+        if (mic) Wake.start(this);
+        else {
+            Wake.stop();
+            if (wantMic) Wake.state = "en attente : ouvre l'appli Muse Tél. pour relancer l'écoute";
+        }
         return START_STICKY;
+    }
+
+    /** Service au premier plan ; avec le type « micro » si l'écoute de « Muse » est active (sinon Android coupe le micro en arrière-plan). */
+    private boolean startFg(boolean mic) {
+        Notification n = build(this, false);
+        if (Build.VERSION.SDK_INT >= 34) {
+            int base = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
+            if (mic) {
+                try {
+                    startForeground(2, n, base | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+                    return true;
+                } catch (Throwable t) {
+                    Bus.log("Micro en arrière-plan refusé par Android : " + t.getMessage());
+                }
+            }
+            startForeground(2, n, base);
+            return false;
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                startForeground(2, n, mic ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0);
+                return mic;
+            } catch (Throwable t) {
+                startForeground(2, n);
+                return false;
+            }
+        }
+        startForeground(2, n);
+        return mic;
     }
 
     @Override
     public void onDestroy() {
         running = false;
+        Wake.stop();
         super.onDestroy();
     }
 
@@ -39,7 +78,7 @@ public class KeepAlive extends Service {
         nm.createNotificationChannel(new NotificationChannel("muse", "Muse", NotificationManager.IMPORTANCE_LOW));
         Notification.Builder b = new Notification.Builder(c, "muse");
         b.setSmallIcon(R.mipmap.ic_launcher);
-        b.setContentTitle(active ? "Muse utilise ton téléphone" : "Muse est connectée");
+        b.setContentTitle(active ? "Muse utilise ton téléphone" : Store.wake(c) ? "Muse t'écoute : dis « Muse »" : "Muse est connectée");
         b.setContentText(active ? "Touche pour ouvrir Muse (bouton Pause pour l'arrêter)" : "Prête à recevoir tes demandes");
         b.setOngoing(true);
         b.setContentIntent(PendingIntent.getActivity(c, 0, new Intent(c, MainActivity.class), PendingIntent.FLAG_IMMUTABLE));
