@@ -28,7 +28,7 @@ import android.widget.Toast;
 /** Assistant de configuration : chaque réglage nécessaire, avec un bouton qui ouvre la bonne page Android. */
 public class MainActivity extends Activity {
     private LinearLayout root;
-    private TextView sLink, sAcc, sOver, sBat, sNot, sTest, logv;
+    private TextView sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         setContentView(sv);
 
         root.addView(text("Muse · Téléphone", 26, true, Color.parseColor("#6c4bd8")));
-        root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les 5 étapes ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
+        root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
         sStat = text("", 13, true, Color.parseColor("#1a1a2e"));
@@ -135,6 +135,14 @@ public class MainActivity extends Activity {
                 else Toast.makeText(MainActivity.this, "Déjà autorisé sur cette version d'Android.", Toast.LENGTH_SHORT).show();
             }
         }));
+
+        // 6. Micro
+        sMic = step(6, "Autoriser le micro (pour parler à Muse)", "Optionnel : permet de dicter tes demandes dans le panneau de la bulle. Sans le micro, tu peux toujours écrire.");
+        root.addView(button("🎤  Autoriser le micro", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { requestPermissions(new String[]{"android.permission.RECORD_AUDIO"}, 2); }
+        }));
+        if (getIntent().getBooleanExtra("mic", false)) requestPermissions(new String[]{"android.permission.RECORD_AUDIO"}, 2);
 
         root.addView(button("💬  Ouvrir le chat Muse", new View.OnClickListener() {
             @Override
@@ -235,6 +243,7 @@ public class MainActivity extends Activity {
         mark(sOver, Settings.canDrawOverlays(this));
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         mark(sBat, pm.isIgnoringBatteryOptimizations(getPackageName()));
+        mark(sMic, checkSelfPermission("android.permission.RECORD_AUDIO") == PackageManager.PERMISSION_GRANTED);
         mark(sNot, Build.VERSION.SDK_INT < 33 || checkSelfPermission("android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED);
         String link = Store.linked(this) ? "Lié à " + Store.repo(this) : "Pas encore lié";
         String acc = MuseService.inst != null ? "service actif" : "service inactif";

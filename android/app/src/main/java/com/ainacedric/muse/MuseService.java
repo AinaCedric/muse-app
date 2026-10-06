@@ -69,7 +69,7 @@ public class MuseService extends AccessibilityService {
         try {
             getAccessibilityButtonController().registerAccessibilityButtonCallback(new AccessibilityButtonController.AccessibilityButtonCallback() {
                 @Override
-                public void onClicked(AccessibilityButtonController c) { openChat(); }
+                public void onClicked(AccessibilityButtonController c) { Panel.toggle(MuseService.this); }
             });
         } catch (Throwable t) { Bus.log("Bouton d'accessibilité : " + t.getMessage()); }
     }
@@ -99,6 +99,21 @@ public class MuseService extends AccessibilityService {
                 @Override
                 public void run() { try { wm.removeView(v); } catch (Throwable ignore) { } }
             }, 3000);
+        }
+    }
+
+    // Écran tel qu'il était quand on a touché la bulle (avant l'ouverture du panneau) : sert à « Résumer cet écran ».
+    static volatile JSONObject before = null;
+    static volatile long beforeAt = 0;
+
+    void snapshot() {
+        try {
+            JSONObject o = screen();
+            before = o;
+            beforeAt = System.currentTimeMillis();
+        } catch (Throwable t) {
+            before = null;
+            Bus.log("Écran non mémorisé : " + t.getMessage());
         }
     }
 
@@ -405,7 +420,7 @@ public class MuseService extends AccessibilityService {
                 out.put("model", Build.MODEL);
                 out.put("android", Build.VERSION.RELEASE);
                 out.put("sdk", Build.VERSION.SDK_INT);
-                out.put("app", "1.0");
+                out.put("app", "1.5");
                 return out;
             }
             case "state": {
@@ -423,6 +438,14 @@ public class MuseService extends AccessibilityService {
             case "screen": {
                 prep();
                 return screen();
+            }
+            case "screen_before": {
+                JSONObject b = before;
+                long age = (System.currentTimeMillis() - beforeAt) / 1000;
+                if (b == null || age > 600) throw new Exception("Aucun écran mémorisé récemment : Cédric doit toucher la bulle Muse depuis l'écran à résumer, puis lancer « Résumer cet écran ».");
+                JSONObject o = new JSONObject(b.toString());
+                o.put("ageSec", age);
+                return o;
             }
             case "shot": {
                 prep();

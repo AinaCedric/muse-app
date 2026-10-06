@@ -323,3 +323,15 @@ input.addEventListener('input', () => { input.style.height = 'auto'; input.style
 $('#new').onclick = newChat; $('#menu').onclick = () => $('#side').classList.toggle('open');
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
+
+// ---- Demande venue de la bulle Muse du téléphone (?ask=…&mode=…) : nouvelle discussion + envoi automatique
+(() => {
+  const u = new URL(location.href), q = u.searchParams.get('ask'), m = u.searchParams.get('mode');
+  if (!q) return;
+  history.replaceState(null, '', u.pathname);
+  if (!(cfg.repo && cfg.token)) return;
+  newChat();
+  if (m && [...modeSel.options].some((o) => o.value === m && !o.disabled)) modeSel.value = m;
+  input.value = q; input.dispatchEvent(new Event('input'));
+  setTimeout(send, 500);
+})();
