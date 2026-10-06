@@ -14,6 +14,8 @@ import android.os.Looper;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -23,14 +25,17 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
 /**
  * Le panneau « assistant » de Muse : s'ouvre quand on touche la bulle (bouton d'accessibilité), par-dessus n'importe quelle appli.
  * Micro + waveform, 3 actions rapides, champ de saisie. Tirer le panneau vers le haut (ou toucher ⤢) ouvre le chat Muse en grand.
- * Les demandes sont transmises au chat (PWA) qui les envoie à Muse.
+ * Les demandes partent directement à Muse ; la réponse s'affiche dans le panneau et est lue à voix haute (réglable avec 🔊/🔇).
+ * Si le code « Cerveau » n'est pas collé dans l'appli, la demande est transmise au chat (PWA) comme avant.
  */
 class Panel {
     static Panel cur;
@@ -45,7 +50,15 @@ class Panel {
     private LinearLayout card;
     private WindowManager.LayoutParams lp;
     private Wave wave;
-    private TextView status, hint, micBtn;
+    private TextView status, hint, micBtn, spk, answer;
+    private ScrollView answerScroll;
+    private LinearLayout chipsRow;
+    private Ask ask;
+    private TextToSpeech tts;
+    private boolean ttsReady = false;
+    private volatile boolean speaking = false;
+    private volatile String lastUtt = "";
+    private String pendingSpeech = null, lastSpeech = "";
     private EditText field;
     private SpeechRecognizer sr;
     private boolean listening = false, closed = false, focusable = false;
@@ -55,7 +68,8 @@ class Panel {
         @Override
         public void run() {
             if (closed) return;
-            wave.step(listening);
+            if (speaking) wave.feed((float) (0.25 + 0.55 * Math.random()));
+            wave.step(listening || speaking);
             h.postDelayed(this, 55);
         }
     };
@@ -140,15 +154,29 @@ class Panel {
         TextView title = label("Muse", 20, INK, true);
         title.setPadding(dp(10), 0, 0, 0);
         head.addView(title, lpw(0, -2, 1f));
+        spk = label(Store.speak(svc) ? "🔊" : "🔇", 20, GREY, false);
+        spk.setPadding(dp(10), dp(4), dp(8), dp(4));
+        spk.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { toggleSpeak(); }
+        });
+        head.addView(spk);
+        TextView fresh = label("↺", 22, GREY, false);
+        fresh.setPadding(dp(8), dp(4), dp(8), dp(4));
+        fresh.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { newConversation(); }
+        });
+        head.addView(fresh);
         TextView expand = label("⤢", 22, GREY, false);
-        expand.setPadding(dp(12), dp(4), dp(12), dp(4));
+        expand.setPadding(dp(8), dp(4), dp(8), dp(4));
         expand.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) { openChat(typed()); }
         });
         head.addView(expand);
         TextView min = label("—", 22, GREY, false);
-        min.setPadding(dp(12), dp(4), dp(8), dp(4));
+        min.setPadding(dp(8), dp(4), dp(6), dp(4));
         min.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) { close(); }
@@ -190,16 +218,32 @@ class Panel {
         hint = label("Comment puis-je t'aider ?", 14, GREY, false);
         hint.setGravity(Gravity.CENTER);
         card.addView(hint);
+        answerScroll = new ScrollView(svc);
+        answer = label("", 15, INK, false);
+        answer.setPadding(dp(14), dp(10), dp(14), dp(10));
+        answer.setLineSpacing(0f, 1.1f);
+        answer.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { if (!lastSpeech.isEmpty()) speak(lastSpeech); }
+        });
+        answerScroll.addView(answer);
+        answerScroll.setBackground(shape(Color.WHITE, 16, Color.rgb(214, 210, 238)));
+        LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, dp(190));
+        al.topMargin = dp(8);
+        answerScroll.setLayoutParams(al);
+        answerScroll.setVisibility(View.GONE);
+        card.addView(answerScroll);
 
         // 3 actions rapides
         LinearLayout chips = new LinearLayout(svc);
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
         cl.topMargin = dp(12);
         chips.setLayoutParams(cl);
+        chipsRow = chips;
         chips.addView(chip("✨", "Résumer\ncet écran", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                openChatWith("Résume en quelques lignes ce qui était affiché sur l'écran de mon téléphone quand j'ai ouvert l'assistant (lis-le avec l'outil phone_screen_before, sans rien toucher).", "phone");
+                ask("Résume en quelques lignes ce qui était affiché sur l'écran de mon téléphone quand j'ai ouvert l'assistant (lis-le avec l'outil phone_screen_before, sans rien toucher).", "phone");
             }
         }), lpw(0, -2, 1f));
         chips.addView(chip("✏️", "Écrire\nun message", new View.OnClickListener() {
@@ -209,7 +253,7 @@ class Panel {
         chips.addView(chip("📅", "Mon programme\ndu jour", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                openChatWith("Qu'ai-je à mon agenda aujourd'hui ? Ajoute les e-mails importants non lus, en bref.", "auto");
+                ask("Qu'ai-je à mon agenda aujourd'hui ? Ajoute les e-mails importants non lus, en bref.", "auto");
             }
         }), lpw(0, -2, 1f));
         card.addView(chips);
@@ -329,7 +373,7 @@ class Panel {
     private void sendTyped() {
         String q = typed();
         if (q.isEmpty()) { status.setText("Écris ou dis ta demande"); return; }
-        openChatWith(q, "auto");
+        ask(q, "auto");
     }
 
     private void openChat(String q) {
@@ -343,6 +387,148 @@ class Panel {
         closeLater();
     }
 
+    // ---------- Demande + réponse dans le panneau
+    private void ask(String q, String mode) {
+        stopListening();
+        stopSpeaking();
+        if (!Store.brainLinked(svc)) {
+            status.setText("Ouvert dans le chat");
+            hint.setText("Pour voir et entendre la réponse ici : colle le code « Cerveau » dans l'appli Muse Tél. (étape 7).");
+            openChatWith(q, mode);
+            return;
+        }
+        if (ask != null) ask.cancel();
+        field.setText("");
+        chipsRow.setVisibility(View.GONE);
+        answerScroll.setVisibility(View.GONE);
+        hint.setVisibility(View.VISIBLE);
+        String shown = q.length() > 90 ? q.substring(0, 90) + "…" : q;
+        status.setText("Muse réfléchit…");
+        hint.setText("« " + shown + " »");
+        ask = new Ask(svc, new Ask.Cb() {
+            @Override public void waiting(int seconds) { if (!closed) status.setText("Muse réfléchit… " + seconds + " s"); }
+            @Override public void reply(String raw) { if (!closed) showReply(raw); }
+            @Override public void error(String msg) {
+                if (closed) return;
+                status.setText("Oups, ça n'a pas marché");
+                hint.setText(msg);
+                chipsRow.setVisibility(View.VISIBLE);
+                Bus.log("Panneau : " + msg);
+            }
+        });
+        ask.start(q, mode);
+    }
+
+    private void showReply(String raw) {
+        boolean err = raw.contains("<!--muse-error-->");
+        String text = Ask.plain(raw, false);
+        if (text.isEmpty()) text = "(réponse vide)";
+        status.setText(err ? "⚠️ Problème" : "Muse");
+        hint.setVisibility(View.GONE);
+        answer.setText(text);
+        answerScroll.scrollTo(0, 0);
+        answerScroll.setVisibility(View.VISIBLE);
+        answerScroll.getLayoutParams().height = text.length() < 140 ? -2 : dp(190);
+        answerScroll.requestLayout();
+        chipsRow.setVisibility(View.GONE);
+        lastSpeech = err ? "" : Ask.plain(raw, true);
+        if (!err && Store.speak(svc)) speak(lastSpeech);
+    }
+
+    private void newConversation() {
+        if (ask != null) ask.cancel();
+        stopSpeaking();
+        Ask.forgetConversation(svc);
+        answerScroll.setVisibility(View.GONE);
+        hint.setVisibility(View.VISIBLE);
+        chipsRow.setVisibility(View.VISIBLE);
+        field.setText("");
+        status.setText("Nouvelle conversation");
+        hint.setText("Comment puis-je t'aider ?");
+    }
+
+    // ---------- Lecture à voix haute
+    private void toggleSpeak() {
+        boolean on = !Store.speak(svc);
+        Store.setSpeak(svc, on);
+        spk.setText(on ? "🔊" : "🔇");
+        if (!on) stopSpeaking();
+        else if (answerScroll.getVisibility() == View.VISIBLE && !lastSpeech.isEmpty()) speak(lastSpeech);
+        Bus.log("Lecture à voix haute : " + (on ? "oui" : "non"));
+    }
+
+    private void speak(String text) {
+        if (text == null || text.trim().isEmpty() || closed) return;
+        if (tts == null) {
+            pendingSpeech = text;
+            try {
+                tts = new TextToSpeech(svc, new TextToSpeech.OnInitListener() {
+                    @Override
+                    public void onInit(final int st) {
+                        h.post(new Runnable() {
+                            @Override public void run() { onTtsReady(st); }
+                        });
+                    }
+                });
+            } catch (Throwable t) {
+                Bus.log("Voix de lecture impossible : " + t.getMessage());
+            }
+            return;
+        }
+        if (ttsReady) say(text); else pendingSpeech = text;
+    }
+
+    private void onTtsReady(int st) {
+        if (closed) { try { if (tts != null) tts.shutdown(); } catch (Throwable ignore) { } return; }
+        if (st != TextToSpeech.SUCCESS) {
+            Bus.log("Voix de lecture indisponible (code " + st + ")");
+            tts = null;
+            hint.setVisibility(View.VISIBLE);
+            hint.setText("Voix de lecture indisponible sur ce téléphone.");
+            return;
+        }
+        ttsReady = true;
+        int r = tts.setLanguage(Locale.FRANCE);
+        if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) Bus.log("Voix française absente : voix par défaut du téléphone");
+        tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override public void onStart(String id) { speaking = true; }
+            @Override public void onDone(String id) { if (id != null && id.equals(lastUtt)) speaking = false; }
+            @Override public void onError(String id) { if (id != null && id.equals(lastUtt)) speaking = false; }
+        });
+        String t = pendingSpeech;
+        pendingSpeech = null;
+        if (t != null) say(t);
+    }
+
+    private void say(String text) {
+        try {
+            tts.stop();
+            String rest = text.trim();
+            int i = 0;
+            while (!rest.isEmpty()) {
+                String part = rest;
+                if (rest.length() > 1500) {
+                    int cut = Math.max(rest.lastIndexOf(". ", 1500), rest.lastIndexOf("\n", 1500));
+                    if (cut < 300) cut = rest.lastIndexOf(' ', 1500);
+                    if (cut < 300) cut = 1500;
+                    part = rest.substring(0, cut + 1);
+                }
+                rest = rest.substring(part.length()).trim();
+                lastUtt = "m" + (rest.isEmpty() ? "last" : String.valueOf(i));
+                tts.speak(part.trim(), TextToSpeech.QUEUE_ADD, null, lastUtt);
+                i++;
+            }
+        } catch (Throwable t) {
+            Bus.log("Lecture : " + t.getMessage());
+        }
+    }
+
+    private void stopSpeaking() {
+        pendingSpeech = null;
+        speaking = false;
+        try { if (tts != null && ttsReady) tts.stop(); } catch (Throwable ignore) { }
+    }
+
     private void closeLater() {
         h.postDelayed(new Runnable() {
             @Override
@@ -353,7 +539,10 @@ class Panel {
     void close() {
         if (closed) return;
         closed = true;
+        if (ask != null) ask.cancel();
         stopListening();
+        speaking = false;
+        try { if (tts != null) { tts.stop(); tts.shutdown(); } } catch (Throwable ignore) { }
         try { if (sr != null) sr.destroy(); } catch (Throwable ignore) { }
         h.removeCallbacksAndMessages(null);
         try { wm.removeView(card); } catch (Throwable ignore) { }
@@ -407,7 +596,7 @@ class Panel {
                         if (q.isEmpty()) { status.setText("Je n'ai rien compris : retouche le micro"); return; }
                         field.setText(q);
                         status.setText("« " + q + " »");
-                        openChatWith(q, "auto");
+                        ask(q, "auto");
                     }
                     @Override public void onPartialResults(Bundle b) {
                         ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);

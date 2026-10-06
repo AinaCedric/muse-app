@@ -51,11 +51,15 @@ class Bus {
     }
 
     static Resp req(Context c, String method, String path, String body, String ifNoneMatch) throws IOException {
+        return reqTok(Store.token(c), method, path, body, ifNoneMatch);
+    }
+
+    static Resp reqTok(String token, String method, String path, String body, String ifNoneMatch) throws IOException {
         HttpURLConnection h = (HttpURLConnection) new URL("https://api.github.com" + path).openConnection();
         h.setRequestMethod(method);
         h.setConnectTimeout(10000);
         h.setReadTimeout(20000);
-        h.setRequestProperty("Authorization", "Bearer " + Store.token(c));
+        h.setRequestProperty("Authorization", "Bearer " + token);
         h.setRequestProperty("Accept", "application/vnd.github+json");
         h.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
         h.setRequestProperty("User-Agent", "MuseTelephone");
@@ -139,7 +143,7 @@ class Bus {
         o.put("model", Build.MODEL);
         o.put("android", Build.VERSION.RELEASE);
         o.put("sdk", Build.VERSION.SDK_INT);
-        o.put("app", "1.6");
+        o.put("app", "1.7");
         o.put("a11y", MuseService.inst != null);
         return o;
     }

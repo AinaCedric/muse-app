@@ -271,6 +271,14 @@ function addUser(text, atts = []) {
 
 // ---- Réglages
 function openCfg() { $('#cfgRepo').value = cfg.repo; $('#cfgTok').value = cfg.token; $('#cfgMsg').textContent = ''; $('#cfg').showModal(); }
+$('#phoneCode').onclick = async () => {
+  if (!cfg.repo || !cfg.token) { $('#cfgMsg').textContent = '⚠️ Renseigne d\'abord le dépôt et le token ci-dessus, puis enregistre.'; return; }
+  const bytes = new TextEncoder().encode(JSON.stringify({ r: cfg.repo, t: cfg.token }));
+  let bin = ''; bytes.forEach((c) => (bin += String.fromCharCode(c)));
+  const code = 'MUSEB.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  try { await navigator.clipboard.writeText(code); $('#cfgMsg').textContent = '✅ Code copié. Ouvre l\'appli Muse Tél. → étape 7 → « Coller le code Cerveau ».'; }
+  catch { window.prompt('Copie ce code :', code); }
+};
 $('#cfgBtn').onclick = openCfg; $('#cfgCancel').onclick = () => $('#cfg').close();
 $('#cfgSave').onclick = async () => {
   const repo = $('#cfgRepo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''), token = $('#cfgTok').value.trim();

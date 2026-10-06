@@ -28,7 +28,7 @@ import android.widget.Toast;
 /** Assistant de configuration : chaque réglage nécessaire, avec un bouton qui ouvre la bonne page Android. */
 public class MainActivity extends Activity {
     private LinearLayout root;
-    private TextView sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
+    private TextView sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
         sv.addView(root);
         setContentView(sv);
 
-        root.addView(text("Muse · Téléphone  v1.6", 26, true, Color.parseColor("#6c4bd8")));
+        root.addView(text("Muse · Téléphone  v1.7", 26, true, Color.parseColor("#6c4bd8")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
@@ -143,6 +143,13 @@ public class MainActivity extends Activity {
             public void onClick(View v) { requestPermissions(new String[]{"android.permission.RECORD_AUDIO"}, 2); }
         }));
         if (getIntent().getBooleanExtra("mic", false)) requestPermissions(new String[]{"android.permission.RECORD_AUDIO"}, 2);
+
+        // 7. Réponses dans le panneau
+        sBrain = step(7, "Voir et entendre les réponses dans le panneau", "Dans l'appli Muse (PWA) : ⚙️ Réglages → « 📲 Copier le code pour le téléphone ». Reviens ici et touche le bouton : le panneau de la bulle affichera les réponses et les lira à voix haute (🔊/🔇 pour couper).");
+        root.addView(button("🧠  Coller le code Cerveau", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { pasteBrain(); }
+        }));
 
         root.addView(button("🫧  Tester le panneau (comme la bulle)", new View.OnClickListener() {
             @Override
@@ -241,6 +248,22 @@ public class MainActivity extends Activity {
         refresh();
     }
 
+    private void pasteBrain() {
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData d = cm.getPrimaryClip();
+            String s = (d != null && d.getItemCount() > 0) ? d.getItemAt(0).coerceToText(this).toString() : "";
+            int k = s.indexOf("MUSEB.");
+            if (k < 0) throw new Exception("Le presse-papiers ne contient pas de code MUSEB.… : copie-le d'abord depuis la PWA (⚙️ Réglages).");
+            String code = s.substring(k).trim().split("\\s+")[0];
+            Store.linkBrain(this, code);
+            Toast.makeText(this, "✅ Panneau relié à " + Store.brain(this), Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "❌ " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+        refresh();
+    }
+
     private static void mark(TextView t, boolean ok) {
         String s = t.getText().toString();
         if (s.length() > 1) t.setText((ok ? "✅" : "⬜") + s.substring(1));
@@ -253,6 +276,7 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         mark(sLink, Store.linked(this));
+        mark(sBrain, Store.brainLinked(this));
         mark(sAcc, accessibilityOn());
         mark(sOver, Settings.canDrawOverlays(this));
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
