@@ -36,9 +36,9 @@ const need = () => { if (!cfg.repo || !cfg.token) { openCfg(); return false; } r
 
 function empty() {
   msgs.innerHTML = `<div id="empty"><h1>✨ Salut Cédric</h1><div>Je suis Muse, propulsée par Claude. Je te réponds dès que tu es connecté, même PC éteint.</div>
-  <div class="chips">${['💡 Idées de contenu pour GYOO', '💻 Aide-moi sur un module Odoo', '🎯 Planifie ma semaine', '💬 Juste discuter un peu']
-    .map((t) => `<button class="ghost chip">${t}</button>`).join('')}</div></div>`;
-  document.querySelectorAll('.chip').forEach((b) => (b.onclick = () => { input.value = b.textContent; send(); }));
+  <div class="chips">${[['💡', 'Idées de contenu pour GYOO'], ['💻', 'Aide-moi sur un module Odoo'], ['🎯', 'Planifie ma semaine'], ['💬', 'Juste discuter un peu']]
+    .map(([i, t]) => `<button class="chip" data-q="${t}"><span>${i}</span>${t}</button>`).join('')}</div></div>`;
+  document.querySelectorAll('.chip').forEach((b) => (b.onclick = () => { input.value = b.dataset.q; send(); }));
 }
 
 async function loadList() {
@@ -324,6 +324,14 @@ $('#new').onclick = newChat; $('#menu').onclick = () => $('#side').classList.tog
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
 
+// ---- Thème clair (comme le panneau de la bulle) / sombre
+(() => {
+  const root = document.documentElement, meta = document.querySelector('meta[name=theme-color]'), btn = $('#themeBtn');
+  const apply = (t) => { root.dataset.theme = t; if (meta) meta.content = t === 'dark' ? '#14121f' : '#F8F7FF'; btn.textContent = t === 'dark' ? '☀️' : '🌙'; };
+  apply(root.dataset.theme === 'dark' ? 'dark' : 'light');
+  btn.onclick = () => { const t = root.dataset.theme === 'dark' ? 'light' : 'dark'; apply(t); try { localStorage.setItem('muse_theme', t); } catch { /* stockage indisponible */ } };
+})();
+
 // ---- Micro : dicter sa demande (reconnaissance vocale du navigateur, en français) ; la phrase est envoyée à la fin
 (() => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#micBtn');
@@ -336,7 +344,9 @@ empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
     'audio-capture': '🎤 Aucun micro détecté.',
     network: '🎤 La dictée a besoin d’internet.',
   };
-  const reset = () => { rec = null; mic.classList.remove('on'); mic.textContent = '🎤'; mic.title = 'Parler à Muse'; };
+  const panel = $('#listen'), wave = $('#wave'), hint = $('#listenHint');
+  wave.innerHTML = Array.from({ length: 36 }, () => `<i style="--h:${25 + Math.random() * 70}%;--d:${(0.55 + Math.random() * 0.8).toFixed(2)}s;--l:-${(Math.random() * 1.2).toFixed(2)}s"></i>`).join('');
+  const reset = () => { rec = null; mic.classList.remove('on'); mic.textContent = '🎤'; mic.title = 'Parler à Muse'; panel.classList.remove('on'); };
   mic.onclick = () => {
     if (rec) { try { rec.stop(); } catch { /* déjà arrêté */ } return; }
     if (busy) { toast('⏳ Muse travaille encore, attends sa réponse.'); return; }
@@ -346,11 +356,11 @@ empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
     base = input.value.trim() ? input.value.replace(/\s*$/, ' ') : ''; heard = false;
     rec.onresult = (e) => {
       let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
-      heard = !!t.trim(); input.value = base + t; input.dispatchEvent(new Event('input'));
+      heard = !!t.trim(); input.value = base + t; input.dispatchEvent(new Event('input')); if (t.trim()) hint.textContent = t;
     };
     rec.onerror = (e) => { if (ERR[e.error]) toast(ERR[e.error]); else if (e.error !== 'aborted') toast('🎤 Micro : ' + e.error); };
     rec.onend = () => { reset(); avatar('idle'); if (heard && input.value.trim() && !busy) send(); };
-    try { rec.start(); mic.classList.add('on'); mic.textContent = '⏹'; mic.title = 'Arrêter et envoyer'; avatar('thinking'); }
+    try { rec.start(); hint.textContent = 'Parle, je t’écoute'; panel.classList.add('on'); mic.classList.add('on'); mic.textContent = '⏹'; mic.title = 'Arrêter et envoyer'; avatar('thinking'); }
     catch (e) { reset(); toast('🎤 Impossible de démarrer le micro : ' + e.message); }
   };
 })();
