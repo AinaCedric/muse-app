@@ -101,11 +101,14 @@ const avatar = (s) => { try { window.MuseAvatar && window.MuseAvatar.setState(s)
 const toast = (t) => { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2800); };
 
 async function gh(path, opts = {}) {
-  const r = await fetch(API + path, {
-    cache: 'no-store', // GitHub impose max-age=60 : sans ça, la réponse de Muse n'apparaît qu'après 60 s
-    ...opts,
-    headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
-  });
+  let r;
+  try {
+    r = await fetch(API + path, {
+      cache: 'no-store', // GitHub impose max-age=60 : sans ça, la réponse de Muse n'apparaît qu'après 60 s
+      ...opts,
+      headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
+    });
+  } catch (e) { const n = new Error('Connexion perdue pendant l’envoi (réseau ou GitHub injoignable). Réessaie dans un instant : ton message est conservé.'); n.network = true; throw n; }
   if (!r.ok) { const e = new Error(r.status === 401 ? 'Token invalide ou expiré' : r.status === 404 ? 'Dépôt introuvable (vérifie le nom et les droits du token)' : `GitHub ${r.status}`); e.status = r.status; throw e; }
   return r.status === 204 ? null : r.json();
 }
@@ -240,6 +243,7 @@ async function send() {
   if ((!message && !pending.length) || busy || !need()) return;
   stopTts(); const files = pending.splice(0); renderPending();
   input.value = ''; input.style.height = 'auto'; busy = true; $('#send').disabled = true;
+  let up = null, sent = false;
   try {
     if (!issueNo) {
       const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: (message || files[0].name).slice(0, 60), body: 'Discussion Muse' }) });
@@ -248,13 +252,17 @@ async function send() {
     addUser(message, files.map((f) => ({ name: f.name, type: f.type, url: f.url })));
     let markers = '';
     if (files.length) {
-      const up = add('bot', 'Envoi des pièces jointes', 'wait');
+      up = add('bot', 'Envoi des pièces jointes', 'wait');
       markers = await upload(issueNo, files, (k) => { up.textContent = `Envoi des pièces jointes · ${k}/${files.length}`; });
       up.remove();
     }
     const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->` }) });
+    sent = true;
     wait(issueNo, c.created_at);
-  } catch (e) { add('bot', '' + e.message, 'err'); busy = false; $('#send').disabled = false; avatar('sad'); }
+  } catch (e) {
+    if (up) up.remove();
+    if (!sent) { input.value = message; input.dispatchEvent(new Event('input')); pending.push(...files); renderPending(); } // rien n'est perdu : il suffit de renvoyer
+    add('bot', '' + e.message, 'err'); busy = false; $('#send').disabled = false; avatar('sad'); }
 }
 
 // ---- Pièces jointes
@@ -340,7 +348,15 @@ async function upload(n, files, progress) {
   let markers = '';
   for (let i = 0; i < files.length; i++) {
     const f = files[i], p = `uploads/${n}/${Date.now()}-${i}-${safeName(f.name)}`;
-    await gh(`/repos/${cfg.repo}/contents/${p}`, { method: 'PUT', body: JSON.stringify({ message: 'pièce jointe', content: await toB64(f.blob) }) });
+    const body = JSON.stringify({ message: 'pièce jointe', content: await toB64(f.blob) });
+    for (let t = 1; ; t++) { // une coupure réseau passagère ne doit pas faire perdre la pièce jointe : 3 essais
+      try { await gh(`/repos/${cfg.repo}/contents/${p}`, { method: 'PUT', body }); break; }
+      catch (e) {
+        if (e.status === 422) break; // déjà déposée lors d'un essai précédent
+        if (t >= 3 || !(e.network || e.status >= 500 || [403, 409, 429].includes(e.status))) throw e;
+        await new Promise((r) => setTimeout(r, 900 * t));
+      }
+    }
     markers += `\n<!--att:${p}|${label(f.name)}|${f.type}-->`;
     progress(i + 1);
   }
