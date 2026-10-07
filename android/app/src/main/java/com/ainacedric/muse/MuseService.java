@@ -324,7 +324,7 @@ public class MuseService extends AccessibilityService {
         return best;
     }
 
-    private JSONObject shot() throws Exception {
+    private JSONObject shot(JSONObject region) throws Exception {
         if (Build.VERSION.SDK_INT < 30) throw new Exception("Capture d'écran : Android 11 minimum.");
         final Bitmap[] bm = new Bitmap[1];
         final int[] err = {0};
@@ -351,13 +351,29 @@ public class MuseService extends AccessibilityService {
             if (bm[0] == null && attempt == 0) Thread.sleep(1200);
         }
         if (bm[0] == null) throw new Exception("Capture impossible (code " + err[0] + ") : fenêtre protégée contre les captures, ou appels trop rapprochés.");
-        int[][] opts = {{540, 50}, {480, 45}, {420, 40}, {360, 35}};
+        // Rognage demandé (fractions de l'écran) : fait sur l'image en pleine définition, avant la réduction → bien plus net
+        Bitmap src = bm[0];
+        boolean cropped = false;
+        if (region != null) {
+            int fw = src.getWidth(), fh = src.getHeight();
+            double rx = Math.max(0, Math.min(0.95, region.optDouble("x", 0))), ry = Math.max(0, Math.min(0.95, region.optDouble("y", 0)));
+            double rw = Math.max(0.05, Math.min(1 - rx, region.optDouble("w", 1))), rh = Math.max(0.05, Math.min(1 - ry, region.optDouble("h", 1)));
+            int cx = (int) Math.round(rx * fw), cy = (int) Math.round(ry * fh);
+            int cw = Math.min(fw - cx, (int) Math.round(rw * fw)), ch = Math.min(fh - cy, (int) Math.round(rh * fh));
+            if (cw >= 48 && ch >= 48 && (cw < fw || ch < fh)) {
+                src = Bitmap.createBitmap(src, cx, cy, cw, ch);
+                cropped = true;
+            }
+        }
+        int[][] opts = cropped
+                ? new int[][]{{1080, 55}, {900, 50}, {720, 48}, {600, 45}, {480, 40}, {360, 35}}
+                : new int[][]{{540, 50}, {480, 45}, {420, 40}, {360, 35}};
         String b64 = "";
         int W = 0, H = 0;
         for (int[] o : opts) {
-            int w = Math.min(o[0], bm[0].getWidth());
-            int h = Math.round(bm[0].getHeight() * (w / (float) bm[0].getWidth()));
-            Bitmap sc = Bitmap.createScaledBitmap(bm[0], w, h, true);
+            int w = Math.min(o[0], src.getWidth());
+            int h = Math.round(src.getHeight() * (w / (float) src.getWidth()));
+            Bitmap sc = Bitmap.createScaledBitmap(src, w, h, true);
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             sc.compress(Bitmap.CompressFormat.JPEG, o[1], bo);
             b64 = Base64.encodeToString(bo.toByteArray(), Base64.NO_WRAP);
@@ -371,6 +387,7 @@ public class MuseService extends AccessibilityService {
         o.put("w", W);
         o.put("h", H);
         o.put("b64", b64);
+        o.put("cropped", cropped);
         return o;
     }
 
@@ -444,7 +461,7 @@ public class MuseService extends AccessibilityService {
                 out.put("model", Build.MODEL);
                 out.put("android", Build.VERSION.RELEASE);
                 out.put("sdk", Build.VERSION.SDK_INT);
-                out.put("app", "2.0");
+                out.put("app", "2.1");
                 return out;
             }
             case "state": {
@@ -474,7 +491,7 @@ public class MuseService extends AccessibilityService {
             case "shot": {
                 prep();
                 denyCheck();
-                return shot();
+                return shot(c.optJSONObject("region"));
             }
             case "tap": {
                 prep();
