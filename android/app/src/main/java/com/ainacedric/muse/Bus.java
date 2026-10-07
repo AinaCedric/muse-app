@@ -143,7 +143,7 @@ class Bus {
         o.put("model", Build.MODEL);
         o.put("android", Build.VERSION.RELEASE);
         o.put("sdk", Build.VERSION.SDK_INT);
-        o.put("app", "1.9");
+        o.put("app", "2.0");
         o.put("a11y", MuseService.inst != null);
         return o;
     }

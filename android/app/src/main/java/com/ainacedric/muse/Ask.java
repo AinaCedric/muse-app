@@ -107,9 +107,17 @@ class Ask {
         if (!stop) throw new Exception("Muse met trop de temps à répondre : regarde dans le chat.");
     }
 
+    /** Nombre d'images jointes à la réponse (affichées dans le chat, pas dans le panneau). */
+    static int imgCount(String raw) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\[\\[IMG:").matcher(raw);
+        int n = 0;
+        while (m.find()) n++;
+        return n;
+    }
+
     /** Texte lisible : sans balises cachées ni mise en forme Markdown. keepEmoji=false pour la voix. */
     static String plain(String raw, boolean forSpeech) {
-        String s = raw.replaceAll("(?s)<!--.*?-->", "");
+        String s = raw.replaceAll("(?s)<!--.*?-->", "").replaceAll("[ \\t]*\\[\\[IMG:[^\\]]*\\]\\][ \\t]*", "");
         s = s.replaceAll("(?s)```.*?```", forSpeech ? " (bloc de code) " : "");
         s = s.replaceAll("(?m)^\\s*🧭.*$", "");
         s = s.replaceAll("\\[([^\\]]+)\\]\\((https?://[^)]+)\\)", forSpeech ? "$1" : "$1");

@@ -18,6 +18,10 @@ const ICON = {
   file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/>',
   camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  left: '<path d="M15 6l-6 6 6 6"/>',
+  right: '<path d="m9 6 6 6-6 6"/>',
+  out: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   folder: '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/>',
 };
 const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
@@ -37,6 +41,56 @@ function render(text) {
   h = h.replace(/(^|\n)[ \t]*[-*•][ \t]+([^\n]*)/g, '$1<span class="li">$2</span>').replace(/(<span class="li">[^\n]*<\/span>)\n/g, '$1');
   h = h.replace(/\b(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   return h;
+}
+// ---- Galerie d'images : Muse écrit [[IMG:adresse_image|adresse_page|légende]] ; on les montre en vignettes, un clic les agrandit
+const IMG_RE = /[ \t]*\[\[IMG:([^\]]*)\]\][ \t]*/g;
+const okUrl = (u) => { try { return /^https?:$/.test(new URL(u).protocol); } catch { return false; } };
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+function splitImgs(text) {
+  const imgs = [];
+  const t = text.replace(IMG_RE, (_, inner) => {
+    const [img = '', page = '', ...cap] = inner.split('|').map((x) => x.trim());
+    if (okUrl(img) && imgs.length < 8) imgs.push({ img, page: okUrl(page) ? page : '', cap: cap.join(' ') });
+    return '\n';
+  }).replace(/\n{3,}/g, '\n\n').trim();
+  return { text: t, imgs };
+}
+const lb = { el: null, list: [], i: 0 };
+function lbShow(k) {
+  if (!lb.list.length) return lbClose();
+  lb.i = (k + lb.list.length) % lb.list.length;
+  const it = lb.list[lb.i];
+  lb.el.querySelector('img').src = it.img; lb.el.querySelector('img').alt = it.cap;
+  lb.el.querySelector('.lb-t').textContent = it.cap || hostOf(it.page || it.img);
+  const a = lb.el.querySelector('a'); a.hidden = !it.page; a.href = it.page || '#';
+  lb.el.querySelectorAll('.lb-p,.lb-n').forEach((b) => (b.hidden = lb.list.length < 2));
+  lb.el.querySelector('.lb-c').textContent = lb.list.length > 1 ? `${lb.i + 1} / ${lb.list.length}` : '';
+}
+function lbClose() { if (lb.el) { lb.el.hidden = true; lb.el.querySelector('img').removeAttribute('src'); } }
+function openLightbox(list, k) {
+  if (!lb.el) {
+    lb.el = $('#lb');
+    lb.el.onclick = (e) => { if (e.target === lb.el || e.target.closest('.lb-x')) lbClose(); };
+    lb.el.querySelector('.lb-p').onclick = (e) => { e.stopPropagation(); lbShow(lb.i - 1); };
+    lb.el.querySelector('.lb-n').onclick = (e) => { e.stopPropagation(); lbShow(lb.i + 1); };
+    document.addEventListener('keydown', (e) => { if (lb.el.hidden) return; if (e.key === 'Escape') lbClose(); else if (e.key === 'ArrowLeft') lbShow(lb.i - 1); else if (e.key === 'ArrowRight') lbShow(lb.i + 1); });
+    let x0 = null; lb.el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    lb.el.addEventListener('touchend', (e) => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) lbShow(lb.i + (dx < 0 ? 1 : -1)); });
+  }
+  lb.list = list; lb.el.hidden = false; lbShow(k);
+}
+function gallery(imgs) {
+  const g = document.createElement('div'); g.className = 'gallery';
+  const alive = imgs.slice();
+  imgs.forEach((it) => {
+    const f = document.createElement('figure');
+    const im = document.createElement('img'); im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; im.alt = it.cap || ''; im.src = it.img;
+    im.onerror = () => { f.remove(); const n = alive.indexOf(it); if (n >= 0) alive.splice(n, 1); if (!g.children.length) g.remove(); }; // image bloquée ou disparue : on la retire
+    f.onclick = () => openLightbox(alive, Math.max(0, alive.indexOf(it)));
+    const c = document.createElement('figcaption'); c.textContent = it.cap || hostOf(it.page || it.img);
+    f.append(im, c); g.appendChild(f);
+  });
+  return g;
 }
 function add(role, text, cls = '') {
   const d = document.createElement('div');
@@ -97,7 +151,9 @@ function show(c) {
   if (c.body.includes(REPLY)) {
     let txt = strip(c.body), meta = '';
     txt = txt.replace(/^[ \t]*🧭[^\n]*?Mode choisi\s*:\s*([^\n]*)$/m, (_, m) => { meta = m.replace(/[_*]/g, '').replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim(); return ''; }).trim();
-    const d = add('bot', txt); d.dataset.raw = txt;
+    const { text: body, imgs } = splitImgs(txt);
+    const d = add('bot', body); d.dataset.raw = body;
+    if (imgs.length) d.appendChild(gallery(imgs));
     if (meta) { const s = document.createElement('span'); s.className = 'meta'; s.textContent = 'Mode : ' + meta; d.appendChild(s); }
     addTts(d);
     if (/Code de confirmation\s*:\s*[0-9a-f]{6}/i.test(c.body)) { // boutons de validation humaine
@@ -371,7 +427,7 @@ const TTS = (() => {
   // Texte « parlable » : sans markdown, emojis, liens, code ni lignes techniques
   T.clean = (md) => {
     let t = String(md || '')
-      .replace(/<!--[\s\S]*?-->/g, ' ').replace(/\[\[REMEMBER:[\s\S]*?\]\]/g, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ').replace(/\[\[IMG:[^\]]*\]\]/g, ' ').replace(/\[\[REMEMBER:[\s\S]*?\]\]/g, ' ')
       .replace(/^[ \t]*(🧭|ℹ️|🧠|📎)[^\n]*$/gm, ' ')
       .replace(/^[ \t]*Code de confirmation\s*:[^\n]*$/gim, ' ')
       .replace(/^[ \t]*Sources?\s*:[\s\S]*$/im, ' ')

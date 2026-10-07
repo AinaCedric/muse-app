@@ -444,7 +444,7 @@ public class MuseService extends AccessibilityService {
                 out.put("model", Build.MODEL);
                 out.put("android", Build.VERSION.RELEASE);
                 out.put("sdk", Build.VERSION.SDK_INT);
-                out.put("app", "1.9");
+                out.put("app", "2.0");
                 return out;
             }
             case "state": {

@@ -465,6 +465,8 @@ class Panel {
         boolean err = raw.contains("<!--muse-error-->");
         String text = Ask.plain(raw, false);
         if (text.isEmpty()) text = "(réponse vide)";
+        int nImg = Ask.imgCount(raw);
+        if (nImg > 0) text += "\n\n" + nImg + (nImg > 1 ? " images" : " image") + " à voir dans le chat Muse (touche ⤢).";
         status.setText(err ? "⚠️ Problème" : "Muse");
         hint.setVisibility(View.GONE);
         answer.setText(text);
