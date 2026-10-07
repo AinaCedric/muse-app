@@ -346,11 +346,14 @@ async function upload(n, files, progress) {
   }
   return markers;
 }
-async function fetchBlob(p) {
+const MIME_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf', mp4: 'video/mp4', txt: 'text/plain', csv: 'text/csv', json: 'application/json' };
+async function fetchBlob(p, hint = '') {
   if (blobCache.has(p)) return blobCache.get(p);
   const r = await fetch(`${API}/repos/${cfg.repo}/contents/${p.split('/').map(encodeURIComponent).join('/')}`, { headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github.raw+json' } });
   if (!r.ok) throw new Error('GitHub ' + r.status);
-  const url = URL.createObjectURL(await r.blob()); blobCache.set(p, url); return url;
+  // GitHub renvoie un type générique : on remet le vrai type (sinon l'image s'ouvre comme du texte)
+  const type = /^[a-z]+\/[\w.+-]+$/i.test(hint) && hint !== 'application/octet-stream' ? hint : (MIME_EXT[(p.split('.').pop() || '').toLowerCase()] || 'application/octet-stream');
+  const url = URL.createObjectURL(new Blob([await r.arrayBuffer()], { type })); blobCache.set(p, url); return url;
 }
 function attsBox(atts) {
   const box = document.createElement('div'); box.className = 'atts';
@@ -358,14 +361,18 @@ function attsBox(atts) {
     const isImg = /^image\//i.test(a.type) || /\.(jpe?g|png|webp|gif)$/i.test(a.name);
     const open = async () => {
       try {
-        const u = a.url || await fetchBlob(a.path);
-        if (isImg) window.open(u, '_blank');
+        const u = a.url || await fetchBlob(a.path, a.type);
+        if (isImg) {
+          const imgs = atts.filter((x) => /^image\//i.test(x.type) || /\.(jpe?g|png|webp|gif)$/i.test(x.name));
+          const list = await Promise.all(imgs.map(async (x) => ({ img: x.url || await fetchBlob(x.path, x.type), cap: x.name.split('/').pop() })));
+          openLightbox(list, Math.max(0, imgs.indexOf(a)));
+        }
         else { const l = document.createElement('a'); l.href = u; l.download = a.name.split('/').pop(); document.body.appendChild(l); l.click(); l.remove(); }
       } catch { toast('Fichier introuvable'); }
     };
     if (isImg) {
       const im = document.createElement('img'); im.alt = a.name; im.title = a.name; im.onclick = open; box.appendChild(im);
-      if (a.url) im.src = a.url; else fetchBlob(a.path).then((u) => (im.src = u)).catch(() => { im.replaceWith(Object.assign(document.createElement('span'), { className: 'fchip', textContent: a.name })); });
+      if (a.url) im.src = a.url; else fetchBlob(a.path, a.type).then((u) => (im.src = u)).catch(() => { im.replaceWith(Object.assign(document.createElement('span'), { className: 'fchip', textContent: a.name })); });
     } else {
       const s = document.createElement('span'); s.className = 'fchip'; s.innerHTML = iconOf(a.name) + esc(a.name) + ' ↓'; s.title = 'Télécharger'; s.onclick = open; box.appendChild(s);
     }
