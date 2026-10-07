@@ -27,7 +27,7 @@ const ICON = {
 const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((e) => { e.outerHTML = ic(e.dataset.icon); });
 const msgs = $('#msgs'), input = $('#in'), modeSel = $('#mode');
-const REPLY = '<!--muse-reply-->', ERROR = '<!--muse-error-->';
+const REPLY = '<!--muse-reply-->', ERROR = '<!--muse-error-->', LIVE = '<!--muse-live-->';
 const API = localStorage.getItem('muse_api') || 'https://api.github.com';
 let cfg = { repo: localStorage.getItem('muse_repo') || '', token: localStorage.getItem('muse_token') || '' };
 let issueNo = null, busy = false, pollId = 0;
@@ -148,6 +148,7 @@ async function fetchComments(n, since) {
 }
 const attsIn = (body) => [...body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)-->/g)].map((m) => ({ path: m[1].trim(), name: m[2].trim(), type: m[3].trim() }));
 function show(c) {
+  if (c.body.includes(LIVE)) return null;
   if (c.body.includes(REPLY)) {
     let txt = strip(c.body), meta = '';
     txt = txt.replace(/^[ \t]*🧭[^\n]*?Mode choisi\s*:\s*([^\n]*)$/m, (_, m) => { meta = m.replace(/[_*]/g, '').replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim(); return ''; }).trim();
@@ -173,7 +174,7 @@ async function openConv(n) {
     cs.forEach(show);
     const mode = [...cs].reverse().map((c) => (c.body.match(/<!--mode:(\w+)-->/) || [])[1]).find(Boolean);
     if (mode) modeSel.value = mode;
-    const last = cs[cs.length - 1];
+    const last = [...cs].reverse().find((c) => !c.body.includes(LIVE));
     // Une réponse est peut-être encore en préparation : on reprend l'attente.
     if (last && !last.body.includes(REPLY) && !last.body.includes(ERROR) && Date.now() - new Date(last.created_at) < 20 * 60 * 1000) wait(n, last.created_at);
   } catch (e) { add('bot', '' + e.message, 'err'); }
@@ -181,20 +182,54 @@ async function openConv(n) {
 }
 function newChat() { stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
 
+// 🖥️ Carte « Muse travaille » : dernière capture du navigateur, étape en cours, étapes déjà faites
+function liveCard() {
+  const d = document.createElement('div'); d.className = 'm bot live';
+  d.innerHTML = '<div class="lv-head"><span class="lv-dot"></span><b>Muse travaille</b><span class="lv-t"></span></div>'
+    + '<div class="lv-screen"><div class="lv-bar"><i></i><i></i><i></i><span class="lv-url"></span></div><div class="lv-view"><img alt="Capture du navigateur de Muse" hidden><div class="lv-ph"></div></div></div>'
+    + '<div class="lv-now"></div><ul class="lv-steps"></ul>';
+  const img = d.querySelector('img');
+  img.onclick = () => openLightbox([{ img: img.src, cap: d.querySelector('.lv-now').textContent, page: d.dataset.url || '' }], 0);
+  msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d;
+}
+function liveUpdate(d, o) {
+  d.querySelector('.lv-now').textContent = o.label || '';
+  d.querySelector('.lv-t').textContent = Math.max(0, Math.round((Date.now() - (o.t0 || Date.now())) / 1000)) + ' s';
+  const img = d.querySelector('img'), ph = d.querySelector('.lv-ph');
+  d.dataset.url = /^https?:/i.test(o.url || '') ? o.url : '';
+  d.querySelector('.lv-url').textContent = o.masked ? 'Page de connexion' : (d.dataset.url ? hostOf(d.dataset.url) : '');
+  if (o.img && /^[A-Za-z0-9+/=]+$/.test(o.img)) { const src = 'data:image/jpeg;base64,' + o.img; if (img.src !== src) img.src = src; img.hidden = false; ph.hidden = true; }
+  else { img.hidden = true; ph.hidden = false; ph.textContent = o.masked ? 'Capture masquée : page de connexion' : 'Le navigateur démarre…'; }
+  const ul = d.querySelector('.lv-steps'), steps = (o.steps || []).map(String);
+  if (ul.dataset.n !== String(steps.length)) {
+    ul.dataset.n = String(steps.length); ul.innerHTML = '';
+    steps.forEach((t) => { const li = document.createElement('li'); li.textContent = t.replace(/…$/, ''); ul.appendChild(li); });
+    ul.scrollTop = ul.scrollHeight;
+  }
+  d.classList.toggle('empty-steps', !steps.length);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+const liveOf = (cs) => { const c = [...cs].reverse().find((x) => x.body.includes(LIVE)); if (!c || Date.now() - new Date(c.updated_at || c.created_at) > 2 * 60 * 1000) return null; try { return JSON.parse(c.body.slice(c.body.indexOf(LIVE) + LIVE.length).trim()); } catch { return null; } };
+
 async function wait(n, since) {
   const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
   const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
-  const bubble = add('bot', label, 'wait'); const t0 = Date.now();
+  const bubble = add('bot', label, 'wait'); const t0 = Date.now(); let card = null;
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
     if (my !== pollId) return;
     bubble.textContent = `${label} · ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
-      const cs = (await fetchComments(n, since)).filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
-      if (cs.length) { bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
+      const all = await fetchComments(n, since);
+      const cs = all.filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
+      const lv = cs.length ? null : liveOf(all);
+      if (lv) { if (!card) { card = liveCard(); bubble.style.display = 'none'; } liveUpdate(card, lv); }
+      else if (card && !cs.length) { card.remove(); card = null; bubble.style.display = ''; }
+      if (cs.length) { if (card) card.remove(); bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }
   if (my === pollId) {
+    if (card) card.remove();
     if (Date.now() - t0 >= MAXW) { bubble.className = 'm bot err'; bubble.textContent = 'Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
     busy = false; $('#send').disabled = false; loadList();
   }

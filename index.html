@@ -159,6 +159,24 @@ textarea::placeholder{color:var(--faint)}
 #plusMenu p{margin:4px 10px 6px;font-size:12px;color:var(--faint)}
 
 /* Galerie d'images dans les réponses */
+.m.live{padding:14px 14px 12px;width:min(100%,560px)}
+.lv-head{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:10px}
+.lv-head b{font-weight:600}.lv-t{margin-left:auto;color:var(--mut);font-variant-numeric:tabular-nums;font-size:13px}
+.lv-dot{width:9px;height:9px;border-radius:50%;background:var(--acc);animation:lvp 1.4s ease-in-out infinite}
+@keyframes lvp{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--acc) 45%,transparent)}50%{box-shadow:0 0 0 7px transparent}}
+.lv-screen{border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:var(--soft)}
+.lv-bar{display:flex;align-items:center;gap:5px;padding:7px 10px;background:var(--panel);border-bottom:1px solid var(--bd)}
+.lv-bar i{width:8px;height:8px;border-radius:50%;background:var(--bd)}
+.lv-url{margin-left:8px;font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-view{aspect-ratio:2/1;display:flex;align-items:center;justify-content:center}
+.lv-view img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;cursor:zoom-in}
+.lv-view img[hidden],.lv-ph[hidden]{display:none}
+.lv-ph{color:var(--mut);font-size:13px;padding:0 16px;text-align:center}
+.lv-now{margin:12px 2px 6px;font-weight:500}
+.lv-steps{list-style:none;margin:0;padding:0 2px;max-height:112px;overflow:auto;font-size:13.5px;color:var(--mut)}
+.lv-steps li{padding:2px 0 2px 20px;position:relative}
+.lv-steps li::before{content:'✓';position:absolute;left:2px;color:var(--acc);font-weight:700}
+.m.live.empty-steps .lv-steps{display:none}
 .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px;margin-top:14px;white-space:normal}
 .gallery figure{margin:0;cursor:zoom-in;min-width:0}
 .gallery img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:18px;background:var(--soft);box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s}
