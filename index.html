@@ -374,7 +374,7 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 <dialog id="autoDlg">
   <h3 id="autoDlgTitle">Nouvelle automatisation</h3>
   <p class="hint">Muse surveille ton téléphone et agit toute seule quand l’événement se produit.</p>
-  <label for="aName">Nom</label>
+  <label for="aName">Nom de l’automatisation</label>
   <input id="aName" placeholder="Répondre à Elena" maxlength="80" autocomplete="off">
   <h4>Quand…</h4>
   <span class="trig"><span data-icon="phone"></span>Une notification arrive sur le téléphone</span>
@@ -386,11 +386,11 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
   <select id="aApp"></select>
   <input id="aAppCustom" placeholder="morceau du nom de l’appli, ex. signal" hidden maxlength="60" autocomplete="off">
   <h4>Alors Muse doit…</h4>
-  <label for="aIns">Consigne</label>
-  <textarea id="aIns" placeholder="Lis son message et réponds-lui gentiment, en français. Dis-lui que je suis occupé et que je la rappelle dans la soirée."></textarea>
+  <p class="hint">Pas de consigne à écrire : Muse lit la conversation, l’analyse, puis répond au dernier message comme toi, dans le même ton et la même langue.</p>
   <label class="chk"><input type="checkbox" id="aAuto"><span>Répondre toute seule, sans me demander<small>Muse envoie la réponse sans « OUI ». Elle ne contient jamais de lien, de code ni de mot de passe, et jamais pour une appli de banque. Décoche pour recevoir seulement un résumé.</small></span></label>
-  <label for="aMax">Maximum d’exécutions par heure</label>
+  <label for="aMax">Limite de sécurité : réponses maximum par heure</label>
   <input id="aMax" type="number" min="1" max="60" value="6">
+  <p class="hint" style="margin:-6px 0 8px;font-size:12.5px">Au-delà, Muse ignore les messages suivants jusqu’à l’heure d’après. Ça protège ton quota et évite une conversation sans fin.</p>
   <div id="aMsg" class="hint"></div>
   <div class="row"><button class="ghost" id="aCancel" type="button">Annuler</button><button class="btn" id="aSave" type="button">Enregistrer</button></div>
 </dialog>

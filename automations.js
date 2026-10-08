@@ -56,7 +56,7 @@
           <label class="sw" title="${r.enabled ? 'Active' : 'En pause'}"><input type="checkbox" class="aon" ${r.enabled ? 'checked' : ''}><span></span></label>
         </div>
         <p class="asum">${summary(r)}</p>
-        <p class="ains">${esc((r.instruction || '').slice(0, 220))}${(r.instruction || '').length > 220 ? '…' : ''}</p>
+        <p class="ains">${r.instruction ? esc(r.instruction.slice(0, 220)) : 'Muse lit la conversation, l’analyse, puis répond comme toi.'}</p>
         <div class="aact">
           <button class="ghost aedit" type="button">Modifier</button>
           <button class="ghost atest" type="button">Tester</button>
@@ -120,7 +120,6 @@
     $('#aApp').value = known ? t.app || '' : '__custom';
     $('#aAppCustom').value = known ? '' : t.app || '';
     $('#aAppCustom').hidden = $('#aApp').value !== '__custom';
-    $('#aIns').value = r ? r.instruction : '';
     $('#aAuto').checked = r ? !!r.autoReply : true;
     $('#aMax').value = r ? r.maxPerHour || 6 : 6;
     $('#aMsg').textContent = '';
@@ -129,13 +128,13 @@
   $('#aApp').onchange = () => { $('#aAppCustom').hidden = $('#aApp').value !== '__custom'; if (!$('#aAppCustom').hidden) $('#aAppCustom').focus(); };
   $('#aCancel').onclick = () => dlg.close();
   $('#aSave').onclick = async () => {
-    const name = $('#aName').value.trim(), match = $('#aMatch').value.trim(), ins = $('#aIns').value.trim();
+    const name = $('#aName').value.trim(), match = $('#aMatch').value.trim();
     const app = $('#aApp').value === '__custom' ? $('#aAppCustom').value.trim() : $('#aApp').value;
     const max = Math.max(1, Math.min(60, parseInt($('#aMax').value, 10) || 6));
-    if (!name || !match || !ins) { $('#aMsg').textContent = 'Le nom, le déclencheur (nom ou mot) et la consigne sont obligatoires.'; return; }
+    if (!name || !match) { $('#aMsg').textContent = 'Le nom et le déclencheur (nom ou mot) sont obligatoires.'; return; }
     if ($('#aApp').value === '__custom' && !app) { $('#aMsg').textContent = 'Indique un morceau du nom de l’appli (ex. « signal »).'; return; }
     const btn = $('#aSave'); btn.disabled = true;
-    const data = { name, enabled: editing ? editing.enabled : true, instruction: ins, autoReply: $('#aAuto').checked, maxPerHour: max, trigger: { type: 'notification', match, by: $('#aBy').value, app } };
+    const data = { name, enabled: editing ? editing.enabled : true, instruction: editing ? editing.instruction || '' : '', autoReply: $('#aAuto').checked, maxPerHour: max, trigger: { type: 'notification', match, by: $('#aBy').value, app } };
     try {
       if (editing) {
         Object.assign(editing, data);
