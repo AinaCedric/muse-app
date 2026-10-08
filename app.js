@@ -74,7 +74,7 @@ function splitParts(text) {
 }
 
 // ---- 🧩 Interfaces interactives : Muse écrit un bloc ```muse-ui … ``` ; on l'affiche comme un mini-outil vivant dans une bulle isolée
-const UI_RE = /```muse-ui[ \t]*\n([\s\S]*?)(```|$)/g;
+const UI_RE = /```[ \t]*muse-ui[ \t]*\r?\n([\s\S]*?)(```|$)/g;
 const UI_VARS = ['bg', 'panel', 'soft', 'txt', 'mut', 'acc', 'acc-soft', 'bd', 'code', 'ok', 'err'];
 function uiTheme() {
   const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue('--' + n).trim();
