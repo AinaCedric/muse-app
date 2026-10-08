@@ -100,6 +100,15 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 .m.wait{color:var(--mut);font-style:italic;font-family:var(--serif);font-size:16.5px;background:transparent;border:0;box-shadow:none;padding:0 4px}
 .m.wait::after{content:'';display:inline-block;width:1.2em;animation:dots 1.2s steps(4,end) infinite}
 @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%,100%{content:'...'}}
+.m .uibox{white-space:normal;margin:10px -6px;border:1px solid var(--bd);border-radius:16px;overflow:hidden;background:var(--panel)}
+.m .uibar{display:flex;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid var(--bd);background:var(--soft)}
+.m .uitag{flex:1;font-size:12.5px;color:var(--acc);font-weight:500}
+.m .uib{border:0;background:transparent;color:var(--mut);border-radius:8px;min-width:32px;height:30px;font:500 13px var(--mono);cursor:pointer}
+.m .uib:hover{background:var(--panel);color:var(--txt)}
+.m .uibox iframe{display:block;width:100%;border:0;background:var(--panel)}
+.m .uibox.full{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;display:flex;flex-direction:column}
+.m .uibox.full iframe{flex:1;height:auto!important}
+body.uifull{overflow:hidden}
 .m pre{background:var(--code);border:1px solid var(--bd);border-radius:14px;padding:12px 14px;overflow:auto;white-space:pre;font-size:13.5px;line-height:1.5}
 .m code{font-family:var(--mono);font-size:.88em}
 .m :not(pre)>code{background:var(--code);padding:1px 5px;border-radius:4px}

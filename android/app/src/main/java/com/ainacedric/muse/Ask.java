@@ -118,6 +118,7 @@ class Ask {
     /** Texte lisible : sans balises cachées ni mise en forme Markdown. keepEmoji=false pour la voix. */
     static String plain(String raw, boolean forSpeech) {
         String s = raw.replaceAll("(?s)<!--.*?-->", "").replaceAll("[ \\t]*\\[\\[IMG:[^\\]]*\\]\\][ \\t]*", "");
+        s = s.replaceAll("(?s)```muse-ui.*?(```|$)", forSpeech ? " J'ai préparé une interface interactive, ouvre le chat pour l'utiliser. " : "\n🧩 Interface interactive : ouvre le chat Muse pour l'utiliser.\n");
         s = s.replaceAll("(?s)```.*?```", forSpeech ? " (bloc de code) " : "");
         s = s.replaceAll("(?m)^\\s*🧭.*$", "");
         s = s.replaceAll("\\[([^\\]]+)\\]\\((https?://[^)]+)\\)", forSpeech ? "$1" : "$1");

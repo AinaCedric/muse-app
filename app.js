@@ -72,6 +72,65 @@ function splitParts(text) {
   pushText(text.slice(pos));
   return { parts, all, plain: text.replace(/\[\[IMG:[^\]]*\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim() };
 }
+
+// ---- 🧩 Interfaces interactives : Muse écrit un bloc ```muse-ui … ``` ; on l'affiche comme un mini-outil vivant dans une bulle isolée
+const UI_RE = /```muse-ui[ \t]*\n([\s\S]*?)(```|$)/g;
+const UI_VARS = ['bg', 'panel', 'soft', 'txt', 'mut', 'acc', 'acc-soft', 'bd', 'code', 'ok', 'err'];
+function uiTheme() {
+  const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue('--' + n).trim();
+  return { bg: v('panel'), card: v('bg'), txt: v('txt'), mut: v('mut'), acc: v('acc'), acc2: v('ok'), bd: v('bd'), soft: v('soft'), err: v('err'), dark: document.documentElement.dataset.theme === 'dark' };
+}
+function uiDoc(code, id) {
+  const t = uiTheme();
+  const vars = Object.entries(t).filter(([k]) => k !== 'dark').map(([k, val]) => `--${k}:${val}`).join(';');
+  const csp = "default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: blob: https:; connect-src 'none'; form-action 'none'";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
+<style>:root{${vars};color-scheme:${t.dark ? 'dark' : 'light'}}*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}body{padding:12px}
+input,select,textarea,button{font:inherit;color:inherit}input,select,textarea{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:9px 11px;min-height:40px;max-width:100%}
+button{background:var(--acc);color:#fff;border:0;border-radius:999px;padding:9px 16px;min-height:40px;cursor:pointer}button.ghost{background:var(--soft);color:var(--txt)}
+canvas,svg,img{max-width:100%}</style>
+<script>
+const museSend=(t)=>parent.postMessage({museUi:${id},send:String(t).slice(0,2000)},'*');
+addEventListener('message',(e)=>{const d=e.data||{};if(d.museTheme){for(const[k,v]of Object.entries(d.museTheme)){if(k!=='dark')document.documentElement.style.setProperty('--'+k,v)}document.documentElement.style.colorScheme=d.museTheme.dark?'dark':'light'}});
+const __h=()=>parent.postMessage({museUi:${id},h:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*');
+addEventListener('load',__h);new ResizeObserver(__h).observe(document.documentElement);
+addEventListener('error',(e)=>parent.postMessage({museUi:${id},err:String(e.message||e).slice(0,200)},'*'));
+for(const k of ['alert','confirm','prompt','open'])window[k]=()=>null;
+</script></head><body>${code}</body></html>`;
+}
+let uiSeq = 0;
+const uiFrames = new Map();
+function uiBox(code) {
+  const id = ++uiSeq, box = document.createElement('div'); box.className = 'uibox';
+  const bar = document.createElement('div'); bar.className = 'uibar';
+  bar.innerHTML = '<span class="uitag">🧩 Interface interactive</span>';
+  const fr = document.createElement('iframe');
+  fr.setAttribute('sandbox', 'allow-scripts allow-forms'); fr.setAttribute('loading', 'lazy'); fr.title = 'Interface interactive de Muse';
+  fr.srcdoc = uiDoc(code, id); fr.style.height = '220px';
+  const btn = (label, title, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'uib'; b.textContent = label; b.title = title; b.onclick = fn; bar.appendChild(b); };
+  btn('⛶', 'Plein écran', () => { box.classList.toggle('full'); document.body.classList.toggle('uifull', box.classList.contains('full')); });
+  btn('↻', 'Réinitialiser', () => { fr.srcdoc = uiDoc(code, id); });
+  btn('</>', 'Copier le code', async () => { try { await navigator.clipboard.writeText(code); toast('Code copié'); } catch { toast('Copie impossible'); } });
+  btn('⤓', 'Télécharger en .html', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([uiDoc(code, 0)], { type: 'text/html' })); a.download = 'muse-outil.html'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); });
+  box.append(bar, fr); uiFrames.set(id, fr);
+  return box;
+}
+addEventListener('message', (e) => {
+  const d = e.data || {}; const fr = d.museUi && uiFrames.get(d.museUi);
+  if (!fr || e.source !== fr.contentWindow) return;
+  if (d.h) fr.style.height = Math.min(Math.max(d.h, 60), 1600) + 'px';
+  if (d.send) { input.value = d.send; input.focus(); input.dispatchEvent(new Event('input')); toast('Message prêt : appuie sur Envoyer'); }
+  if (d.err) console.warn('Interface Muse :', d.err);
+});
+function uiThemeSync() { const t = uiTheme(); uiFrames.forEach((fr) => { if (fr.isConnected) fr.contentWindow?.postMessage({ museTheme: t }, '*'); else uiFrames.delete(fr); }); }
+// Découpe une réponse en morceaux texte / interface
+function splitUI(text) {
+  const out = []; let pos = 0, m; UI_RE.lastIndex = 0;
+  while ((m = UI_RE.exec(text))) { out.push({ t: text.slice(pos, m.index) }); if (m[2]) out.push({ ui: m[1] }); else out.push({ t: '🧩 _(interface incomplète : réponse coupée)_' }); pos = UI_RE.lastIndex; }
+  out.push({ t: text.slice(pos) });
+  return out.filter((x) => x.ui || x.t.trim());
+}
 const lb = { el: null, list: [], i: 0 };
 function lbShow(k) {
   if (!lb.list.length) return lbClose();
@@ -182,9 +241,13 @@ function show(c) {
   if (c.body.includes(REPLY)) {
     let txt = strip(c.body), meta = '';
     txt = txt.replace(/^[ \t]*🧭[^\n]*?Mode choisi\s*:\s*([^\n]*)$/m, (_, m) => { meta = m.replace(/[_*]/g, '').replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim(); return ''; }).trim();
-    const { parts, all, plain } = splitParts(txt);
-    const d = add('bot', ''); d.dataset.raw = plain;
-    parts.forEach((p) => (p.t !== undefined ? d.insertAdjacentHTML('beforeend', render(p.t)) : d.appendChild(gallery(p.imgs, all))));
+    const d = add('bot', ''); const raws = [];
+    splitUI(txt).forEach((seg) => {
+      if (seg.ui) { d.appendChild(uiBox(seg.ui)); d.classList.add('hasUi'); raws.push("J'ai préparé une interface interactive."); return; }
+      const { parts, all, plain } = splitParts(seg.t); raws.push(plain);
+      parts.forEach((p) => (p.t !== undefined ? d.insertAdjacentHTML('beforeend', render(p.t)) : d.appendChild(gallery(p.imgs, all))));
+    });
+    d.dataset.raw = raws.filter(Boolean).join('\n\n');
     if (meta) { const s = document.createElement('span'); s.className = 'meta'; s.textContent = 'Mode : ' + meta; d.appendChild(s); }
     addTts(d);
     if (c.body.includes('<!--propose-->')) { // proposition d'une automatisation : validation en un clic (ou écris ta version)
@@ -510,7 +573,7 @@ empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
   const root = document.documentElement, meta = document.querySelector('meta[name=theme-color]'), btn = $('#themeBtn');
   const apply = (t) => { root.dataset.theme = t; if (meta) meta.content = t === 'dark' ? '#13111D' : '#F8F7FF'; btn.innerHTML = ic(t === 'dark' ? 'sun' : 'moon'); };
   apply(root.dataset.theme === 'dark' ? 'dark' : 'light');
-  btn.onclick = () => { const t = root.dataset.theme === 'dark' ? 'light' : 'dark'; apply(t); try { localStorage.setItem('muse_theme', t); } catch { /* stockage indisponible */ } };
+  btn.onclick = () => { const t = root.dataset.theme === 'dark' ? 'light' : 'dark'; apply(t); setTimeout(uiThemeSync, 30); try { localStorage.setItem('muse_theme', t); } catch { /* stockage indisponible */ } };
 })();
 
 // ---- Lecture à voix haute des réponses de Muse (synthèse vocale du navigateur, hors-ligne, en français)
