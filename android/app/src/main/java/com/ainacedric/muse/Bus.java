@@ -31,6 +31,7 @@ class Bus {
     static volatile int lastCode = 0;
     private static String etag = null;
     private static Thread loopT = null;
+    private static int rebind = 0;
 
     static synchronized void log(String s) {
         LOG.addFirst(new SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(new Date()) + "  " + s);
@@ -130,6 +131,7 @@ class Bus {
             }
             boolean active = System.currentTimeMillis() < activeUntil;
             try { KeepAlive.refresh(app, active); } catch (Throwable ignore) { }
+            if (++rebind % 20 == 0) { try { NotifWatch.keep(app); } catch (Throwable ignore) { } }
             try {
                 Thread.sleep(active ? 1000 : 6000);
             } catch (InterruptedException e) {
@@ -143,7 +145,8 @@ class Bus {
         o.put("model", Build.MODEL);
         o.put("android", Build.VERSION.RELEASE);
         o.put("sdk", Build.VERSION.SDK_INT);
-        o.put("app", "2.1");
+        o.put("app", "2.2");
+        o.put("notif", NotifWatch.inst != null);
         o.put("a11y", MuseService.inst != null);
         return o;
     }
@@ -195,6 +198,9 @@ class Bus {
                     out = ping();
                 } else if (opName.equals("notify")) {
                     out = Notif.show(c, cmd);
+                } else if (opName.equals("notifs") || opName.equals("notif_reply")) {
+                    if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
+                    out = NotifWatch.op(c, cmd);
                 } else {
                     if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
                     MuseService s = MuseService.inst;

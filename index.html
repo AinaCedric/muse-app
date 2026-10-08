@@ -198,6 +198,57 @@ textarea::placeholder{color:var(--faint)}
 #lb .lb-btn:hover{background:rgba(255,255,255,.26)}
 .lb-x{top:14px;right:14px}.lb-p{left:12px;top:50%;margin-top:-22px}.lb-n{right:12px;top:50%;margin-top:-22px}
 @media(max-width:600px){.lb-p,.lb-n{top:auto;bottom:18px;margin:0}.lb-p{left:16px}.lb-n{right:16px}}
+
+/* Automatisations */
+#autoBtn{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:9px 14px;border-radius:18px;background:transparent;border:1px solid transparent;font-weight:500;text-align:left;color:var(--txt)}
+#autoBtn:hover,#autoBtn.on{background:var(--soft);border-color:var(--bd)}
+#autoBtn svg{width:17px;height:17px;color:var(--acc)}
+#autos{flex:1;overflow:auto;padding:26px 18px 40px}
+#autos[hidden]{display:none}
+main.autoview #msgs,main.autoview #pending,main.autoview #listen,main.autoview form{display:none}
+main.autoview #mode,main.autoview #ttsBtn{visibility:hidden}
+.ainner{max-width:700px;margin:0 auto}
+.atop{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}
+.atop h2{font:400 clamp(28px,6vw,36px)/1.1 var(--serif);letter-spacing:-.015em;margin:0 0 4px}
+.atop .hint{margin:0}
+.atop .btn{display:flex;align-items:center;gap:6px;white-space:nowrap;flex:none}
+.atop .btn svg{width:17px;height:17px;stroke-width:2}
+.anote{display:flex;gap:10px;align-items:flex-start;background:var(--acc-soft);color:var(--txt);border-radius:18px;padding:11px 14px;font-size:13.5px;line-height:1.5;margin-bottom:16px}
+.anote svg{width:18px;height:18px;color:var(--acc);margin-top:2px}
+.acard{background:var(--panel);border:1px solid var(--bd);border-radius:22px;padding:16px 18px 14px;box-shadow:var(--shadow);margin-bottom:14px;transition:opacity .2s}
+.acard.off{opacity:.62}
+.ahead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.atitle{display:flex;align-items:center;gap:10px;min-width:0}
+.atitle b{font:500 18px/1.2 var(--serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.abolt{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--acc-soft);color:var(--acc);flex:none}
+.abolt svg{width:16px;height:16px}
+.abolt.big{width:54px;height:54px;margin:0 auto 10px}.abolt.big svg{width:26px;height:26px}
+.asum{margin:10px 0 4px;font-size:14.5px;color:var(--txt)}
+.ains{margin:0;font-size:13.5px;color:var(--mut);white-space:pre-wrap}
+.aact{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.aact .ghost{padding:6px 14px;font-size:13.5px}
+.aact .adel{padding:6px 10px;margin-left:auto;color:var(--err)}
+.aact .adel svg{width:16px;height:16px}
+.aempty{text-align:center;padding:36px 12px;color:var(--mut)}
+.aempty h3{font:400 24px var(--serif);color:var(--txt);margin:0 0 6px}
+.aempty p{max-width:420px;margin:0 auto 18px;font-size:14.5px}
+.sw{position:relative;display:inline-block;width:46px;height:27px;flex:none;cursor:pointer}
+.sw input{position:absolute;inset:0;opacity:0;margin:0;width:100%;height:100%;cursor:pointer}
+.sw span{position:absolute;inset:0;border-radius:999px;background:var(--bd2);transition:background .18s}
+.sw span::after{content:'';position:absolute;left:3px;top:3px;width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0003;transition:transform .18s}
+.sw input:checked+span{background:var(--acc)}
+.sw input:checked+span::after{transform:translateX(19px)}
+.sw input:focus-visible+span{outline:2px solid var(--acc);outline-offset:2px}
+#autoDlg textarea,#autoTestDlg textarea{height:120px;margin:4px 0 12px;font:inherit}
+#autoDlg .chk{display:flex;gap:10px;align-items:flex-start;margin:6px 0 10px;color:var(--txt);font-size:14.5px}
+#autoDlg .chk input{width:auto;margin:4px 0 0;accent-color:var(--acc)}
+#autoDlg .chk small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px;line-height:1.4}
+#autoDlg .trig{display:inline-flex;align-items:center;gap:6px;background:var(--acc-soft);color:var(--acc);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:500;margin:4px 0 10px}
+#autoDlg .trig svg{width:15px;height:15px}
+#autoDlg{max-height:92vh;overflow:auto}
+#autoDlg label,#autoTestDlg label{display:block}
+#autoDlg label.chk{display:flex}
+#autoDlg .trig{display:flex;width:fit-content}
 /* Écoute */
 #listen{display:none;width:calc(100% - 24px);max-width:724px;margin:8px auto 0;padding:12px 14px 10px;background:var(--panel);border:1px solid var(--bd);border-radius:28px;box-shadow:var(--shadow)}
 #listen.on{display:block}
@@ -232,6 +283,7 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 <aside id="side">
   <header>Muse</header>
   <button id="new"><span data-icon="edit"></span>Nouvelle discussion</button>
+  <button id="autoBtn" type="button"></button>
   <div class="sect">Discussions</div>
   <div id="list"></div>
   <footer>
@@ -262,6 +314,7 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
     </div>
     <div class="tr"><button type="button" class="ib" id="ttsBtn" aria-label="Lecture à voix haute"></button></div>
   </div>
+  <section id="autos" hidden></section>
   <div id="msgs"></div>
   <div id="pending" hidden></div>
   <div id="listen"><div id="wave"></div><b id="listenSt">Je t’écoute</b><small id="listenHint">Parle quand tu veux</small></div>
@@ -317,6 +370,38 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
     <button class="ghost" id="memCancel" type="button">Fermer</button><button class="btn" id="memSave" type="button">Enregistrer</button>
   </div>
 </dialog>
+
+<dialog id="autoDlg">
+  <h3 id="autoDlgTitle">Nouvelle automatisation</h3>
+  <p class="hint">Muse surveille ton téléphone et agit toute seule quand l’événement se produit.</p>
+  <label for="aName">Nom</label>
+  <input id="aName" placeholder="Répondre à Elena" maxlength="80" autocomplete="off">
+  <h4>Quand…</h4>
+  <span class="trig"><span data-icon="phone"></span>Une notification arrive sur le téléphone</span>
+  <label for="aMatch">Nom du contact ou mot recherché</label>
+  <input id="aMatch" placeholder="Elena Salvatore" maxlength="120" autocomplete="off">
+  <label for="aBy">Je cherche dans</label>
+  <select id="aBy"></select>
+  <label for="aApp">Application</label>
+  <select id="aApp"></select>
+  <input id="aAppCustom" placeholder="morceau du nom de l’appli, ex. signal" hidden maxlength="60" autocomplete="off">
+  <h4>Alors Muse doit…</h4>
+  <label for="aIns">Consigne</label>
+  <textarea id="aIns" placeholder="Lis son message et réponds-lui gentiment, en français. Dis-lui que je suis occupé et que je la rappelle dans la soirée."></textarea>
+  <label class="chk"><input type="checkbox" id="aAuto"><span>Répondre toute seule, sans me demander<small>Muse envoie la réponse sans « OUI ». Elle ne contient jamais de lien, de code ni de mot de passe, et jamais pour une appli de banque. Décoche pour recevoir seulement un résumé.</small></span></label>
+  <label for="aMax">Maximum d’exécutions par heure</label>
+  <input id="aMax" type="number" min="1" max="60" value="6">
+  <div id="aMsg" class="hint"></div>
+  <div class="row"><button class="ghost" id="aCancel" type="button">Annuler</button><button class="btn" id="aSave" type="button">Enregistrer</button></div>
+</dialog>
+
+<dialog id="autoTestDlg">
+  <h3>Tester « <span id="tName"></span> »</h3>
+  <p class="hint">Écris un message comme s’il venait du contact. Muse t’explique ce qu’elle répondrait : rien n’est envoyé et le téléphone n’est pas touché.</p>
+  <label for="tMsg">Message simulé</label>
+  <textarea id="tMsg"></textarea>
+  <div class="row"><button class="ghost" id="tCancel" type="button">Annuler</button><button class="btn" id="tGo" type="button">Lancer le test</button></div>
+</dialog>
 <div id="lb" hidden role="dialog" aria-label="Image">
   <button class="lb-btn lb-x" aria-label="Fermer"><span data-icon="x"></span></button>
   <button class="lb-btn lb-p" aria-label="Précédente"><span data-icon="left"></span></button>
@@ -328,5 +413,6 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 <script src="./vendor/three.min.js"></script>
 <script src="./avatar.js"></script>
 <script src="./app.js"></script>
+<script src="./automations.js"></script>
 </body>
 </html>

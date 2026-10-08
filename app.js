@@ -22,6 +22,9 @@ const ICON = {
   left: '<path d="M15 6l-6 6 6 6"/>',
   right: '<path d="m9 6 6 6-6 6"/>',
   out: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  bolt: '<path d="M13 3 5 14h6l-1 7 8-11h-6Z"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
   folder: '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/>',
 };
 const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
@@ -149,7 +152,7 @@ function empty() {
 async function loadList() {
   if (!cfg.repo || !cfg.token) return;
   try {
-    const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=50`)).filter((i) => !i.pull_request);
+    const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=50`)).filter((i) => !i.pull_request && !(i.body || '').startsWith('<!--auto:')); // les historiques d'automatisations vivent dans l'onglet ⚡
     $('#list').innerHTML = '';
     l.forEach((i) => {
       const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '');
@@ -195,6 +198,7 @@ function show(c) {
 
 async function openConv(n) {
   if (!need()) return;
+  if (window.autosClose) autosClose();
   stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = n; msgs.innerHTML = ''; $('#side').classList.remove('open');
   try {
     const cs = await fetchComments(n);
@@ -207,7 +211,7 @@ async function openConv(n) {
   } catch (e) { add('bot', '' + e.message, 'err'); }
   loadList();
 }
-function newChat() { stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
+function newChat() { if (window.autosClose) autosClose(); stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
 
 // 🖥️ Carte « Muse travaille » : dernière capture du navigateur, étape en cours, étapes déjà faites
 function liveCard() {

@@ -29,7 +29,7 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
     private LinearLayout root;
     private Button wakeBtn, notifBtn;
-    private TextView sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
+    private TextView sAuto, sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         sv.addView(root);
         setContentView(sv);
 
-        root.addView(text("Muse · Téléphone  v2.0", 26, true, Color.parseColor("#5B3FD6")));
+        root.addView(text("Muse · Téléphone  v2.2", 26, true, Color.parseColor("#5B3FD6")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
@@ -167,6 +167,13 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(notifBtn);
+
+        // 9. Automatisations
+        sAuto = step(9, "Automatisations : surveiller les notifications", "Pour l'onglet ⚡ Automatisations de l'appli Muse : Muse repère les notifications que tu as choisies (ex. un message d'un contact) et agit toute seule. Touche le bouton, active « Muse » dans la liste et accepte. Si c'est grisé : bouton « infos de l'appli » de l'étape 2, ⋮ → « Autoriser les paramètres restreints ». Il faut aussi avoir collé le code Cerveau (étape 7).");
+        root.addView(button("🔔  Autoriser l'accès aux notifications", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { open(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")); }
+        }));
 
         root.addView(button("🫧  Tester le panneau (comme la bulle)", new View.OnClickListener() {
             @Override
@@ -314,6 +321,7 @@ public class MainActivity extends Activity {
         mark(sLink, Store.linked(this));
         mark(sBrain, Store.brainLinked(this));
         mark(sWake, Store.wake(this));
+        mark(sAuto, NotifWatch.enabled(this) && Store.brainLinked(this));
         wakeBtn.setText(Store.wake(this) ? "🔕  Arrêter l'écoute de « Muse »" : "🗣️  Activer « Muse » à la voix");
         notifBtn.setText(Store.notify(this) ? "🔔  Notifications des réponses : activées" : "🔕  Notifications des réponses : coupées");
         mark(sAcc, accessibilityOn());
@@ -329,6 +337,7 @@ public class MainActivity extends Activity {
         sStat.setText("Accessibilité : " + (MuseService.inst != null ? "✅ active" : "❌ INACTIVE (réactive Muse dans les réglages d'accessibilité)")
                 + "\nDernier toucher de la bulle : " + (MuseService.lastClick == 0 ? "aucun" : "il y a " + (System.currentTimeMillis() - MuseService.lastClick) / 1000 + " s")
                 + "\nMot d'activation : " + Wake.state
+                + "\nNotifications (automatisations) : " + (NotifWatch.enabled(this) ? NotifWatch.state : "❌ accès non accordé (étape 9)")
                 + "\nRelève des ordres : " + (ago < 0 ? "pas encore" : "il y a " + ago + " s (HTTP " + Bus.lastCode + ")"));
         logv.setText(Bus.logText());
     }
