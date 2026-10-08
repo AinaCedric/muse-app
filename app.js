@@ -494,7 +494,14 @@ input.addEventListener('paste', (e) => { const fs = [...(e.clipboardData?.files 
 $('#f').onsubmit = (e) => { e.preventDefault(); send(); };
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !/Android|iPhone|iPad/i.test(navigator.userAgent)) { e.preventDefault(); send(); } });
 input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; });
-$('#new').onclick = newChat; $('#menu').onclick = () => $('#side').classList.toggle('open');
+$('#new').onclick = newChat; const sideSet = on => { $('#side').classList.toggle('open', on); $('#scrim').classList.toggle('on', on); };
+$('#menu').onclick = () => sideSet(!$('#side').classList.contains('open'));
+$('#scrim').onclick = $('#sclose').onclick = () => sideSet(false);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') sideSet(false); });
+{ let sx = null; const side = $('#side');
+  side.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
+  side.addEventListener('touchend', e => { if (sx !== null && sx - e.changedTouches[0].clientX > 60) sideSet(false); sx = null; }, { passive: true }); }
+new MutationObserver(() => $('#scrim').classList.toggle('on', $('#side').classList.contains('open'))).observe($('#side'), { attributes: true, attributeFilter: ['class'] });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
 

@@ -275,12 +275,14 @@ dialog::backdrop{background:rgba(28,26,46,.4);backdrop-filter:blur(2px)}
 input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10px;accent-color:var(--acc)}
 .hint{color:var(--mut);font-size:13.5px;margin-top:0}
 .row{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
-@media(max-width:760px){#side{position:fixed;inset:0 auto 0 0;transform:translateX(-100%);box-shadow:var(--shadow)}#side.open{transform:none}#menu{display:grid}}
+#scrim{display:none}#sclose{display:none}@media(max-width:760px){#scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:4;opacity:0;pointer-events:none;transition:opacity .22s}#scrim.on{opacity:1;pointer-events:auto}#sclose{display:grid;position:absolute;top:14px;right:12px;width:40px;height:40px;place-items:center;border:0;background:var(--soft);color:var(--txt);border-radius:50%;font-size:22px;line-height:1}#side{position:fixed;inset:0 auto 0 0;transform:translateX(-100%);box-shadow:var(--shadow)}#side.open{transform:none}#menu{display:grid}}
 @media(max-width:420px){#mode{max-width:96px}}
 </style>
 </head>
 <body>
+<div id="scrim"></div>
 <aside id="side">
+  <button id="sclose" aria-label="Fermer le menu">✕</button>
   <header>Muse</header>
   <button id="new"><span data-icon="edit"></span>Nouvelle discussion</button>
   <button id="autoBtn" type="button"></button>

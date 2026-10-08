@@ -66,7 +66,8 @@ public class MuseService extends AccessibilityService {
         try {
             startForegroundService(new Intent(this, KeepAlive.class));
         } catch (Throwable ignore) { }
-        // Bouton flottant d'accessibilité (la petite bulle Muse) : un toucher ouvre le chat Muse (le PWA).
+        Bubble.show(this);
+        // Ancien bouton système (secours seulement) : un toucher ouvre le chat Muse (le PWA).
         try {
             getAccessibilityButtonController().registerAccessibilityButtonCallback(new AccessibilityButtonController.AccessibilityButtonCallback() {
                 @Override
@@ -150,6 +151,7 @@ public class MuseService extends AccessibilityService {
     @Override
     public boolean onUnbind(Intent intent) {
         inst = null;
+        Bubble.hide(this);
         Bus.log("Service d'accessibilité arrêté");
         return super.onUnbind(intent);
     }
