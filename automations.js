@@ -13,6 +13,12 @@
     ['__custom', 'Autre appli…'],
   ];
   const BYS = [['sender', 'Nom de l’expéditeur (conseillé)'], ['text', 'Un mot dans le message'], ['any', 'L’un ou l’autre']];
+  const REPLIES = [
+    ['ask', 'Me proposer la réponse, j’envoie après validation (conseillé)', 'Muse te prévient avec la réponse proposée. Tu dis « envoie » pour l’envoyer telle quelle, ou tu écris ta version : elle part aussitôt, sans « OUI » ni code.'],
+    ['auto', 'Répondre toute seule, sans me demander', 'Muse envoie la réponse sans rien te demander. Elle ne contient jamais de lien, de code ni de mot de passe, et jamais pour une appli de banque.'],
+    ['none', 'Ne pas répondre : seulement me résumer le message', 'Muse lit la conversation et te résume le message ; rien n’est envoyé.'],
+  ];
+  const replyOf = (r) => r.replyMode || (r.autoReply ? 'auto' : 'none');
   let st = { items: [], sha: null, loaded: false };
   const view = $('#autos'), mainEl = $('main');
   const q = (s) => esc(String(s == null ? '' : s)).replace(/"/g, '&quot;');
@@ -45,7 +51,7 @@
     const t = r.trigger || {}, who = `« ${esc(t.match || '…')} »`;
     const when = t.by === 'text' ? `Quand un message contient ${who}` : t.by === 'any' ? `Quand ${who} apparaît dans une notification` : `Quand ${who} m’écrit`;
     const app = t.app ? ` sur ${esc(appLabel(t.app))}` : '';
-    return `${when}${app} → ${r.autoReply ? 'Muse répond seule' : 'Muse te résume le message'}`;
+    return `${when}${app} → ${({ ask: 'Muse te propose la réponse', auto: 'Muse répond seule', none: 'Muse te résume le message' })[replyOf(r)]}`;
   };
 
   function render() {
@@ -108,6 +114,7 @@
     $('#aApp').innerHTML = APPS.map(([v, l]) => `<option value="${q(v)}">${esc(l)}</option>`).join('');
     $('#aBy').innerHTML = BYS.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
   }
+  const hint = () => { $('#aReplyHint').textContent = (REPLIES.find((x) => x[0] === $('#aReply').value) || [])[2] || ''; };
   function edit(r) {
     editing = r;
     fillApps();
@@ -120,7 +127,9 @@
     $('#aApp').value = known ? t.app || '' : '__custom';
     $('#aAppCustom').value = known ? '' : t.app || '';
     $('#aAppCustom').hidden = $('#aApp').value !== '__custom';
-    $('#aAuto').checked = r ? !!r.autoReply : true;
+    $('#aReply').innerHTML = REPLIES.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+    $('#aReply').value = r ? replyOf(r) : 'ask';
+    $('#aReply').onchange = hint; hint();
     $('#aMax').value = r ? r.maxPerHour || 6 : 6;
     $('#aMsg').textContent = '';
     dlg.showModal();
@@ -134,7 +143,7 @@
     if (!name || !match) { $('#aMsg').textContent = 'Le nom et le déclencheur (nom ou mot) sont obligatoires.'; return; }
     if ($('#aApp').value === '__custom' && !app) { $('#aMsg').textContent = 'Indique un morceau du nom de l’appli (ex. « signal »).'; return; }
     const btn = $('#aSave'); btn.disabled = true;
-    const data = { name, enabled: editing ? editing.enabled : true, instruction: editing ? editing.instruction || '' : '', autoReply: $('#aAuto').checked, maxPerHour: max, trigger: { type: 'notification', match, by: $('#aBy').value, app } };
+    const data = { name, enabled: editing ? editing.enabled : true, instruction: editing ? editing.instruction || '' : '', replyMode: $('#aReply').value, autoReply: $('#aReply').value !== 'none', maxPerHour: max, trigger: { type: 'notification', match, by: $('#aBy').value, app } };
     try {
       if (editing) {
         Object.assign(editing, data);

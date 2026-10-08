@@ -387,7 +387,9 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
   <input id="aAppCustom" placeholder="morceau du nom de l’appli, ex. signal" hidden maxlength="60" autocomplete="off">
   <h4>Alors Muse doit…</h4>
   <p class="hint">Pas de consigne à écrire : Muse lit la conversation, l’analyse, puis répond au dernier message comme toi, dans le même ton et la même langue.</p>
-  <label class="chk"><input type="checkbox" id="aAuto"><span>Répondre toute seule, sans me demander<small>Muse envoie la réponse sans « OUI ». Elle ne contient jamais de lien, de code ni de mot de passe, et jamais pour une appli de banque. Décoche pour recevoir seulement un résumé.</small></span></label>
+  <label for="aReply">Pour répondre</label>
+  <select id="aReply"></select>
+  <p class="hint" id="aReplyHint" style="margin:-6px 0 8px;font-size:12.5px"></p>
   <label for="aMax">Limite de sécurité : réponses maximum par heure</label>
   <input id="aMax" type="number" min="1" max="60" value="6">
   <p class="hint" style="margin:-6px 0 8px;font-size:12.5px">Au-delà, Muse ignore les messages suivants jusqu’à l’heure d’après. Ça protège ton quota et évite une conversation sans fin.</p>
