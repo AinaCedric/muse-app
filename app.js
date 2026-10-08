@@ -46,14 +46,28 @@ function render(text) {
 const IMG_RE = /[ \t]*\[\[IMG:([^\]]*)\]\][ \t]*/g;
 const okUrl = (u) => { try { return /^https?:$/.test(new URL(u).protocol); } catch { return false; } };
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
-function splitImgs(text) {
-  const imgs = [];
-  const t = text.replace(IMG_RE, (_, inner) => {
-    const [img = '', page = '', ...cap] = inner.split('|').map((x) => x.trim());
-    if (okUrl(img) && imgs.length < 8) imgs.push({ img, page: okUrl(page) ? page : '', cap: cap.join(' ') });
-    return '\n';
-  }).replace(/\n{3,}/g, '\n\n').trim();
-  return { text: t, imgs };
+// Découpe la réponse : morceaux de texte et images placées JUSTE là où Muse les a écrites (plusieurs images de suite = une seule rangée)
+function parseImg(inner) {
+  const [img = '', page = '', ...rest] = inner.split('|').map((x) => x.trim());
+  const local = rest.find((x) => /^uploads\/[\w./-]+$/.test(x)) || '';
+  const cap = rest.filter((x) => x !== local).join(' ');
+  if (!okUrl(img) && !local) return null;
+  return { img: okUrl(img) ? img : '', page: okUrl(page) ? page : '', cap, local };
+}
+function splitParts(text) {
+  const parts = [], all = [], re = /\[\[IMG:([^\]]*)\]\]/g;
+  const pushText = (t) => { t = t.replace(/^\s*\n|\n\s*$/g, ''); if (t.trim()) parts.push({ t }); };
+  let group = null, pos = 0, m;
+  while ((m = re.exec(text))) {
+    const between = text.slice(pos, m.index);
+    if (!(group && !between.trim())) { if (group) { parts.push({ imgs: group }); group = null; } pushText(between); }
+    const it = all.length < 8 ? parseImg(m[1]) : null;
+    if (it) { (group = group || []).push(it); all.push(it); }
+    pos = re.lastIndex;
+  }
+  if (group) parts.push({ imgs: group });
+  pushText(text.slice(pos));
+  return { parts, all, plain: text.replace(/\[\[IMG:[^\]]*\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim() };
 }
 const lb = { el: null, list: [], i: 0 };
 function lbShow(k) {
@@ -79,16 +93,26 @@ function openLightbox(list, k) {
   }
   lb.list = list; lb.el.hidden = false; lbShow(k);
 }
-function gallery(imgs) {
-  const g = document.createElement('div'); g.className = 'gallery';
-  const alive = imgs.slice();
-  imgs.forEach((it) => {
+// Chaque image est cherchée dans l'ordre : copie gardée dans ton dépôt privé (jamais bloquée) → adresse d'origine → carte « voir la source »
+function gallery(group, all) {
+  const g = document.createElement('div'); g.className = 'gallery' + (group.length === 1 ? ' one' : '');
+  group.forEach((it) => {
     const f = document.createElement('figure');
-    const im = document.createElement('img'); im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; im.alt = it.cap || ''; im.src = it.img;
-    im.onerror = () => { f.remove(); const n = alive.indexOf(it); if (n >= 0) alive.splice(n, 1); if (!g.children.length) g.remove(); }; // image bloquée ou disparue : on la retire
-    f.onclick = () => openLightbox(alive, Math.max(0, alive.indexOf(it)));
+    const im = document.createElement('img'); im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; im.alt = it.cap || '';
     const c = document.createElement('figcaption'); c.textContent = it.cap || hostOf(it.page || it.img);
-    f.append(im, c); g.appendChild(f);
+    const miss = () => {
+      it.dead = true;
+      if (!it.page) { f.remove(); if (!g.children.length) g.remove(); return; }
+      f.className = 'miss'; f.onclick = null; f.textContent = '';
+      const a = document.createElement('a'); a.href = it.page; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `${it.cap || hostOf(it.page)} — voir la source ↗`; f.appendChild(a);
+    };
+    const srcs = []; if (it.local) srcs.push(() => fetchBlob(it.local, '')); if (it.img) srcs.push(async () => it.img);
+    let i = 0;
+    const tryNext = async () => { while (i < srcs.length) { try { im.src = await srcs[i++](); return; } catch { /* source suivante */ } } miss(); };
+    im.onload = () => { it.shown = im.currentSrc || im.src; };
+    im.onerror = tryNext;
+    f.onclick = () => { const live = all.filter((x) => !x.dead); openLightbox(live.map((x) => ({ img: x.shown || x.img, cap: x.cap, page: x.page })), Math.max(0, live.indexOf(it))); };
+    f.append(im, c); g.appendChild(f); tryNext();
   });
   return g;
 }
@@ -155,9 +179,9 @@ function show(c) {
   if (c.body.includes(REPLY)) {
     let txt = strip(c.body), meta = '';
     txt = txt.replace(/^[ \t]*🧭[^\n]*?Mode choisi\s*:\s*([^\n]*)$/m, (_, m) => { meta = m.replace(/[_*]/g, '').replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim(); return ''; }).trim();
-    const { text: body, imgs } = splitImgs(txt);
-    const d = add('bot', body); d.dataset.raw = body;
-    if (imgs.length) d.appendChild(gallery(imgs));
+    const { parts, all, plain } = splitParts(txt);
+    const d = add('bot', ''); d.dataset.raw = plain;
+    parts.forEach((p) => (p.t !== undefined ? d.insertAdjacentHTML('beforeend', render(p.t)) : d.appendChild(gallery(p.imgs, all))));
     if (meta) { const s = document.createElement('span'); s.className = 'meta'; s.textContent = 'Mode : ' + meta; d.appendChild(s); }
     addTts(d);
     if (/Code de confirmation\s*:\s*[0-9a-f]{6}/i.test(c.body)) { // boutons de validation humaine
