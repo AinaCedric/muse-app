@@ -199,6 +199,8 @@ public class MuseService extends AccessibilityService {
         wl.acquire(3000);
     }
 
+    void prepare() throws Exception { prep(); }
+
     /** Allume l'écran et dépasse un écran de verrouillage SANS code. Si un code est demandé : on s'arrête. */
     private void prep() throws Exception {
         PowerManager pm = getSystemService(PowerManager.class);

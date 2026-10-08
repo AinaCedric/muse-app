@@ -1,11 +1,13 @@
 package com.ainacedric.muse;
 
+import android.app.ActivityOptions;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.RemoteInput;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.service.notification.NotificationListenerService;
@@ -43,7 +45,7 @@ public class NotifWatch extends NotificationListenerService {
 
     static class Pending {
         String id, pkg, from, key;
-        PendingIntent pi;
+        PendingIntent pi, open;
         RemoteInput[] ri;
         long at;
         int sent;
@@ -153,25 +155,28 @@ public class NotifWatch extends NotificationListenerService {
         return false;
     }
 
-    private static Pending findReply(Notification n, String pkg, String from, String key) {
-        if (n.actions == null) return null;
-        for (Notification.Action a : n.actions) {
-            RemoteInput[] ri = a.getRemoteInputs();
-            if (ri == null || ri.length == 0 || a.actionIntent == null) continue;
-            boolean free = false;
-            for (RemoteInput r : ri) if (r.getAllowFreeFormInput()) free = true;
-            if (!free) continue;
-            Pending p = new Pending();
-            p.id = newId();
-            p.pkg = pkg;
-            p.from = from;
-            p.key = key;
-            p.pi = a.actionIntent;
-            p.ri = ri;
-            p.at = System.currentTimeMillis();
-            return p;
+    /** Mémorise la notification : réponse rapide (si elle en a une) et ouverture directe de la conversation. */
+    private static Pending makePending(Notification n, String pkg, String from, String key) {
+        Pending p = new Pending();
+        p.id = newId();
+        p.pkg = pkg;
+        p.from = from;
+        p.key = key;
+        p.open = n.contentIntent;
+        p.at = System.currentTimeMillis();
+        if (n.actions != null) {
+            for (Notification.Action a : n.actions) {
+                RemoteInput[] ri = a.getRemoteInputs();
+                if (ri == null || ri.length == 0 || a.actionIntent == null) continue;
+                boolean free = false;
+                for (RemoteInput r : ri) if (r.getAllowFreeFormInput()) free = true;
+                if (!free) continue;
+                p.pi = a.actionIntent;
+                p.ri = ri;
+                break;
+            }
         }
-        return null;
+        return p;
     }
 
     private static synchronized void keepPending(Pending p) {
@@ -284,12 +289,13 @@ public class NotifWatch extends NotificationListenerService {
             return;
         }
         String from = d.optString("title");
-        Pending p = r.optBoolean("autoReply", false) ? findReply(n, pkg, from, sbn.getKey()) : null;
-        if (p != null) keepPending(p);
+        Pending p = makePending(n, pkg, from, sbn.getKey());
+        keepPending(p);
         JSONObject ctx = new JSONObject();
         ctx.put("pkg", clean(pkg, 80));
         ctx.put("from", clean(from, 80));
-        ctx.put("reply", p == null ? "" : p.id);
+        ctx.put("reply", p.ri == null ? "" : p.id);
+        ctx.put("nid", p.open == null ? "" : p.id);
         StringBuilder b = new StringBuilder();
         b.append("<!--auto:").append(rid).append("-->\n");
         b.append("<!--autoctx:").append(ctx.toString().replace("-->", "- >")).append("-->\n");
@@ -323,8 +329,10 @@ public class NotifWatch extends NotificationListenerService {
                     o.put("pkg", s.getPackageName());
                     o.put("title", clean(d.optString("title"), 100));
                     o.put("text", clean(d.optString("messages").isEmpty() ? d.optString("text") : d.optString("messages"), 400));
-                    Pending p = findReply(n, s.getPackageName(), d.optString("title"), s.getKey());
-                    if (p != null) { keepPending(p); o.put("reply", p.id); }
+                    Pending p = makePending(n, s.getPackageName(), d.optString("title"), s.getKey());
+                    keepPending(p);
+                    if (p.open != null) o.put("id", p.id);
+                    if (p.ri != null) o.put("reply", p.id);
                     out.put(o);
                 }
             }
@@ -338,6 +346,7 @@ public class NotifWatch extends NotificationListenerService {
             Pending p;
             synchronized (NotifWatch.class) { p = PEND.get(id); }
             if (p == null) throw new Exception("Cette notification n'est plus disponible (déjà ouverte, effacée ou trop ancienne) : impossible de répondre sans ouvrir l'appli.");
+            if (p.ri == null || p.pi == null) throw new Exception("Cette notification n'offre pas de réponse rapide.");
             if (p.sent >= 3) throw new Exception("Déjà 3 réponses envoyées à cette notification.");
             Intent i = new Intent();
             Bundle b = new Bundle();
@@ -350,6 +359,26 @@ public class NotifWatch extends NotificationListenerService {
             }
             p.sent++;
             return new JSONObject().put("sent", true).put("to", p.from).put("app", p.pkg);
+        }
+        if (op.equals("notif_open")) {
+            String id = cmd.optString("id");
+            Pending p;
+            synchronized (NotifWatch.class) { p = PEND.get(id); }
+            if (p == null || p.open == null) throw new Exception("Cette notification n'est plus disponible (déjà ouverte, effacée ou trop ancienne) : ouvre l'appli avec phone_open_app puis la conversation avec phone_tap_text.");
+            MuseService s = MuseService.inst;
+            if (s != null) s.prepare(); // allume l'écran ; s'arrête si un code est demandé
+            try {
+                if (Build.VERSION.SDK_INT >= 34) {
+                    ActivityOptions o = ActivityOptions.makeBasic();
+                    o.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                    p.open.send(c, 0, null, null, null, null, o.toBundle());
+                } else {
+                    p.open.send();
+                }
+            } catch (PendingIntent.CanceledException e) {
+                throw new Exception("La notification a été retirée : ouvre l'appli avec phone_open_app puis la conversation avec phone_tap_text.");
+            }
+            return new JSONObject().put("opened", true).put("to", p.from).put("app", p.pkg);
         }
         throw new Exception("Opération inconnue : " + op);
     }
