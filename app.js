@@ -91,7 +91,7 @@ input,select,textarea,button{font:inherit;color:inherit}input,select,textarea{ba
 button{background:var(--acc);color:#fff;border:0;border-radius:999px;padding:9px 16px;min-height:40px;cursor:pointer}button.ghost{background:var(--soft);color:var(--txt)}
 canvas,svg,img{max-width:100%}</style>
 <script>
-const museSend=(t)=>parent.postMessage({museUi:${id},send:String(t).slice(0,2000)},'*');
+const museSend=(t)=>parent.postMessage({museUi:${id},send:String(t).slice(0,2000)},'*');const museCopy=(t)=>parent.postMessage({museUi:${id},copy:String(t).slice(0,20000)},'*');
 addEventListener('message',(e)=>{const d=e.data||{};if(d.museTheme){for(const[k,v]of Object.entries(d.museTheme)){if(k!=='dark')document.documentElement.style.setProperty('--'+k,v)}document.documentElement.style.colorScheme=d.museTheme.dark?'dark':'light'}});
 const __h=()=>parent.postMessage({museUi:${id},h:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*');
 addEventListener('load',__h);new ResizeObserver(__h).observe(document.documentElement);
@@ -121,6 +121,7 @@ addEventListener('message', (e) => {
   if (!fr || e.source !== fr.contentWindow) return;
   if (d.h) fr.style.height = Math.min(Math.max(d.h, 60), 1600) + 'px';
   if (d.send) { input.value = d.send; input.focus(); input.dispatchEvent(new Event('input')); toast('Message prêt : appuie sur Envoyer'); }
+  if (d.copy) navigator.clipboard.writeText(d.copy).then(() => toast('Copié'), () => toast('Copie impossible'));
   if (d.err) console.warn('Interface Muse :', d.err);
 });
 function uiThemeSync() { const t = uiTheme(); uiFrames.forEach((fr) => { if (fr.isConnected) fr.contentWindow?.postMessage({ museTheme: t }, '*'); else uiFrames.delete(fr); }); }
