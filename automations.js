@@ -49,6 +49,7 @@
 
   const summary = (r) => {
     const t = r.trigger || {}, who = `« ${esc(t.match || '…')} »`;
+    if (!t.match) return `Quand un message arrive sur ${esc(appLabel(t.app) || 'l’appli')} (tous les contacts, hors groupes) → ${({ ask: 'Muse te propose la réponse', auto: 'Muse répond seule', none: 'Muse te résume le message' })[replyOf(r)]}`;
     const when = t.by === 'text' ? `Quand un message contient ${who}` : t.by === 'any' ? `Quand ${who} apparaît dans une notification` : `Quand ${who} m’écrit`;
     const app = t.app ? ` sur ${esc(appLabel(t.app))}` : '';
     return `${when}${app} → ${({ ask: 'Muse te propose la réponse', auto: 'Muse répond seule', none: 'Muse te résume le message' })[replyOf(r)]}`;
@@ -76,7 +77,7 @@
           <div><h2>Automatisations</h2><p class="hint">Des consignes que Muse exécute toute seule, sans que tu aies à lui écrire.</p></div>
           <button class="btn" id="autoNew" type="button">${ic('plus')}<span>Nouvelle</span></button>
         </div>
-        <div class="anote">${ic('phone')}<span>Pour surveiller les notifications, l’appli <b>Muse Tél. 2.2</b> doit avoir accès aux notifications (étape 9) et le code Cerveau doit être collé (étape 7). Une nouvelle règle est prise en compte en moins d’une minute.</span></div>
+        <div class="anote">${ic('phone')}<span>Pour surveiller les notifications, l’appli <b>Muse Tél. 2.3</b> doit avoir accès aux notifications (étape 9) et le code Cerveau doit être collé (étape 7). Une nouvelle règle est prise en compte en moins d’une minute.</span></div>
         ${st.items.length ? cards : `<div class="aempty"><span class="abolt big">${ic('bolt')}</span><h3>Aucune automatisation</h3><p>Exemple : « Quand Elena Salvatore m’écrit sur WhatsApp, lis son message et réponds-lui que je la rappelle. »</p><button class="btn" id="autoNew2" type="button">Créer ma première automatisation</button></div>`}
       </div>`;
     view.querySelectorAll('#autoNew,#autoNew2').forEach((b) => (b.onclick = () => edit(null)));
@@ -140,7 +141,7 @@
     const name = $('#aName').value.trim(), match = $('#aMatch').value.trim();
     const app = $('#aApp').value === '__custom' ? $('#aAppCustom').value.trim() : $('#aApp').value;
     const max = Math.max(1, Math.min(60, parseInt($('#aMax').value, 10) || 6));
-    if (!name || !match) { $('#aMsg').textContent = 'Le nom et le déclencheur (nom ou mot) sont obligatoires.'; return; }
+    if (!name || (!match && !app)) { $('#aMsg').textContent = 'Donne un nom, et soit un contact ou un mot, soit une application précise (pour tous ses messages).'; return; }
     if ($('#aApp').value === '__custom' && !app) { $('#aMsg').textContent = 'Indique un morceau du nom de l’appli (ex. « signal »).'; return; }
     const btn = $('#aSave'); btn.disabled = true;
     const data = { name, enabled: editing ? editing.enabled : true, instruction: editing ? editing.instruction || '' : '', replyMode: $('#aReply').value, autoReply: $('#aReply').value !== 'none', maxPerHour: max, trigger: { type: 'notification', match, by: $('#aBy').value, app } };
@@ -177,7 +178,7 @@
     if (!r.issue) { toast('Cette automatisation n’a pas d’historique : enregistre-la à nouveau.'); return; }
     $('#tGo').disabled = true;
     try {
-      const body = `<!--auto:${r.id}-->\n<!--autotest-->\n🧪 **Test** (rien n’est envoyé)\n\nMessage simulé de ${r.trigger.match} :\n\`\`\`\n${msg.replace(/```/g, "'''").replace(/-->/g, '- >')}\n\`\`\`\n<!--mode:phone-->`;
+      const body = `<!--auto:${r.id}-->\n<!--autotest-->\n🧪 **Test** (rien n’est envoyé)\n\nMessage simulé de ${r.trigger.match || 'un contact'} :\n\`\`\`\n${msg.replace(/```/g, "'''").replace(/-->/g, '- >')}\n\`\`\`\n<!--mode:phone-->`;
       await gh(`/repos/${cfg.repo}/issues/${r.issue}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
       tdlg.close(); await openConv(r.issue);
     } catch (e) { toast('' + e.message); }

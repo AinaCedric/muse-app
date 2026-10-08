@@ -239,9 +239,15 @@ public class NotifWatch extends NotificationListenerService {
             String app = t.optString("app", "").trim();
             if (!app.isEmpty() && !has(pk, app)) continue;
             String match = t.optString("match", "").trim();
-            if (match.isEmpty()) continue;
             String by = t.optString("by", "sender");
-            boolean ok = "text".equals(by) ? has(body, match) : "any".equals(by) ? (has(who, match) || has(body, match)) : has(who, match);
+            boolean ok;
+            if (match.isEmpty()) {
+                // Sans nom ni mot : tous les messages de l'appli choisie (jamais « toutes les applis »), hors conversations de groupe
+                if (app.isEmpty()) continue;
+                ok = n.extras == null || !n.extras.getBoolean("android.isGroupConversation", false);
+            } else {
+                ok = "text".equals(by) ? has(body, match) : "any".equals(by) ? (has(who, match) || has(body, match)) : has(who, match);
+            }
             if (!ok) continue;
             fire(c, r, pkg, sbn, n, d);
         }

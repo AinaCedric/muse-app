@@ -145,7 +145,7 @@ class Bus {
         o.put("model", Build.MODEL);
         o.put("android", Build.VERSION.RELEASE);
         o.put("sdk", Build.VERSION.SDK_INT);
-        o.put("app", "2.2");
+        o.put("app", "2.3");
         o.put("notif", NotifWatch.inst != null);
         o.put("a11y", MuseService.inst != null);
         return o;
