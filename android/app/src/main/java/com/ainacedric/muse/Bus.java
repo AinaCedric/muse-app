@@ -145,7 +145,7 @@ class Bus {
         o.put("model", Build.MODEL);
         o.put("android", Build.VERSION.RELEASE);
         o.put("sdk", Build.VERSION.SDK_INT);
-        o.put("app", "2.5");
+        o.put("app", "2.6");
         o.put("notif", NotifWatch.inst != null);
         o.put("a11y", MuseService.inst != null);
         return o;
@@ -198,6 +198,9 @@ class Bus {
                     out = ping();
                 } else if (opName.equals("notify")) {
                     out = Notif.show(c, cmd);
+                } else if (opName.equals("location")) {
+                    if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
+                    out = Loc.op(c);
                 } else if (opName.equals("notifs") || opName.equals("notif_reply") || opName.equals("notif_open")) {
                     if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
                     out = NotifWatch.op(c, cmd);

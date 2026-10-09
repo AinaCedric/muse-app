@@ -29,7 +29,7 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
     private LinearLayout root;
     private Button wakeBtn, notifBtn;
-    private TextView sAuto, sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
+    private TextView sLoc, sAuto, sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         sv.addView(root);
         setContentView(sv);
 
-        root.addView(text("Muse · Téléphone  v2.5", 26, true, Color.parseColor("#5B3FD6")));
+        root.addView(text("Muse · Téléphone  v2.6", 26, true, Color.parseColor("#5B3FD6")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
@@ -173,6 +173,17 @@ public class MainActivity extends Activity {
         root.addView(button("🔔  Autoriser l'accès aux notifications", new View.OnClickListener() {
             @Override
             public void onClick(View v) { open(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")); }
+        }));
+
+        // 10. Position
+        sLoc = step(10, "Position (restaurants proches, itinéraires)", "Optionnel : quand tu demandes « le plus proche », Muse lit la position du téléphone pour chercher autour de toi et tracer le chemin. Touche le bouton, accepte, puis choisis « Toujours autoriser » (sinon Muse ne la voit pas quand l'appli est fermée). Muse ne la lit que quand tu le lui demandes.");
+        root.addView(button("📍  Autoriser la position", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!Loc.granted(MainActivity.this)) requestPermissions(new String[]{"android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"}, 4);
+                else if (!Loc.background(MainActivity.this)) requestPermissions(new String[]{"android.permission.ACCESS_BACKGROUND_LOCATION"}, 5);
+                else Toast.makeText(MainActivity.this, "Position déjà autorisée ✅", Toast.LENGTH_SHORT).show();
+            }
         }));
 
         root.addView(button("🫧  Tester le panneau (comme la bulle)", new View.OnClickListener() {
@@ -287,6 +298,7 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
         super.onRequestPermissionsResult(code, perms, res);
+        if (code == 4 && Loc.granted(this) && !Loc.background(this)) { Toast.makeText(this, "Choisis maintenant « Toujours autoriser »", Toast.LENGTH_LONG).show(); requestPermissions(new String[]{"android.permission.ACCESS_BACKGROUND_LOCATION"}, 5); }
         startKeepAlive();
         refresh();
     }
@@ -322,6 +334,7 @@ public class MainActivity extends Activity {
         mark(sBrain, Store.brainLinked(this));
         mark(sWake, Store.wake(this));
         mark(sAuto, NotifWatch.enabled(this) && Store.brainLinked(this));
+        mark(sLoc, Loc.granted(this) && Loc.background(this));
         wakeBtn.setText(Store.wake(this) ? "🔕  Arrêter l'écoute de « Muse »" : "🗣️  Activer « Muse » à la voix");
         notifBtn.setText(Store.notify(this) ? "🔔  Notifications des réponses : activées" : "🔕  Notifications des réponses : coupées");
         mark(sAcc, accessibilityOn());

@@ -118,6 +118,26 @@ class Ask {
     /** Texte lisible : sans balises cachées ni mise en forme Markdown. keepEmoji=false pour la voix. */
     static String plain(String raw, boolean forSpeech) {
         String s = raw.replaceAll("(?s)<!--.*?-->", "").replaceAll("[ \\t]*\\[\\[IMG:[^\\]]*\\]\\][ \\t]*", "").replaceAll("[ \\t]*\\[\\[SRC:[^\\]]*\\]\\]", "");
+        {   // carte des lieux (JSON) : on garde le titre et les noms des lieux
+            java.util.regex.Matcher mm = java.util.regex.Pattern.compile("(?s)```[ \\t]*muse-map[^\\n]*\\n(.*?)(```|$)").matcher(s);
+            StringBuffer sb = new StringBuffer();
+            while (mm.find()) {
+                String rep = "";
+                try {
+                    org.json.JSONObject o = new org.json.JSONObject(mm.group(1).trim());
+                    StringBuilder b = new StringBuilder("🗺️ " + o.optString("title", "Carte") + "\n");
+                    org.json.JSONArray ps = o.optJSONArray("places");
+                    for (int i = 0; ps != null && i < ps.length() && i < 8; i++) {
+                        org.json.JSONObject p = ps.optJSONObject(i); if (p == null) continue;
+                        b.append(i + 1).append(". ").append(p.optString("name", "")).append(p.optString("dist", "").isEmpty() ? "" : " · " + p.optString("dist", "")).append("\n");
+                    }
+                    rep = b.toString() + "(carte et itinéraire dans le chat Muse)";
+                } catch (Throwable e) { rep = "🗺️ Carte : ouvre le chat Muse pour la voir."; }
+                mm.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(rep));
+            }
+            mm.appendTail(sb);
+            s = sb.toString();
+        }
         {   // cartes d'actualités : on garde titres + texte, sans les lignes techniques (image, sources…)
             java.util.regex.Matcher cm = java.util.regex.Pattern.compile("(?s)```[ \\t]*muse-cards[^\\n]*\\n(.*?)(```|$)").matcher(s);
             StringBuffer sb = new StringBuffer();

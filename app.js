@@ -85,7 +85,7 @@ function splitParts(text) {
 }
 
 // ---- 🧩 Interfaces interactives : Muse écrit un bloc ```muse-ui … ``` ; on l'affiche comme un mini-outil vivant dans une bulle isolée
-const UI_RE = /```[ \t]*(muse-ui|muse-cards)[ \t]*\r?\n([\s\S]*?)(```|$)/g;
+const UI_RE = /```[ \t]*(muse-ui|muse-cards|muse-map)[ \t]*\r?\n([\s\S]*?)(```|$)/g;
 const UI_VARS = ['bg', 'panel', 'soft', 'txt', 'mut', 'acc', 'acc-soft', 'bd', 'code', 'ok', 'err'];
 function uiTheme() {
   const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue('--' + n).trim();
@@ -142,11 +142,12 @@ function splitUI(text) {
   while ((m = UI_RE.exec(text))) {
     out.push({ t: text.slice(pos, m.index) });
     if (m[1] === 'muse-cards') out.push({ cards: m[2] });
+    else if (m[1] === 'muse-map') out.push(m[3] ? { map: m[2] } : { t: '🗺️ _(carte incomplète : réponse coupée)_' });
     else if (m[3]) out.push({ ui: m[2] }); else out.push({ t: '🧩 _(interface incomplète : réponse coupée)_' });
     pos = UI_RE.lastIndex;
   }
   out.push({ t: text.slice(pos) });
-  return out.filter((x) => x.ui || x.cards || x.t.trim());
+  return out.filter((x) => x.ui || x.cards || x.map || x.t.trim());
 }
 // ---- 📰 Cartes d'actualités / résultats : bloc ```muse-cards (## Titre, puis badge:, img:, sources:, intérêt:, et le texte)
 function parseCards(src) {
@@ -211,6 +212,119 @@ function cardsBox(src) {
   return wrap;
 }
 const cardsPlain = (src) => parseCards(src).map((c, i) => `${i + 1}. ${c.title}. ${c.text.join(' ').trim()}`).join('\n');
+// ---- 🗺️ Carte interactive : bloc ```muse-map (JSON) → vraie carte (Leaflet + OpenStreetMap), lieux, photos, itinéraire
+let leafletP = null;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (!leafletP) leafletP = new Promise((ok, ko) => {
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = './vendor/leaflet/leaflet.css'; document.head.appendChild(css);
+    const s = document.createElement('script'); s.src = './vendor/leaflet/leaflet.js'; s.onload = () => ok(window.L); s.onerror = () => { leafletP = null; ko(new Error('Leaflet indisponible')); }; document.head.appendChild(s);
+  });
+  return leafletP;
+}
+function parseMap(src) {
+  let d = null;
+  try { d = JSON.parse(src); } catch { try { d = JSON.parse(src.replace(/\[\[IMG:[^\]]*\]\]/g, (x) => x.replace(/["\\]/g, ''))); } catch { return null; } }
+  const num = (v) => (Number.isFinite(+v) ? +v : null);
+  const places = (Array.isArray(d.places) ? d.places : []).slice(0, 12).map((p, i) => {
+    const m = String(p.img || '').match(/\[\[IMG:([^\]]*)\]\]/);
+    return { i, name: String(p.name || `Lieu ${i + 1}`).slice(0, 80), address: String(p.address || '').slice(0, 140), lat: num(p.lat), lng: num(p.lng), rating: num(p.rating), reviews: num(p.reviews), price: String(p.price || '').slice(0, 40), open: String(p.open || '').slice(0, 60), dist: String(p.dist || '').slice(0, 50), note: String(p.note || '').slice(0, 220), tags: Array.isArray(p.tags) ? p.tags.slice(0, 4).map((t) => String(t).slice(0, 20)) : [], img: m ? parseImg(m[1]) : (okUrl(p.img) ? { img: p.img, page: '', cap: '' } : null), approx: !!p.approx };
+  });
+  const me = d.me && num(d.me.lat) !== null && num(d.me.lng) !== null ? { lat: +d.me.lat, lng: +d.me.lng } : null;
+  return { title: String(d.title || 'Carte').slice(0, 90), me, mode: d.mode === 'car' ? 'car' : 'foot', places };
+}
+const mapPlain = (src) => { const d = parseMap(src); return d ? `${d.title}. ` + d.places.map((p, i) => `${i + 1}. ${p.name}${p.price ? ', ' + p.price : ''}${p.dist ? ', ' + p.dist : ''}.`).join(' ') : ''; };
+const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`);
+const fmtDur = (s) => { const m = Math.max(1, Math.round(s / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
+const gmapsDir = (p, mode) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat != null ? `${p.lat},${p.lng}` : encodeURIComponent(`${p.name} ${p.address}`)}&travelmode=${mode === 'car' ? 'driving' : 'walking'}`;
+function mapBox(src) {
+  const d = parseMap(src), box = document.createElement('div'); box.className = 'mapbox';
+  if (!d || !d.places.length) { box.textContent = '🗺️ Carte illisible'; return box; }
+  const st = { mode: d.mode, me: d.me, sel: -1, route: null, map: null, markers: [], meLayer: null };
+  box.innerHTML = `<div class="mhead"><b class="mtitle"></b><div class="mtools"><div class="mseg"><button type="button" data-m="foot">🚶 À pied</button><button type="button" data-m="car">🚗 Voiture</button></div><button type="button" class="mbtn mloc" title="Ma position">📍</button><button type="button" class="mbtn mfull" title="Plein écran">⛶</button></div></div>
+    <div class="mmap"><div class="mload">Chargement de la carte…</div></div><div class="mroute" hidden></div><div class="mlist"></div>`;
+  box.querySelector('.mtitle').textContent = '🗺️ ' + d.title;
+  const list = box.querySelector('.mlist'), routeEl = box.querySelector('.mroute'), mapEl = box.querySelector('.mmap');
+  const seg = () => box.querySelectorAll('.mseg button').forEach((b) => b.classList.toggle('on', b.dataset.m === st.mode));
+  seg();
+  d.places.forEach((p, i) => {
+    const c = document.createElement('div'); c.className = 'mcard'; c.dataset.i = i;
+    const ph = document.createElement('div'); ph.className = 'mph';
+    if (p.img) { const im = document.createElement('img'); im.alt = ''; im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; const srcs = []; if (p.img.local) srcs.push(() => fetchBlob(p.img.local, '')); if (p.img.img) srcs.push(async () => p.img.img); let k = 0; const nx = async () => { while (k < srcs.length) { try { im.src = await srcs[k++](); return; } catch { /* suivante */ } } im.remove(); }; im.onerror = nx; nx(); ph.appendChild(im); }
+    const n = document.createElement('span'); n.className = 'mnum'; n.textContent = i + 1; ph.appendChild(n);
+    const b = document.createElement('div'); b.className = 'mbody';
+    const h = document.createElement('b'); h.textContent = p.name; b.appendChild(h);
+    const meta = document.createElement('div'); meta.className = 'mmeta';
+    meta.textContent = [p.rating != null ? `★ ${String(p.rating).replace('.', ',')}${p.reviews ? ` (${p.reviews})` : ''}` : '', p.price, p.dist].filter(Boolean).join(' · ');
+    b.appendChild(meta);
+    if (p.open) { const o = document.createElement('div'); o.className = 'mopen' + (/ferm/i.test(p.open) && !/ferme à/i.test(p.open) ? ' closed' : ''); o.textContent = p.open; b.appendChild(o); }
+    if (p.note) { const t = document.createElement('div'); t.className = 'mnote'; t.textContent = p.note; b.appendChild(t); }
+    if (p.tags.length) { const tg = document.createElement('div'); tg.className = 'mtags'; p.tags.forEach((x) => { const s = document.createElement('span'); s.textContent = x; tg.appendChild(s); }); b.appendChild(tg); }
+    c.append(ph, b); c.onclick = () => select(i, true); list.appendChild(c);
+  });
+  async function route(p) {
+    routeEl.hidden = false;
+    const go = `<a class="mgo" href="${gmapsDir(p, st.mode)}" target="_blank" rel="noopener">Ouvrir dans Google Maps ↗</a>`;
+    if (!st.me || p.lat == null) { routeEl.innerHTML = `<span>${st.me ? 'Position du lieu inconnue' : '📍 Touche « Ma position » pour tracer le chemin'}</span>${go}`; return; }
+    routeEl.innerHTML = `<span class="mcalc">Calcul du chemin…</span>${go}`;
+    if (st.route) { st.route.forEach((l) => l.remove()); st.route = null; }
+    const L = window.L, prof = st.mode === 'car' ? 'routed-car' : 'routed-foot';
+    let coords = null, dist = 0, dur = 0;
+    try {
+      const r = await fetch(`https://routing.openstreetmap.de/${prof}/route/v1/driving/${st.me.lng},${st.me.lat};${p.lng},${p.lat}?overview=full&geometries=geojson`);
+      const j = await r.json(); const rt = j.routes && j.routes[0];
+      if (rt) { coords = rt.geometry.coordinates.map(([x, y]) => [y, x]); dist = rt.distance; dur = rt.duration; }
+    } catch { /* hors ligne : ligne droite */ }
+    if (st.sel !== p.i) return;
+    const straight = !coords;
+    if (straight) { coords = [[st.me.lat, st.me.lng], [p.lat, p.lng]]; dist = L.latLng(st.me.lat, st.me.lng).distanceTo([p.lat, p.lng]); dur = dist / (st.mode === 'car' ? 8 : 1.3); }
+    st.route = [L.polyline(coords, { color: '#fff', weight: 9, opacity: 0.9, lineCap: 'round' }).addTo(st.map), L.polyline(coords, { color: getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#5B3FD6', weight: 5, opacity: 1, lineCap: 'round', className: 'mline' + (straight ? ' straight' : '') }).addTo(st.map)];
+    st.map.fitBounds(L.latLngBounds(coords).pad(0.25), { animate: true });
+    routeEl.innerHTML = `<span><b>${fmtDur(dur)}</b> · ${fmtDist(dist)} ${st.mode === 'car' ? 'en voiture' : 'à pied'}${straight ? ' <small>(à vol d\'oiseau)</small>' : ''} → ${esc(p.name)}</span>${go}`;
+  }
+  function select(i, scroll) {
+    st.sel = i; const p = d.places[i];
+    list.querySelectorAll('.mcard').forEach((c) => c.classList.toggle('on', +c.dataset.i === i));
+    st.markers.forEach((m, k) => { const el = m && m.getElement() && m.getElement().querySelector('.mpin'); if (el) el.classList.toggle('on', k === i); if (m) m.setZIndexOffset(k === i ? 800 : 0); });
+    if (scroll) list.querySelector(`.mcard[data-i="${i}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    if (st.map && p.lat != null) st.map.flyTo([p.lat, p.lng], Math.max(st.map.getZoom(), 15), { duration: 0.6 });
+    route(p);
+  }
+  function setMe(me) {
+    st.me = me; const L = window.L;
+    if (st.meLayer) st.meLayer.remove();
+    st.meLayer = L.marker([me.lat, me.lng], { icon: L.divIcon({ className: '', html: '<div class="mme"><i></i></div>', iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000 }).addTo(st.map).bindTooltip('Toi', { direction: 'top', offset: [0, -10] });
+  }
+  box.querySelectorAll('.mseg button').forEach((b) => { b.onclick = () => { st.mode = b.dataset.m; seg(); if (st.sel >= 0) route(d.places[st.sel]); }; });
+  box.querySelector('.mloc').onclick = () => {
+    if (!navigator.geolocation) return toast('Position indisponible sur cet appareil');
+    toast('Recherche de ta position…');
+    navigator.geolocation.getCurrentPosition((pos) => { setMe({ lat: pos.coords.latitude, lng: pos.coords.longitude }); if (st.sel >= 0) route(d.places[st.sel]); else st.map.flyTo([st.me.lat, st.me.lng], 15); }, () => toast('Position refusée : autorise-la dans le navigateur'), { enableHighAccuracy: true, timeout: 12000 });
+  };
+  box.querySelector('.mfull').onclick = () => { box.classList.toggle('full'); document.body.classList.toggle('uifull', box.classList.contains('full')); setTimeout(() => st.map && st.map.invalidateSize(), 250); };
+  loadLeaflet().then((L) => {
+    mapEl.innerHTML = '';
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const map = L.map(mapEl, { zoomControl: false, attributionControl: true, scrollWheelZoom: false, tap: true });
+    st.map = map; L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark ? 'dark_all' : 'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`, { maxZoom: 19, subdomains: 'abcd', attribution: '© OpenStreetMap · © CARTO' }).addTo(map);
+    const pts = [];
+    d.places.forEach((p, i) => {
+      if (p.lat == null) { st.markers.push(null); return; }
+      const mk = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: `<div class="mpin"><span>${i + 1}</span></div>`, iconSize: [34, 42], iconAnchor: [17, 40] }), riseOnHover: true }).addTo(map);
+      mk.bindTooltip(p.name, { direction: 'top', offset: [0, -38] }); mk.on('click', () => select(i, true));
+      st.markers.push(mk); pts.push([p.lat, p.lng]);
+    });
+    if (st.me) { setMe(st.me); pts.push([st.me.lat, st.me.lng]); }
+    if (pts.length > 1) map.fitBounds(L.latLngBounds(pts).pad(0.18)); else if (pts.length) map.setView(pts[0], 15); else map.setView([-18.8792, 47.5079], 13);
+    map.on('click', () => map.scrollWheelZoom.enable());
+    const miss = d.places.filter((p) => p.lat == null).length;
+    if (miss) { const n = document.createElement('div'); n.className = 'mwarn'; n.textContent = `${miss} lieu${miss > 1 ? 'x' : ''} sans position exacte : utilise « Ouvrir dans Google Maps ».`; box.insertBefore(n, list); }
+    const first = d.places.findIndex((p) => p.lat != null);
+    if (first >= 0) select(first, false);
+  }).catch(() => { mapEl.innerHTML = '<div class="mload">Carte indisponible hors ligne — la liste reste utilisable.</div>'; });
+  return box;
+}
 const lb = { el: null, list: [], i: 0 };
 function lbShow(k) {
   if (!lb.list.length) return lbClose();
@@ -324,6 +438,7 @@ function show(c) {
     const d = add('bot', ''); const raws = [];
     splitUI(txt).forEach((seg) => {
       if (seg.ui) { d.appendChild(uiBox(seg.ui)); d.classList.add('hasUi'); raws.push("J'ai préparé une interface interactive."); return; }
+      if (seg.map) { d.appendChild(mapBox(seg.map)); d.classList.add('hasUi'); raws.push(mapPlain(seg.map)); return; }
       if (seg.cards) { d.appendChild(cardsBox(seg.cards)); d.classList.add('hasUi'); raws.push(cardsPlain(seg.cards)); return; }
       const { parts, all, plain } = splitParts(seg.t); raws.push(plain);
       parts.forEach((p) => (p.t !== undefined ? d.insertAdjacentHTML('beforeend', render(p.t)) : d.appendChild(gallery(p.imgs, all))));

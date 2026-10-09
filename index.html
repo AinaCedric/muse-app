@@ -133,6 +133,46 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 .m .nnote{margin-top:6px;font-size:13.5px;color:var(--mut)}
 .m .slist{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:13px}
 @media(max-width:520px){.m .nthumb{flex-basis:88px}.m .nthumb img{width:88px;height:112px;border-radius:12px}.m .ncard{gap:12px}}
+.m .mapbox{white-space:normal;margin:12px -6px 8px;border:1px solid var(--bd);border-radius:18px;overflow:hidden;background:var(--panel);box-shadow:var(--shadow)}
+.m .mhead{display:flex;align-items:center;gap:8px;padding:10px 12px;flex-wrap:wrap}
+.m .mtitle{flex:1;min-width:140px;font-size:15px}
+.m .mtools{display:flex;gap:6px;align-items:center}
+.m .mseg{display:flex;background:var(--soft);border-radius:999px;padding:3px}
+.m .mseg button{border:0;background:transparent;color:var(--mut);border-radius:999px;padding:5px 10px;font-size:12.5px;cursor:pointer}
+.m .mseg button.on{background:var(--panel);color:var(--txt);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.m .mbtn{border:0;background:var(--soft);border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:14px}
+.m .mmap{height:320px;position:relative;background:var(--soft);z-index:0}
+.m .mload{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut);font-size:13px}
+.m .mroute{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;background:var(--acc-soft);font-size:13.5px}
+.m .mroute b{color:var(--acc);font-size:15px}
+.m .mroute small{color:var(--mut)}
+.m .mgo{background:var(--acc);color:#fff!important;text-decoration:none;border-radius:999px;padding:5px 12px;font-size:12.5px;white-space:nowrap}
+.m .mwarn{font-size:12px;color:var(--mut);padding:6px 12px 0}
+.m .mlist{display:flex;gap:10px;overflow-x:auto;padding:12px;scroll-snap-type:x mandatory;scrollbar-width:thin}
+.m .mcard{flex:0 0 232px;scroll-snap-align:center;border:1.5px solid var(--bd);border-radius:14px;overflow:hidden;cursor:pointer;background:var(--panel);transition:border-color .2s,transform .2s}
+.m .mcard.on{border-color:var(--acc);transform:translateY(-2px);box-shadow:var(--shadow)}
+.m .mph{position:relative;height:104px;background:linear-gradient(135deg,var(--acc-soft),var(--soft))}
+.m .mph img{width:100%;height:100%;object-fit:cover;display:block}
+.m .mnum{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-size:12.5px;font-weight:600;display:grid;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.m .mbody{padding:8px 10px 10px;font-size:13px;line-height:1.4}
+.m .mbody>b{display:block;font-size:14px;margin-bottom:2px}
+.m .mmeta{color:var(--mut)}
+.m .mopen{color:var(--ok);font-size:12.5px;margin-top:2px}.m .mopen.closed{color:var(--err)}
+.m .mnote{margin-top:4px}
+.m .mtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.m .mtags span{background:var(--soft);border-radius:6px;padding:1px 7px;font-size:11.5px;color:var(--mut)}
+.mpin{width:34px;height:42px;position:relative;filter:drop-shadow(0 3px 4px rgba(0,0,0,.35));transition:transform .2s}
+.mpin::before{content:'';position:absolute;left:3px;top:0;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#5B3FD6;border:2.5px solid #fff}
+.mpin span{position:absolute;left:0;top:5px;width:34px;text-align:center;color:#fff;font:600 13px/18px Inter,system-ui,sans-serif}
+.mpin.on,.leaflet-marker-icon .mpin.on{transform:scale(1.25) translateY(-4px)}
+.leaflet-marker-icon:has(.mpin.on){z-index:900!important}
+.mpin.on::before{background:#E8743B}
+.mme{width:22px;height:22px;border-radius:50%;background:rgba(66,133,244,.25);display:grid;place-items:center;animation:mmep 2s ease-out infinite}
+.mme i{width:12px;height:12px;border-radius:50%;background:#4285F4;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+@keyframes mmep{0%{box-shadow:0 0 0 0 rgba(66,133,244,.45)}100%{box-shadow:0 0 0 16px rgba(66,133,244,0)}}
+.mline{stroke-dasharray:12 10;animation:mdash 1.2s linear infinite}.mline.straight{stroke-dasharray:4 8}
+@keyframes mdash{to{stroke-dashoffset:-22}}
+.m .mapbox.full{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;display:flex;flex-direction:column}
+.m .mapbox.full .mmap{flex:1;height:auto}
 .m .uibox{white-space:normal;margin:10px -6px;border:1px solid var(--bd);border-radius:16px;overflow:hidden;background:var(--panel)}
 .m .uibar{display:flex;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid var(--bd);background:var(--soft)}
 .m .uitag{flex:1;font-size:12.5px;color:var(--acc);font-weight:500}
