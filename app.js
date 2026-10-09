@@ -213,14 +213,84 @@ function cardsBox(src) {
 }
 const cardsPlain = (src) => parseCards(src).map((c, i) => `${i + 1}. ${c.title}. ${c.text.join(' ').trim()}`).join('\n');
 // ---- 🗺️ Carte interactive : bloc ```muse-map (JSON) → vraie carte (Leaflet + OpenStreetMap), lieux, photos, itinéraire
-let leafletP = null;
-function loadLeaflet() {
-  if (window.L) return Promise.resolve(window.L);
-  if (!leafletP) leafletP = new Promise((ok, ko) => {
-    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = './vendor/leaflet/leaflet.css'; document.head.appendChild(css);
-    const s = document.createElement('script'); s.src = './vendor/leaflet/leaflet.js'; s.onload = () => ok(window.L); s.onerror = () => { leafletP = null; ko(new Error('Leaflet indisponible')); }; document.head.appendChild(s);
-  });
-  return leafletP;
+// ---- 🗺️ Moteurs de carte : 3D (MapLibre + OpenFreeMap, sans clé) ; repli 2D (Leaflet + OpenStreetMap)
+const loadScript = (src, css, test) => { if (test()) return Promise.resolve(); return new Promise((ok, ko) => { if (css) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = css; document.head.appendChild(l); } const s = document.createElement('script'); s.src = src; s.onload = () => (test() ? ok() : ko(new Error('chargement'))); s.onerror = () => ko(new Error('chargement')); document.head.appendChild(s); }); };
+let mlP = null, lfP = null;
+const loadMaplibre = () => (mlP = mlP || loadScript('./vendor/maplibre/maplibre-gl.js', './vendor/maplibre/maplibre-gl.css', () => !!window.maplibregl).catch((e) => { mlP = null; throw e; }));
+const loadLeaflet = () => (lfP = lfP || loadScript('./vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css', () => !!window.L).catch((e) => { lfP = null; throw e; }));
+const accColor = () => getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#5B3FD6';
+const pinEl = (i) => { const e = document.createElement('div'); e.className = 'mpinw'; e.innerHTML = `<div class="mpin"><span>${i + 1}</span></div>`; return e; };
+const meEl = () => { const e = document.createElement('div'); e.className = 'mpinw'; e.innerHTML = '<div class="mme"><i></i></div>'; return e; };
+function webglOk() { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } }
+async function engine3D(el, dark) {
+  await loadMaplibre();
+  const ml = window.maplibregl;
+  const styles = dark ? ['https://tiles.openfreemap.org/styles/dark', 'https://tiles.openfreemap.org/styles/liberty'] : ['https://tiles.openfreemap.org/styles/liberty', 'https://tiles.openfreemap.org/styles/positron'];
+  let map = null, last = null;
+  for (const style of styles) {
+    try {
+      map = new ml.Map({ container: el, style, center: [47.5079, -18.8792], zoom: 13, pitch: 55, bearing: -18, maxPitch: 70, antialias: true, attributionControl: { compact: true }, cooperativeGestures: false, dragRotate: true });
+      await new Promise((ok, ko) => { const t = setTimeout(() => ko(new Error('délai')), 12000); map.once('load', () => { clearTimeout(t); ok(); }); map.once('error', (e) => { if (!map.loaded()) { clearTimeout(t); ko(e.error || new Error('style')); } }); });
+      break;
+    } catch (e) { last = e; try { map && map.remove(); } catch {} map = null; el.innerHTML = ''; }
+  }
+  if (!map) throw last || new Error('carte 3D indisponible');
+  // Bâtiments en relief (ajoutés si le style n'en a pas)
+  const hasExtr = map.getStyle().layers.some((l) => l.type === 'fill-extrusion');
+  const src = Object.keys(map.getStyle().sources).find((k) => map.getStyle().sources[k].type === 'vector');
+  if (!hasExtr && src) {
+    try { map.addLayer({ id: 'muse-3d', type: 'fill-extrusion', source: src, 'source-layer': 'building', minzoom: 14, paint: { 'fill-extrusion-color': dark ? '#2b2747' : '#e4def6', 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], ['get', 'height'], 8], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.85 } }); } catch { /* pas de couche bâtiments */ }
+  }
+  map.addControl(new ml.NavigationControl({ visualizePitch: true, showCompass: true }), 'bottom-right');
+  const acc = accColor();
+  map.addSource('muse-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({ id: 'muse-route-glow', type: 'line', source: 'muse-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': acc, 'line-width': 16, 'line-opacity': 0.25, 'line-blur': 6 } });
+  map.addLayer({ id: 'muse-route-case', type: 'line', source: 'muse-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 9 } });
+  map.addLayer({ id: 'muse-route', type: 'line', source: 'muse-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': acc, 'line-width': 5 } });
+  map.addLayer({ id: 'muse-route-dash', type: 'line', source: 'muse-route', layout: { 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 2.5, 'line-opacity': 0.9, 'line-dasharray': [0, 4, 3] } });
+  // Petits tirets qui avancent le long du chemin
+  const steps = [[0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0], [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5]];
+  let k = 0, alive = true;
+  const tick = () => { if (!alive) return; if (document.visibilityState === 'visible' && el.isConnected) { try { map.setPaintProperty('muse-route-dash', 'line-dasharray', steps[k = (k + 1) % steps.length]); } catch {} } setTimeout(() => requestAnimationFrame(tick), 70); };
+  tick();
+  const markers = [];
+  return {
+    kind: '3d',
+    pin(i, p, onClick) { const e = pinEl(i); e.addEventListener('click', (ev) => { ev.stopPropagation(); onClick(); }); const m = new ml.Marker({ element: e, anchor: 'bottom' }).setLngLat([p.lng, p.lat]).addTo(map); markers[i] = e; return m; },
+    me(pos) { if (this._me) this._me.remove(); this._me = new ml.Marker({ element: meEl(), anchor: 'center' }).setLngLat([pos.lng, pos.lat]).addTo(map); },
+    sel(i) { markers.forEach((e, j) => e && e.querySelector('.mpin').classList.toggle('on', j === i)); markers.forEach((e, j) => { if (e) e.style.zIndex = j === i ? 5 : 1; }); },
+    fly(p) { map.flyTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 16), pitch: 60, bearing: map.getBearing() - 12, speed: 0.9, curve: 1.4, essential: true }); },
+    fit(pts, pad = 60) { if (!pts.length) return; if (pts.length === 1) return map.jumpTo({ center: [pts[0][1], pts[0][0]], zoom: 15.5 }); const b = new ml.LngLatBounds(); pts.forEach(([la, ln]) => b.extend([ln, la])); map.fitBounds(b, { padding: pad, pitch: 55, bearing: map.getBearing(), duration: 900, maxZoom: 16.5 }); },
+    route(coords, straight) { map.getSource('muse-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords.map(([la, ln]) => [ln, la]) } }); map.setPaintProperty('muse-route', 'line-opacity', straight ? 0.6 : 1); this.fit(coords, 70); },
+    clearRoute() { map.getSource('muse-route').setData({ type: 'FeatureCollection', features: [] }); },
+    toggle3d() { const flat = map.getPitch() > 5; map.easeTo({ pitch: flat ? 0 : 60, bearing: flat ? 0 : -18, duration: 700 }); return !flat; },
+    resize() { map.resize(); },
+    dist(a, b) { return new ml.LngLat(a.lng, a.lat).distanceTo(new ml.LngLat(b.lng, b.lat)); },
+    destroy() { alive = false; map.remove(); },
+  };
+}
+async function engine2D(el) {
+  await loadLeaflet();
+  const L = window.L;
+  const map = L.map(el, { zoomControl: false, scrollWheelZoom: false });
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  map.on('click', () => map.scrollWheelZoom.enable());
+  const markers = []; let line = null;
+  return {
+    kind: '2d',
+    pin(i, p, onClick) { const m = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: pinEl(i).outerHTML, iconSize: [34, 42], iconAnchor: [17, 40] }) }).addTo(map); m.on('click', onClick); markers[i] = m; return m; },
+    me(pos) { if (this._me) this._me.remove(); this._me = L.marker([pos.lat, pos.lng], { icon: L.divIcon({ className: '', html: meEl().outerHTML, iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000 }).addTo(map); },
+    sel(i) { markers.forEach((m, j) => { if (!m) return; const e = m.getElement() && m.getElement().querySelector('.mpin'); if (e) e.classList.toggle('on', j === i); m.setZIndexOffset(j === i ? 800 : 0); }); },
+    fly(p) { map.flyTo([p.lat, p.lng], Math.max(map.getZoom(), 15), { duration: 0.6 }); },
+    fit(pts) { if (pts.length > 1) map.fitBounds(L.latLngBounds(pts).pad(0.2)); else if (pts.length) map.setView(pts[0], 15); else map.setView([-18.8792, 47.5079], 13); },
+    route(coords, straight) { if (line) line.forEach((l) => l.remove()); line = [L.polyline(coords, { color: '#fff', weight: 9, opacity: 0.9 }).addTo(map), L.polyline(coords, { color: accColor(), weight: 5, className: 'mline' + (straight ? ' straight' : '') }).addTo(map)]; map.fitBounds(L.latLngBounds(coords).pad(0.25)); },
+    clearRoute() { if (line) line.forEach((l) => l.remove()); line = null; },
+    toggle3d() { toast('Vue 3D indisponible sur cet appareil'); return false; },
+    resize() { map.invalidateSize(); },
+    dist(a, b) { return L.latLng(a.lat, a.lng).distanceTo([b.lat, b.lng]); },
+    destroy() { map.remove(); },
+  };
 }
 function parseMap(src) {
   let d = null;
@@ -228,7 +298,7 @@ function parseMap(src) {
   const num = (v) => (Number.isFinite(+v) ? +v : null);
   const places = (Array.isArray(d.places) ? d.places : []).slice(0, 12).map((p, i) => {
     const m = String(p.img || '').match(/\[\[IMG:([^\]]*)\]\]/);
-    return { i, name: String(p.name || `Lieu ${i + 1}`).slice(0, 80), address: String(p.address || '').slice(0, 140), lat: num(p.lat), lng: num(p.lng), rating: num(p.rating), reviews: num(p.reviews), price: String(p.price || '').slice(0, 40), open: String(p.open || '').slice(0, 60), dist: String(p.dist || '').slice(0, 50), note: String(p.note || '').slice(0, 220), tags: Array.isArray(p.tags) ? p.tags.slice(0, 4).map((t) => String(t).slice(0, 20)) : [], img: m ? parseImg(m[1]) : (okUrl(p.img) ? { img: p.img, page: '', cap: '' } : null), approx: !!p.approx };
+    return { i, name: String(p.name || `Lieu ${i + 1}`).slice(0, 80), address: String(p.address || '').slice(0, 140), lat: num(p.lat), lng: num(p.lng), rating: num(p.rating), reviews: num(p.reviews), price: String(p.price || '').slice(0, 40), open: String(p.open || '').slice(0, 60), dist: String(p.dist || '').slice(0, 50), note: String(p.note || '').slice(0, 220), photo: String(p.photo || '').slice(0, 120), tags: Array.isArray(p.tags) ? p.tags.slice(0, 4).map((t) => String(t).slice(0, 20)) : [], img: m ? parseImg(m[1]) : (okUrl(p.img) ? { img: p.img, page: '', cap: '' } : null), approx: !!p.approx };
   });
   const me = d.me && num(d.me.lat) !== null && num(d.me.lng) !== null ? { lat: +d.me.lat, lng: +d.me.lng } : null;
   return { title: String(d.title || 'Carte').slice(0, 90), me, mode: d.mode === 'car' ? 'car' : 'foot', places };
@@ -237,91 +307,88 @@ const mapPlain = (src) => { const d = parseMap(src); return d ? `${d.title}. ` +
 const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`);
 const fmtDur = (s) => { const m = Math.max(1, Math.round(s / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
 const gmapsDir = (p, mode) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat != null ? `${p.lat},${p.lng}` : encodeURIComponent(`${p.name} ${p.address}`)}&travelmode=${mode === 'car' ? 'driving' : 'walking'}`;
-function mapBox(src) {
+const CAT_EMOJI = [[/resto|restaurant|gargote|cuisine|malgache|pizza|grill|burger|snack|plat/i, '🍽️'], [/caf[ée]|coffee|salon de th[ée]|p[âa]tisserie|boulang/i, '☕'], [/bar\b|pub|cocktail|bi[èe]re/i, '🍹'], [/pharma/i, '💊'], [/h[ôo]tel|lodge|auberge|chambre/i, '🏨'], [/station|essence|carburant/i, '⛽'], [/banque|distributeur|atm/i, '🏧'], [/march[ée]|supermarch|magasin|boutique|shop/i, '🛍️'], [/h[ôo]pital|clinique|m[ée]decin/i, '🏥'], [/plage|parc|jardin|lac/i, '🌴'], [/mus[ée]e|monument|palais|[ée]glise|cath[ée]drale/i, '🏛️'], [/gym|sport|fitness|stade/i, '🏋️']];
+const catEmoji = (p) => { const t = `${p.name} ${p.tags.join(' ')} ${p.note}`; for (const [re, e] of CAT_EMOJI) if (re.test(t)) return e; return '📍'; };
+function mapBox(src, atts = []) {
   const d = parseMap(src), box = document.createElement('div'); box.className = 'mapbox';
   if (!d || !d.places.length) { box.textContent = '🗺️ Carte illisible'; return box; }
-  const st = { mode: d.mode, me: d.me, sel: -1, route: null, map: null, markers: [], meLayer: null };
-  box.innerHTML = `<div class="mhead"><b class="mtitle"></b><div class="mtools"><div class="mseg"><button type="button" data-m="foot">🚶 À pied</button><button type="button" data-m="car">🚗 Voiture</button></div><button type="button" class="mbtn mloc" title="Ma position">📍</button><button type="button" class="mbtn mfull" title="Plein écran">⛶</button></div></div>
-    <div class="mmap"><div class="mload">Chargement de la carte…</div></div><div class="mroute" hidden></div><div class="mlist"></div>`;
+  const st = { mode: d.mode, me: d.me, sel: -1, eng: null, seq: 0 };
+  box.innerHTML = `<div class="mhead"><b class="mtitle"></b><div class="mtools"><div class="mseg"><button type="button" data-m="foot">🚶 À pied</button><button type="button" data-m="car">🚗 Voiture</button></div><button type="button" class="mbtn m3d" title="Vue 3D / 2D">3D</button><button type="button" class="mbtn mloc" title="Ma position">📍</button><button type="button" class="mbtn mfull" title="Plein écran">⛶</button></div></div>
+    <div class="mmap"><div class="mload"><span class="mspin"></span>Chargement de la carte 3D…</div></div><div class="mroute" hidden></div><div class="mlist"></div>`;
   box.querySelector('.mtitle').textContent = '🗺️ ' + d.title;
   const list = box.querySelector('.mlist'), routeEl = box.querySelector('.mroute'), mapEl = box.querySelector('.mmap');
   const seg = () => box.querySelectorAll('.mseg button').forEach((b) => b.classList.toggle('on', b.dataset.m === st.mode));
   seg();
+  const attByName = (n) => { if (!n) return null; const b = String(n).split('/').pop().toLowerCase(); return atts.find((a) => a.name.toLowerCase() === b || a.name.toLowerCase().endsWith(b)) || null; };
   d.places.forEach((p, i) => {
     const c = document.createElement('div'); c.className = 'mcard'; c.dataset.i = i;
     const ph = document.createElement('div'); ph.className = 'mph';
-    if (p.img) { const im = document.createElement('img'); im.alt = ''; im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; const srcs = []; if (p.img.local) srcs.push(() => fetchBlob(p.img.local, '')); if (p.img.img) srcs.push(async () => p.img.img); let k = 0; const nx = async () => { while (k < srcs.length) { try { im.src = await srcs[k++](); return; } catch { /* suivante */ } } im.remove(); }; im.onerror = nx; nx(); ph.appendChild(im); }
+    const ph0 = document.createElement('div'); ph0.className = 'mph0'; ph0.innerHTML = `<b>${catEmoji(p)}</b><small></small>`; ph0.querySelector('small').textContent = p.name; ph.appendChild(ph0);
+    const srcs = []; const shot = attByName(p.photo);
+    if (shot) srcs.push(() => fetchBlob(shot.path, shot.type));
+    if (p.img?.local) srcs.push(() => fetchBlob(p.img.local, ''));
+    if (p.img?.img) srcs.push(async () => p.img.img);
+    if (srcs.length) {
+      const im = document.createElement('img'); im.alt = p.name; im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; im.hidden = true;
+      let k = 0; const nx = async () => { while (k < srcs.length) { try { im.src = await srcs[k++](); return; } catch { /* source suivante */ } } im.remove(); };
+      im.onload = () => { im.hidden = false; ph0.remove(); }; im.onerror = nx; nx(); ph.appendChild(im);
+      ph.onclick = (e) => { if (!im.hidden && im.isConnected) { e.stopPropagation(); openLightbox([{ img: im.src, cap: p.name, page: '' }], 0); } };
+    }
     const n = document.createElement('span'); n.className = 'mnum'; n.textContent = i + 1; ph.appendChild(n);
     const b = document.createElement('div'); b.className = 'mbody';
     const h = document.createElement('b'); h.textContent = p.name; b.appendChild(h);
     const meta = document.createElement('div'); meta.className = 'mmeta';
     meta.textContent = [p.rating != null ? `★ ${String(p.rating).replace('.', ',')}${p.reviews ? ` (${p.reviews})` : ''}` : '', p.price, p.dist].filter(Boolean).join(' · ');
     b.appendChild(meta);
-    if (p.open) { const o = document.createElement('div'); o.className = 'mopen' + (/ferm/i.test(p.open) && !/ferme à/i.test(p.open) ? ' closed' : ''); o.textContent = p.open; b.appendChild(o); }
+    if (p.open) { const o = document.createElement('div'); o.className = 'mopen' + (/^\s*ferm/i.test(p.open) ? ' closed' : ''); o.textContent = p.open; b.appendChild(o); }
     if (p.note) { const t = document.createElement('div'); t.className = 'mnote'; t.textContent = p.note; b.appendChild(t); }
     if (p.tags.length) { const tg = document.createElement('div'); tg.className = 'mtags'; p.tags.forEach((x) => { const s = document.createElement('span'); s.textContent = x; tg.appendChild(s); }); b.appendChild(tg); }
     c.append(ph, b); c.onclick = () => select(i, true); list.appendChild(c);
   });
   async function route(p) {
-    routeEl.hidden = false;
+    const my = ++st.seq; routeEl.hidden = false;
     const go = `<a class="mgo" href="${gmapsDir(p, st.mode)}" target="_blank" rel="noopener">Ouvrir dans Google Maps ↗</a>`;
-    if (!st.me || p.lat == null) { routeEl.innerHTML = `<span>${st.me ? 'Position du lieu inconnue' : '📍 Touche « Ma position » pour tracer le chemin'}</span>${go}`; return; }
+    if (!st.me || p.lat == null || !st.eng) { routeEl.innerHTML = `<span>${!st.me ? '📍 Touche « Ma position » pour tracer le chemin' : 'Position du lieu inconnue'}</span>${go}`; return; }
     routeEl.innerHTML = `<span class="mcalc">Calcul du chemin…</span>${go}`;
-    if (st.route) { st.route.forEach((l) => l.remove()); st.route = null; }
-    const L = window.L, prof = st.mode === 'car' ? 'routed-car' : 'routed-foot';
     let coords = null, dist = 0, dur = 0;
     try {
-      const r = await fetch(`https://routing.openstreetmap.de/${prof}/route/v1/driving/${st.me.lng},${st.me.lat};${p.lng},${p.lat}?overview=full&geometries=geojson`);
+      const r = await fetch(`https://routing.openstreetmap.de/${st.mode === 'car' ? 'routed-car' : 'routed-foot'}/route/v1/driving/${st.me.lng},${st.me.lat};${p.lng},${p.lat}?overview=full&geometries=geojson`);
       const j = await r.json(); const rt = j.routes && j.routes[0];
       if (rt) { coords = rt.geometry.coordinates.map(([x, y]) => [y, x]); dist = rt.distance; dur = rt.duration; }
     } catch { /* hors ligne : ligne droite */ }
-    if (st.sel !== p.i) return;
+    if (my !== st.seq) return;
     const straight = !coords;
-    if (straight) { coords = [[st.me.lat, st.me.lng], [p.lat, p.lng]]; dist = L.latLng(st.me.lat, st.me.lng).distanceTo([p.lat, p.lng]); dur = dist / (st.mode === 'car' ? 8 : 1.3); }
-    st.route = [L.polyline(coords, { color: '#fff', weight: 9, opacity: 0.9, lineCap: 'round' }).addTo(st.map), L.polyline(coords, { color: getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#5B3FD6', weight: 5, opacity: 1, lineCap: 'round', className: 'mline' + (straight ? ' straight' : '') }).addTo(st.map)];
-    st.map.fitBounds(L.latLngBounds(coords).pad(0.25), { animate: true });
+    if (straight) { coords = [[st.me.lat, st.me.lng], [p.lat, p.lng]]; dist = st.eng.dist(st.me, p); dur = dist / (st.mode === 'car' ? 8 : 1.3); }
+    st.eng.route(coords, straight);
     routeEl.innerHTML = `<span><b>${fmtDur(dur)}</b> · ${fmtDist(dist)} ${st.mode === 'car' ? 'en voiture' : 'à pied'}${straight ? ' <small>(à vol d\'oiseau)</small>' : ''} → ${esc(p.name)}</span>${go}`;
   }
   function select(i, scroll) {
     st.sel = i; const p = d.places[i];
     list.querySelectorAll('.mcard').forEach((c) => c.classList.toggle('on', +c.dataset.i === i));
-    st.markers.forEach((m, k) => { const el = m && m.getElement() && m.getElement().querySelector('.mpin'); if (el) el.classList.toggle('on', k === i); if (m) m.setZIndexOffset(k === i ? 800 : 0); });
     if (scroll) list.querySelector(`.mcard[data-i="${i}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    if (st.map && p.lat != null) st.map.flyTo([p.lat, p.lng], Math.max(st.map.getZoom(), 15), { duration: 0.6 });
+    if (st.eng) { st.eng.sel(i); if (p.lat != null && !st.me) st.eng.fly(p); }
     route(p);
   }
-  function setMe(me) {
-    st.me = me; const L = window.L;
-    if (st.meLayer) st.meLayer.remove();
-    st.meLayer = L.marker([me.lat, me.lng], { icon: L.divIcon({ className: '', html: '<div class="mme"><i></i></div>', iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000 }).addTo(st.map).bindTooltip('Toi', { direction: 'top', offset: [0, -10] });
-  }
   box.querySelectorAll('.mseg button').forEach((b) => { b.onclick = () => { st.mode = b.dataset.m; seg(); if (st.sel >= 0) route(d.places[st.sel]); }; });
+  box.querySelector('.m3d').onclick = (e) => { if (st.eng) e.currentTarget.classList.toggle('on', st.eng.toggle3d()); };
   box.querySelector('.mloc').onclick = () => {
     if (!navigator.geolocation) return toast('Position indisponible sur cet appareil');
     toast('Recherche de ta position…');
-    navigator.geolocation.getCurrentPosition((pos) => { setMe({ lat: pos.coords.latitude, lng: pos.coords.longitude }); if (st.sel >= 0) route(d.places[st.sel]); else st.map.flyTo([st.me.lat, st.me.lng], 15); }, () => toast('Position refusée : autorise-la dans le navigateur'), { enableHighAccuracy: true, timeout: 12000 });
+    navigator.geolocation.getCurrentPosition((pos) => { st.me = { lat: pos.coords.latitude, lng: pos.coords.longitude }; if (st.eng) st.eng.me(st.me); if (st.sel >= 0) route(d.places[st.sel]); }, () => toast('Position refusée : autorise-la dans le navigateur'), { enableHighAccuracy: true, timeout: 12000 });
   };
-  box.querySelector('.mfull').onclick = () => { box.classList.toggle('full'); document.body.classList.toggle('uifull', box.classList.contains('full')); setTimeout(() => st.map && st.map.invalidateSize(), 250); };
-  loadLeaflet().then((L) => {
-    mapEl.innerHTML = '';
-    const dark = document.documentElement.dataset.theme === 'dark';
-    const map = L.map(mapEl, { zoomControl: false, attributionControl: true, scrollWheelZoom: false, tap: true });
-    st.map = map; L.control.zoom({ position: 'bottomright' }).addTo(map);
-    L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark ? 'dark_all' : 'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`, { maxZoom: 19, subdomains: 'abcd', attribution: '© OpenStreetMap · © CARTO' }).addTo(map);
+  box.querySelector('.mfull').onclick = () => { box.classList.toggle('full'); document.body.classList.toggle('uifull', box.classList.contains('full')); setTimeout(() => st.eng && st.eng.resize(), 260); };
+  const dark = document.documentElement.dataset.theme === 'dark';
+  (webglOk() ? engine3D(mapEl, dark).catch(() => { mapEl.innerHTML = ''; return engine2D(mapEl); }) : engine2D(mapEl)).then((eng) => {
+    st.eng = eng; mapEl.querySelector('.mload')?.remove();
+    box.querySelector('.m3d').classList.toggle('on', eng.kind === '3d'); if (eng.kind !== '3d') box.querySelector('.m3d').hidden = true;
     const pts = [];
-    d.places.forEach((p, i) => {
-      if (p.lat == null) { st.markers.push(null); return; }
-      const mk = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: `<div class="mpin"><span>${i + 1}</span></div>`, iconSize: [34, 42], iconAnchor: [17, 40] }), riseOnHover: true }).addTo(map);
-      mk.bindTooltip(p.name, { direction: 'top', offset: [0, -38] }); mk.on('click', () => select(i, true));
-      st.markers.push(mk); pts.push([p.lat, p.lng]);
-    });
-    if (st.me) { setMe(st.me); pts.push([st.me.lat, st.me.lng]); }
-    if (pts.length > 1) map.fitBounds(L.latLngBounds(pts).pad(0.18)); else if (pts.length) map.setView(pts[0], 15); else map.setView([-18.8792, 47.5079], 13);
-    map.on('click', () => map.scrollWheelZoom.enable());
+    d.places.forEach((p, i) => { if (p.lat == null) return; eng.pin(i, p, () => select(i, true)); pts.push([p.lat, p.lng]); });
+    if (st.me) { eng.me(st.me); pts.push([st.me.lat, st.me.lng]); }
+    eng.fit(pts);
     const miss = d.places.filter((p) => p.lat == null).length;
     if (miss) { const n = document.createElement('div'); n.className = 'mwarn'; n.textContent = `${miss} lieu${miss > 1 ? 'x' : ''} sans position exacte : utilise « Ouvrir dans Google Maps ».`; box.insertBefore(n, list); }
     const first = d.places.findIndex((p) => p.lat != null);
-    if (first >= 0) select(first, false);
+    if (first >= 0) setTimeout(() => select(first, false), 900);
   }).catch(() => { mapEl.innerHTML = '<div class="mload">Carte indisponible hors ligne — la liste reste utilisable.</div>'; });
   return box;
 }
@@ -438,7 +505,7 @@ function show(c) {
     const d = add('bot', ''); const raws = [];
     splitUI(txt).forEach((seg) => {
       if (seg.ui) { d.appendChild(uiBox(seg.ui)); d.classList.add('hasUi'); raws.push("J'ai préparé une interface interactive."); return; }
-      if (seg.map) { d.appendChild(mapBox(seg.map)); d.classList.add('hasUi'); raws.push(mapPlain(seg.map)); return; }
+      if (seg.map) { d.appendChild(mapBox(seg.map, attsIn(c.body))); d.classList.add('hasUi'); raws.push(mapPlain(seg.map)); return; }
       if (seg.cards) { d.appendChild(cardsBox(seg.cards)); d.classList.add('hasUi'); raws.push(cardsPlain(seg.cards)); return; }
       const { parts, all, plain } = splitParts(seg.t); raws.push(plain);
       parts.forEach((p) => (p.t !== undefined ? d.insertAdjacentHTML('beforeend', render(p.t)) : d.appendChild(gallery(p.imgs, all))));

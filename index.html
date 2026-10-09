@@ -141,8 +141,16 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 .m .mseg button{border:0;background:transparent;color:var(--mut);border-radius:999px;padding:5px 10px;font-size:12.5px;cursor:pointer}
 .m .mseg button.on{background:var(--panel);color:var(--txt);box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .m .mbtn{border:0;background:var(--soft);border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:14px}
-.m .mmap{height:320px;position:relative;background:var(--soft);z-index:0}
-.m .mload{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut);font-size:13px}
+.m .mmap{height:360px;position:relative;background:var(--soft);z-index:0}
+.m .mload{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;color:var(--mut);font-size:13px}
+.m .mspin{width:26px;height:26px;border-radius:50%;border:3px solid var(--bd);border-top-color:var(--acc);animation:spin .8s linear infinite}
+.m .mmap .maplibregl-ctrl-attrib{font-size:10px}
+.m .m3d{font:700 11px/1 var(--sans);color:var(--mut)}.m .m3d.on{background:var(--acc);color:#fff}
+.mpinw{cursor:pointer}
+.m .mph0{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0 12px;text-align:center;background:radial-gradient(circle at 30% 20%,color-mix(in srgb,var(--acc) 30%,transparent),transparent 60%),linear-gradient(135deg,var(--acc-soft),var(--soft))}
+.m .mph0 b{font-size:34px;line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,.18))}
+.m .mph0 small{font-size:11.5px;color:var(--mut);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.m .mph img{cursor:zoom-in}
 .m .mroute{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 12px;background:var(--acc-soft);font-size:13.5px}
 .m .mroute b{color:var(--acc);font-size:15px}
 .m .mroute small{color:var(--mut)}
