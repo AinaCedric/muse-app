@@ -633,13 +633,15 @@ const liveOf = (cs) => { const c = [...cs].reverse().find((x) => x.body.includes
 
 async function wait(n, since) {
   const my = ++pollId; busy = true; $('#send').disabled = true;
-  const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', workMode = ordi || perso || phone, auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
-  avatar(workMode ? 'working' : 'thinking');
+  let workMode; const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
+  workMode = ordi || perso || phone; avatar(workMode ? 'working' : 'thinking'); let shown = label;
   const bubble = add('bot', label, 'wait'); const t0 = Date.now(); let card = null;
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
     if (my !== pollId) return;
-    bubble.textContent = `${label} · ${Math.round((Date.now() - t0) / 1000)} s`;
+    // Après 60 s de réflexion, Muse passe en mode « travaille » (animation 3D + libellé)
+    if (!workMode && Date.now() - t0 >= 60000) { workMode = true; if (!card) avatar('working'); if (shown === 'Muse réfléchit') shown = 'Muse travaille'; }
+    bubble.textContent = `${shown} · ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
       const all = await fetchComments(n, since);
       const cs = all.filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
