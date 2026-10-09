@@ -392,8 +392,9 @@ function liveUpdate(d, o) {
 const liveOf = (cs) => { const c = [...cs].reverse().find((x) => x.body.includes(LIVE)); if (!c || Date.now() - new Date(c.updated_at || c.created_at) > 2 * 60 * 1000) return null; try { return JSON.parse(c.body.slice(c.body.indexOf(LIVE) + LIVE.length).trim()); } catch { return null; } };
 
 async function wait(n, since) {
-  const my = ++pollId; busy = true; $('#send').disabled = true; avatar('thinking');
-  const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
+  const my = ++pollId; busy = true; $('#send').disabled = true;
+  const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', workMode = ordi || perso || phone, auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
+  avatar(workMode ? 'working' : 'thinking');
   const bubble = add('bot', label, 'wait'); const t0 = Date.now(); let card = null;
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
@@ -403,8 +404,8 @@ async function wait(n, since) {
       const all = await fetchComments(n, since);
       const cs = all.filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
       const lv = cs.length ? null : liveOf(all);
-      if (lv) { if (!card) { card = liveCard(); bubble.style.display = 'none'; } liveUpdate(card, lv); }
-      else if (card && !cs.length) { card.remove(); card = null; bubble.style.display = ''; }
+      if (lv) { if (!card) { card = liveCard(); bubble.style.display = 'none'; avatar('working'); } liveUpdate(card, lv); }
+      else if (card && !cs.length) { card.remove(); card = null; bubble.style.display = ''; avatar(workMode ? 'working' : 'thinking'); }
       if (cs.length) { if (card) card.remove(); bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }

@@ -74,6 +74,12 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 #whoName b{font:500 17px/1.15 var(--serif)}
 #whoName small{font-size:11.5px;color:var(--faint);display:flex;align-items:center;gap:6px}
 #whoName small::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--ok)}
+#avatarWrap::before{content:'';position:absolute;inset:-6px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 20%,var(--ring1,#a78bfa) 35%,var(--ring2,#ff8ad0) 50%,transparent 65% 100%);-webkit-mask:radial-gradient(circle,transparent 60%,#000 62%,#000 66%,transparent 68%);mask:radial-gradient(circle,transparent 60%,#000 62%,#000 66%,transparent 68%);opacity:0;transition:opacity .5s;animation:spin 2.4s linear infinite;pointer-events:none}
+#who[data-state=thinking] #avatarWrap::before{opacity:.75}
+#who[data-state=working] #avatarWrap::before{opacity:.8;--ring1:#5ee7ff;--ring2:#7cf5c8;animation-duration:1.3s}
+@keyframes spin{to{transform:rotate(360deg)}}
+#who[data-state=working] .glow{opacity:1;background:radial-gradient(circle,rgba(80,200,255,.42) 0%,rgba(124,245,200,.18) 45%,transparent 70%);animation:pulse 1.6s ease-in-out infinite}
+#who[data-state=working] #whoName small::before{background:#3fc6e8;animation:blink .6s ease-in-out infinite}
 #who[data-state=thinking] .glow{opacity:1;animation:pulse 1.3s ease-in-out infinite}
 #who[data-state=thinking] #whoName small::before{background:var(--acc);animation:blink 1s ease-in-out infinite}
 #who[data-state=happy] .glow{opacity:.95}
