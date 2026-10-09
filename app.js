@@ -889,7 +889,17 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') sideSet(fals
   side.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
   side.addEventListener('touchend', e => { if (sx !== null && sx - e.changedTouches[0].clientX > 60) sideSet(false); sx = null; }, { passive: true }); }
 new MutationObserver(() => $('#scrim').classList.toggle('on', $('#side').classList.contains('open'))).observe($('#side'), { attributes: true, attributeFilter: ['class'] });
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+// Mises à jour automatiques : dès qu'une nouvelle version est publiée, l'appli se recharge toute seule (après la réponse en cours)
+if ('serviceWorker' in navigator) {
+  const hadCtl = !!navigator.serviceWorker.controller; let reloadAsked = false;
+  const reloadSoon = () => { if (reloadAsked) return; reloadAsked = true; const go = () => { if (busy) return setTimeout(go, 3000); toast('Nouvelle version de Muse : mise à jour…'); setTimeout(() => location.reload(), 900); }; go(); };
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadCtl) reloadSoon(); });
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((reg) => {
+    const check = () => reg.update().catch(() => {});
+    setInterval(check, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  }).catch(() => {});
+}
 empty(); if (cfg.repo && cfg.token) loadList(); else setTimeout(openCfg, 300);
 
 // ---- Thème clair (comme le panneau de la bulle) / sombre
