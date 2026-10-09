@@ -118,6 +118,19 @@ class Ask {
     /** Texte lisible : sans balises cachées ni mise en forme Markdown. keepEmoji=false pour la voix. */
     static String plain(String raw, boolean forSpeech) {
         String s = raw.replaceAll("(?s)<!--.*?-->", "").replaceAll("[ \\t]*\\[\\[IMG:[^\\]]*\\]\\][ \\t]*", "");
+        {   // cartes d'actualités : on garde titres + texte, sans les lignes techniques (image, sources…)
+            java.util.regex.Matcher cm = java.util.regex.Pattern.compile("(?s)```[ \\t]*muse-cards[^\\n]*\\n(.*?)(```|$)").matcher(s);
+            StringBuffer sb = new StringBuffer();
+            while (cm.find()) {
+                String body = cm.group(1)
+                        .replaceAll("(?im)^\\s*(badge|img|image|sources?|date)\\s*:.*$", "")
+                        .replaceAll("(?im)^\\s*int[ée]r[êe]t\\s*:\\s*", "👉 ")
+                        .replaceAll("(?m)^\\s*#{2,3}\\s+", "\\n▪ ");
+                cm.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(body));
+            }
+            cm.appendTail(sb);
+            s = sb.toString();
+        }
         s = s.replaceAll("(?s)```muse-ui.*?(```|$)", forSpeech ? " J'ai préparé une interface interactive, ouvre le chat pour l'utiliser. " : "\n🧩 Interface interactive : ouvre le chat Muse pour l'utiliser.\n");
         s = s.replaceAll("(?s)```.*?```", forSpeech ? " (bloc de code) " : "");
         s = s.replaceAll("(?m)^\\s*🧭.*$", "");

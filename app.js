@@ -40,7 +40,7 @@ const strip = (s) => s.replace(/<!--[\s\S]*?-->/g, '').trim();
 function render(text) {
   let h = esc(text);
   h = h.replace(/```(\w*)\n([\s\S]*?)(```|$)/g, (_, l, c) => `<pre><code>${c}</code></pre>`);
-  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/(^|\n)#{1,4} ([^\n]+)/g, '$1<b>$2</b>');
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/(^|\n)# ([^\n]+)\n?/g, '$1<span class="h1">$2</span>').replace(/(^|\n)## ([^\n]+)\n?/g, '$1<span class="h2">$2</span>').replace(/(^|\n)#{3,4} ([^\n]+)/g, '$1<b>$2</b>');
   h = h.replace(/(^|\n)[ \t]*[-*•][ \t]+([^\n]*)/g, '$1<span class="li">$2</span>').replace(/(<span class="li">[^\n]*<\/span>)\n/g, '$1');
   h = h.replace(/\b(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   return h;
@@ -74,7 +74,7 @@ function splitParts(text) {
 }
 
 // ---- 🧩 Interfaces interactives : Muse écrit un bloc ```muse-ui … ``` ; on l'affiche comme un mini-outil vivant dans une bulle isolée
-const UI_RE = /```[ \t]*muse-ui[ \t]*\r?\n([\s\S]*?)(```|$)/g;
+const UI_RE = /```[ \t]*(muse-ui|muse-cards)[ \t]*\r?\n([\s\S]*?)(```|$)/g;
 const UI_VARS = ['bg', 'panel', 'soft', 'txt', 'mut', 'acc', 'acc-soft', 'bd', 'code', 'ok', 'err'];
 function uiTheme() {
   const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue('--' + n).trim();
@@ -128,10 +128,78 @@ function uiThemeSync() { const t = uiTheme(); uiFrames.forEach((fr) => { if (fr.
 // Découpe une réponse en morceaux texte / interface
 function splitUI(text) {
   const out = []; let pos = 0, m; UI_RE.lastIndex = 0;
-  while ((m = UI_RE.exec(text))) { out.push({ t: text.slice(pos, m.index) }); if (m[2]) out.push({ ui: m[1] }); else out.push({ t: '🧩 _(interface incomplète : réponse coupée)_' }); pos = UI_RE.lastIndex; }
+  while ((m = UI_RE.exec(text))) {
+    out.push({ t: text.slice(pos, m.index) });
+    if (m[1] === 'muse-cards') out.push({ cards: m[2] });
+    else if (m[3]) out.push({ ui: m[2] }); else out.push({ t: '🧩 _(interface incomplète : réponse coupée)_' });
+    pos = UI_RE.lastIndex;
+  }
   out.push({ t: text.slice(pos) });
-  return out.filter((x) => x.ui || x.t.trim());
+  return out.filter((x) => x.ui || x.cards || x.t.trim());
 }
+// ---- 📰 Cartes d'actualités / résultats : bloc ```muse-cards (## Titre, puis badge:, img:, sources:, intérêt:, et le texte)
+function parseCards(src) {
+  const cards = []; let cur = null;
+  for (const line of src.split(/\r?\n/)) {
+    const h = line.match(/^\s*#{2,3}\s+(.+)/);
+    if (h) { cur = { title: h[1].trim(), text: [], sources: [] }; cards.push(cur); continue; }
+    if (!cur) continue;
+    const kv = line.match(/^\s*(badge|img|image|sources?|int[ée]r[êe]t|note|date)\s*:\s*(.*)$/i);
+    if (kv) {
+      const k = kv[1].toLowerCase(), v = kv[2].trim();
+      if (k === 'badge') cur.badge = v.slice(0, 30);
+      else if (k === 'img' || k === 'image') { const m = v.match(/\[\[IMG:([^\]]*)\]\]/); cur.img = m ? parseImg(m[1]) : (okUrl(v) ? { img: v, page: '', cap: '' } : null); }
+      else if (k.startsWith('source')) cur.sources = v.split(/\s*;\s*/).map((x) => { const [n, u] = x.split('|').map((y) => (y || '').trim()); return okUrl(u) ? { name: n || hostOf(u), url: u } : okUrl(n) ? { name: hostOf(n), url: n } : null; }).filter(Boolean).slice(0, 6);
+      else if (k === 'date') cur.date = v.slice(0, 40);
+      else cur.note = v;
+      continue;
+    }
+    cur.text.push(line);
+  }
+  return cards.slice(0, 12);
+}
+function srcChip(sources) {
+  const w = document.createElement('span'); w.className = 'schip';
+  const s0 = sources[0], fav = document.createElement('img');
+  fav.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostOf(s0.url))}&sz=32`; fav.alt = ''; fav.referrerPolicy = 'no-referrer'; fav.onerror = () => fav.remove();
+  const nm = document.createElement('span'); nm.textContent = s0.name.length > 18 ? s0.name.slice(0, 17) + '…' : s0.name;
+  w.append(fav, nm);
+  if (sources.length > 1) { const more = document.createElement('small'); more.textContent = '+' + (sources.length - 1); w.appendChild(more); }
+  w.title = sources.map((x) => x.name).join(' · ');
+  w.onclick = (e) => {
+    e.stopPropagation();
+    if (sources.length === 1) { window.open(s0.url, '_blank', 'noopener'); return; }
+    const box = w.closest('.ncard').querySelector('.slist');
+    if (box) { box.hidden = !box.hidden; return; }
+  };
+  return w;
+}
+function cardsBox(src) {
+  const cards = parseCards(src), wrap = document.createElement('div'); wrap.className = 'ncards';
+  const allImgs = cards.map((c) => c.img).filter(Boolean);
+  cards.forEach((c, i) => {
+    const art = document.createElement('article'); art.className = 'ncard';
+    if (c.img) {
+      const th = document.createElement('div'); th.className = 'nthumb';
+      const g = gallery([c.img], allImgs); g.classList.add('nimg'); th.appendChild(g); art.appendChild(th);
+    } else art.classList.add('noimg');
+    const b = document.createElement('div'); b.className = 'nbody';
+    const h = document.createElement('h4'); h.textContent = `${i + 1}. ${c.title.replace(/^\d+[.)]\s*/, '')}`; b.appendChild(h);
+    if (c.badge || c.date) { const r = document.createElement('div'); r.className = 'nmeta'; if (c.badge) { const p = document.createElement('span'); p.className = 'nbadge'; p.textContent = c.badge; r.appendChild(p); } if (c.date) { const d = document.createElement('span'); d.className = 'ndate'; d.textContent = c.date; r.appendChild(d); } b.appendChild(r); }
+    const t = document.createElement('div'); t.className = 'ntext'; t.innerHTML = render(c.text.join('\n').trim());
+    if (c.sources.length) t.appendChild(srcChip(c.sources));
+    b.appendChild(t);
+    if (c.note) { const n = document.createElement('div'); n.className = 'nnote'; n.textContent = 'Intérêt : ' + c.note; b.appendChild(n); }
+    if (c.sources.length > 1) {
+      const l = document.createElement('div'); l.className = 'slist'; l.hidden = true;
+      c.sources.forEach((x) => { const a = document.createElement('a'); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `${x.name} ↗`; l.appendChild(a); });
+      b.appendChild(l);
+    }
+    art.appendChild(b); wrap.appendChild(art);
+  });
+  return wrap;
+}
+const cardsPlain = (src) => parseCards(src).map((c, i) => `${i + 1}. ${c.title}. ${c.text.join(' ').trim()}`).join('\n');
 const lb = { el: null, list: [], i: 0 };
 function lbShow(k) {
   if (!lb.list.length) return lbClose();
@@ -245,6 +313,7 @@ function show(c) {
     const d = add('bot', ''); const raws = [];
     splitUI(txt).forEach((seg) => {
       if (seg.ui) { d.appendChild(uiBox(seg.ui)); d.classList.add('hasUi'); raws.push("J'ai préparé une interface interactive."); return; }
+      if (seg.cards) { d.appendChild(cardsBox(seg.cards)); d.classList.add('hasUi'); raws.push(cardsPlain(seg.cards)); return; }
       const { parts, all, plain } = splitParts(seg.t); raws.push(plain);
       parts.forEach((p) => (p.t !== undefined ? d.insertAdjacentHTML('beforeend', render(p.t)) : d.appendChild(gallery(p.imgs, all))));
     });
