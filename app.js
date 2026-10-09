@@ -565,7 +565,8 @@ function show(c) {
       const row = document.createElement('div'); row.className = 'confirm';
       const mk = (label, cls, text) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost ' + cls; b.textContent = label; b.onclick = () => { row.remove(); input.value = text; send(); }; row.appendChild(b); };
       mk('Confirmer', 'yes', 'OUI'); mk('Annuler', 'no', 'Non, annule'); d.appendChild(row);
-    } const a = attsIn(c.body); if (a.length) { d.appendChild(attsBox(a)); d.classList.add('hasAtts'); } return d; }
+    } const used = new Set(); for (const m of txt.matchAll(/```[ \t]*muse-map[ \t]*\r?\n([\s\S]*?)```/g)) { const pm = parseMap(m[1]); if (pm) pm.places.forEach((p) => p.photo && used.add(p.photo.toLowerCase())); }
+    const a = attsIn(c.body).filter((x) => !used.has(x.name.toLowerCase())); if (a.length) { d.appendChild(attsBox(a)); d.classList.add('hasAtts'); } return d; }
   if (c.body.includes(ERROR)) return add('bot', strip(c.body), 'err');
   return addUser(strip(c.body), attsIn(c.body));
 }
