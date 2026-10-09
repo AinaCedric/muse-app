@@ -245,11 +245,11 @@ async function engine3D(el, dark) {
   try {
     const dem = { type: 'raster-dem', tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], encoding: 'terrarium', tileSize: 256, maxzoom: 14, attribution: 'Relief : Mapzen / AWS' };
     map.addSource('muse-dem', dem); map.addSource('muse-dem-shade', { ...dem });
-    map.addLayer({ id: 'muse-hill', type: 'hillshade', source: 'muse-dem-shade', paint: { 'hillshade-exaggeration': dark ? 0.35 : 0.28, 'hillshade-shadow-color': dark ? '#000000' : '#5b4f8a', 'hillshade-highlight-color': dark ? '#3a3360' : '#ffffff', 'hillshade-accent-color': dark ? '#1b1733' : '#8a7fb8' } }, firstSymbol);
+    map.addLayer({ id: 'muse-hill', type: 'hillshade', source: 'muse-dem-shade', paint: { 'hillshade-exaggeration': dark ? 0.22 : 0.25, 'hillshade-shadow-color': dark ? '#0d0b1a' : '#6b6255', 'hillshade-highlight-color': dark ? '#5a5488' : '#ffffff', 'hillshade-accent-color': dark ? '#2c2850' : '#8f8778' } }, firstSymbol);
     map.setTerrain({ source: 'muse-dem', exaggeration: 1.35 });
   } catch { /* relief indisponible */ }
-  try { map.setSky({ 'sky-color': dark ? '#0d0b22' : '#7fb8ff', 'horizon-color': dark ? '#30275e' : '#f3ecff', 'fog-color': dark ? '#141029' : '#ffffff', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.35, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 12, 0.2] }); } catch { /* ancien moteur */ }
-  try { map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: dark ? 0.25 : 0.4, position: [1.3, 200, 35] }); } catch {}
+  try { map.setSky({ 'sky-color': dark ? '#1a1640' : '#7fb8ff', 'horizon-color': dark ? '#4a3f86' : '#eef4ff', 'fog-color': dark ? '#2a2550' : '#ffffff', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.35, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 12, 0.2] }); } catch { /* ancien moteur */ }
+  try { map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: dark ? 0.45 : 0.4, position: [1.3, 200, 35] }); } catch {}
   // Bâtiments en relief (ajoutés si le style n'en a pas)
   const hasExtr = map.getStyle().layers.some((l) => l.type === 'fill-extrusion');
   const src = Object.keys(map.getStyle().sources).find((k) => map.getStyle().sources[k].type === 'vector');
@@ -260,7 +260,7 @@ async function engine3D(el, dark) {
   for (const l of map.getStyle().layers.filter((x) => x.type === 'fill-extrusion')) {
     try {
       const h = ['coalesce', ['get', 'render_height'], ['get', 'height'], 8];
-      map.setPaintProperty(l.id, 'fill-extrusion-color', ['interpolate', ['linear'], h, 0, dark ? '#2a2646' : '#f1edf8', 25, dark ? '#38315f' : '#e2dbf3', 80, dark ? '#4b4285' : '#cfc4ee']);
+      map.setPaintProperty(l.id, 'fill-extrusion-color', ['interpolate', ['linear'], h, 0, dark ? '#4a4668' : '#f4efe8', 25, dark ? '#5b5585' : '#e9e2d8', 80, dark ? '#7068a6' : '#dcd3c8']);
       map.setPaintProperty(l.id, 'fill-extrusion-vertical-gradient', true);
       map.setPaintProperty(l.id, 'fill-extrusion-opacity', 0.94);
     } catch {}
@@ -345,7 +345,7 @@ function mapBox(src, atts = []) {
   if (!d || !d.places.length) { box.textContent = '🗺️ Carte illisible'; return box; }
   d.places.forEach((p) => { p.ctx = d.title; });
   const st = { mode: d.mode, me: d.me, sel: -1, eng: null, seq: 0 };
-  box.innerHTML = `<div class="mhead"><b class="mtitle"></b><div class="mtools"><div class="mseg"><button type="button" data-m="foot">🚶 À pied</button><button type="button" data-m="car">🚗 Voiture</button></div><button type="button" class="mbtn m3d" title="Vue 3D / 2D">3D</button><button type="button" class="mbtn mloc" title="Ma position">📍</button><button type="button" class="mbtn mfull" title="Plein écran">⛶</button></div></div>
+  box.innerHTML = `<div class="mhead"><b class="mtitle"></b><div class="mtools"><div class="mseg"><button type="button" data-m="foot">🚶 À pied</button><button type="button" data-m="car">🚗 Voiture</button></div><button type="button" class="mbtn m3d" title="Vue 3D / 2D">3D</button><button type="button" class="mbtn mnight" title="Carte de nuit">🌙</button><button type="button" class="mbtn mloc" title="Ma position">📍</button><button type="button" class="mbtn mfull" title="Plein écran">⛶</button></div></div>
     <div class="mmap"><div class="mload"><span class="mspin"></span>Chargement de la carte 3D…</div></div><div class="mroute" hidden></div><div class="mlist"></div>`;
   box.querySelector('.mtitle').textContent = '🗺️ ' + d.title;
   const list = box.querySelector('.mlist'), routeEl = box.querySelector('.mroute'), mapEl = box.querySelector('.mmap');
@@ -421,18 +421,32 @@ function mapBox(src, atts = []) {
     navigator.geolocation.getCurrentPosition((pos) => { st.me = { lat: pos.coords.latitude, lng: pos.coords.longitude }; if (st.eng) st.eng.me(st.me); if (st.sel >= 0) route(d.places[st.sel]); }, () => toast('Position refusée : autorise-la dans le navigateur'), { enableHighAccuracy: true, timeout: 12000 });
   };
   box.querySelector('.mfull').onclick = () => { box.classList.toggle('full'); document.body.classList.toggle('uifull', box.classList.contains('full')); setTimeout(() => st.eng && st.eng.resize(), 260); };
-  const dark = document.documentElement.dataset.theme === 'dark';
-  (webglOk() ? engine3D(mapEl, dark).catch(() => { mapEl.innerHTML = ''; return engine2D(mapEl); }) : engine2D(mapEl)).then((eng) => {
-    st.eng = eng; mapEl.querySelector('.mload')?.remove();
-    box.querySelector('.m3d').classList.toggle('on', eng.kind === '3d'); if (eng.kind !== '3d') box.querySelector('.m3d').hidden = true;
-    const pts = [];
-    d.places.forEach((p, i) => { if (p.lat == null) return; eng.pin(i, p, () => select(i, true)); pts.push([p.lat, p.lng]); });
-    if (st.me) { eng.me(st.me); pts.push([st.me.lat, st.me.lng]); }
-    eng.fit(pts);
-    const miss = d.places.filter((p) => p.lat == null).length;
-    if (miss) { const n = document.createElement('div'); n.className = 'mwarn'; n.textContent = `${miss} lieu${miss > 1 ? 'x' : ''} sans position exacte : utilise « Ouvrir dans Google Maps ».`; box.insertBefore(n, list); }
-    setTimeout(() => eng.orbit(), 1200);
-  }).catch(() => { mapEl.innerHTML = '<div class="mload">Carte indisponible hors ligne — la liste reste utilisable.</div>'; });
+  // Style de la carte : JOUR par défaut (le plus détaillé, même si l'appli est en thème sombre) ; bouton 🌙/☀️ pour la nuit
+  let night = false; try { night = localStorage.getItem('muse_map_night') === '1'; } catch {}
+  const nb = box.querySelector('.mnight'); nb.textContent = night ? '☀️' : '🌙'; nb.title = night ? 'Carte de jour' : 'Carte de nuit';
+  let warned = false;
+  function boot() {
+    mapEl.innerHTML = '<div class="mload"><span class="mspin"></span>Chargement de la carte 3D…</div>';
+    (webglOk() ? engine3D(mapEl, night).catch(() => { mapEl.innerHTML = ''; return engine2D(mapEl); }) : engine2D(mapEl)).then((eng) => {
+      st.eng = eng; mapEl.querySelector('.mload')?.remove();
+      box.querySelector('.m3d').classList.toggle('on', eng.kind === '3d'); box.querySelector('.m3d').hidden = eng.kind !== '3d'; nb.hidden = eng.kind !== '3d';
+      const pts = [];
+      d.places.forEach((p, i) => { if (p.lat == null) return; eng.pin(i, p, () => select(i, true)); pts.push([p.lat, p.lng]); });
+      if (st.me) { eng.me(st.me); pts.push([st.me.lat, st.me.lng]); }
+      eng.fit(pts);
+      const miss = d.places.filter((p) => p.lat == null).length;
+      if (miss && !warned) { warned = true; const n = document.createElement('div'); n.className = 'mwarn'; n.textContent = `${miss} lieu${miss > 1 ? 'x' : ''} sans position exacte : utilise « Ouvrir dans Google Maps ».`; box.insertBefore(n, list); }
+      if (st.sel >= 0) eng.sel(st.sel);
+      setTimeout(() => eng.orbit(), 1200);
+    }).catch(() => { mapEl.innerHTML = '<div class="mload">Carte indisponible hors ligne — la liste reste utilisable.</div>'; });
+  }
+  nb.onclick = () => {
+    night = !night; try { localStorage.setItem('muse_map_night', night ? '1' : '0'); } catch {}
+    nb.textContent = night ? '☀️' : '🌙'; nb.title = night ? 'Carte de jour' : 'Carte de nuit';
+    if (st.eng) { try { st.eng.destroy(); } catch {} st.eng = null; }
+    routeEl.hidden = true; boot();
+  };
+  boot();
   return box;
 }
 const lb = { el: null, list: [], i: 0 };
