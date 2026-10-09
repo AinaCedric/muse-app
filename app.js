@@ -219,7 +219,12 @@ let mlP = null, lfP = null;
 const loadMaplibre = () => (mlP = mlP || loadScript('./vendor/maplibre/maplibre-gl.js', './vendor/maplibre/maplibre-gl.css', () => !!window.maplibregl).catch((e) => { mlP = null; throw e; }));
 const loadLeaflet = () => (lfP = lfP || loadScript('./vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css', () => !!window.L).catch((e) => { lfP = null; throw e; }));
 const accColor = () => getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#5B3FD6';
-const pinEl = (i) => { const e = document.createElement('div'); e.className = 'mpinw'; e.innerHTML = `<div class="mpin"><span>${i + 1}</span></div>`; return e; };
+const pinEl = (i, p) => {
+  const e = document.createElement('div'); e.className = 'mpinw';
+  const rate = p && p.rating != null ? `<span class="mrate">★ ${String(p.rating).replace('.', ',')}</span>` : '';
+  e.innerHTML = `<div class="mpin"><b>${p ? catEmoji(p) : ''}</b><span>${i + 1}</span></div><div class="mlab">${rate}<span class="mname"></span></div>`;
+  e.querySelector('.mname').textContent = p ? p.name : ''; return e;
+};
 const meEl = () => { const e = document.createElement('div'); e.className = 'mpinw'; e.innerHTML = '<div class="mme"><i></i></div>'; return e; };
 function webglOk() { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } }
 async function engine3D(el, dark) {
@@ -235,13 +240,35 @@ async function engine3D(el, dark) {
     } catch (e) { last = e; try { map && map.remove(); } catch {} map = null; el.innerHTML = ''; }
   }
   if (!map) throw last || new Error('carte 3D indisponible');
+  // Relief du terrain (Antananarivo est sur des collines) + ombrage, ciel, lumière : rendu façon Plans d'Apple / Google 3D
+  const firstSymbol = (map.getStyle().layers.find((l) => l.type === 'symbol') || {}).id;
+  try {
+    const dem = { type: 'raster-dem', tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], encoding: 'terrarium', tileSize: 256, maxzoom: 14, attribution: 'Relief : Mapzen / AWS' };
+    map.addSource('muse-dem', dem); map.addSource('muse-dem-shade', { ...dem });
+    map.addLayer({ id: 'muse-hill', type: 'hillshade', source: 'muse-dem-shade', paint: { 'hillshade-exaggeration': dark ? 0.35 : 0.28, 'hillshade-shadow-color': dark ? '#000000' : '#5b4f8a', 'hillshade-highlight-color': dark ? '#3a3360' : '#ffffff', 'hillshade-accent-color': dark ? '#1b1733' : '#8a7fb8' } }, firstSymbol);
+    map.setTerrain({ source: 'muse-dem', exaggeration: 1.35 });
+  } catch { /* relief indisponible */ }
+  try { map.setSky({ 'sky-color': dark ? '#0d0b22' : '#7fb8ff', 'horizon-color': dark ? '#30275e' : '#f3ecff', 'fog-color': dark ? '#141029' : '#ffffff', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.35, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 12, 0.2] }); } catch { /* ancien moteur */ }
+  try { map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: dark ? 0.25 : 0.4, position: [1.3, 200, 35] }); } catch {}
   // Bâtiments en relief (ajoutés si le style n'en a pas)
   const hasExtr = map.getStyle().layers.some((l) => l.type === 'fill-extrusion');
   const src = Object.keys(map.getStyle().sources).find((k) => map.getStyle().sources[k].type === 'vector');
   if (!hasExtr && src) {
     try { map.addLayer({ id: 'muse-3d', type: 'fill-extrusion', source: src, 'source-layer': 'building', minzoom: 14, paint: { 'fill-extrusion-color': dark ? '#2b2747' : '#e4def6', 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], ['get', 'height'], 8], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.85 } }); } catch { /* pas de couche bâtiments */ }
   }
+  // Bâtiments : dégradé de couleur selon la hauteur, éclairage vertical
+  for (const l of map.getStyle().layers.filter((x) => x.type === 'fill-extrusion')) {
+    try {
+      const h = ['coalesce', ['get', 'render_height'], ['get', 'height'], 8];
+      map.setPaintProperty(l.id, 'fill-extrusion-color', ['interpolate', ['linear'], h, 0, dark ? '#2a2646' : '#f1edf8', 25, dark ? '#38315f' : '#e2dbf3', 80, dark ? '#4b4285' : '#cfc4ee']);
+      map.setPaintProperty(l.id, 'fill-extrusion-vertical-gradient', true);
+      map.setPaintProperty(l.id, 'fill-extrusion-opacity', 0.94);
+    } catch {}
+  }
   map.addControl(new ml.NavigationControl({ visualizePitch: true, showCompass: true }), 'bottom-right');
+  const zoomCls = () => el.classList.toggle('mz', map.getZoom() >= 15.6); map.on('zoom', zoomCls); zoomCls();
+  // Petite rotation de caméra au départ (s'arrête dès que Cédric touche la carte)
+  let touched = false; ['mousedown', 'touchstart', 'wheel'].forEach((ev) => map.getCanvas().addEventListener(ev, () => { touched = true; try { map.stop(); } catch {} }, { passive: true }));
   const acc = accColor();
   map.addSource('muse-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({ id: 'muse-route-glow', type: 'line', source: 'muse-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': acc, 'line-width': 16, 'line-opacity': 0.25, 'line-blur': 6 } });
@@ -256,12 +283,14 @@ async function engine3D(el, dark) {
   const markers = [];
   return {
     kind: '3d',
-    pin(i, p, onClick) { const e = pinEl(i); e.addEventListener('click', (ev) => { ev.stopPropagation(); onClick(); }); const m = new ml.Marker({ element: e, anchor: 'bottom' }).setLngLat([p.lng, p.lat]).addTo(map); markers[i] = e; return m; },
+    pin(i, p, onClick) { const e = pinEl(i, p); e.addEventListener('click', (ev) => { ev.stopPropagation(); onClick(); }); const m = new ml.Marker({ element: e, anchor: 'bottom', offset: [0, 0] }).setLngLat([p.lng, p.lat]).addTo(map); markers[i] = e; return m; },
+    popup(p, el) { if (this._pop) this._pop.remove(); this._pop = new ml.Popup({ offset: [0, -54], closeButton: false, closeOnClick: true, className: 'mpop', maxWidth: '320px', focusAfterOpen: false }).setLngLat([p.lng, p.lat]).setDOMContent(el).addTo(map); },
+    orbit() { if (touched) return; map.easeTo({ bearing: map.getBearing() + 35, duration: 9000, easing: (t) => t }); },
     me(pos) { if (this._me) this._me.remove(); this._me = new ml.Marker({ element: meEl(), anchor: 'center' }).setLngLat([pos.lng, pos.lat]).addTo(map); },
-    sel(i) { markers.forEach((e, j) => e && e.querySelector('.mpin').classList.toggle('on', j === i)); markers.forEach((e, j) => { if (e) e.style.zIndex = j === i ? 5 : 1; }); },
-    fly(p) { map.flyTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 16), pitch: 60, bearing: map.getBearing() - 12, speed: 0.9, curve: 1.4, essential: true }); },
+    sel(i) { touched = true; markers.forEach((e, j) => { if (!e) return; e.classList.toggle('on', j === i); e.style.zIndex = j === i ? 5 : 1; }); },
+    fly(p) { map.flyTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 16.4), pitch: 62, bearing: map.getBearing() - 15, speed: 0.8, curve: 1.4, padding: { top: 120, bottom: 0, left: 0, right: 0 }, essential: true }); },
     fit(pts, pad = 60) { if (!pts.length) return; if (pts.length === 1) return map.jumpTo({ center: [pts[0][1], pts[0][0]], zoom: 15.5 }); const b = new ml.LngLatBounds(); pts.forEach(([la, ln]) => b.extend([ln, la])); map.fitBounds(b, { padding: pad, pitch: 55, bearing: map.getBearing(), duration: 900, maxZoom: 16.5 }); },
-    route(coords, straight) { map.getSource('muse-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords.map(([la, ln]) => [ln, la]) } }); map.setPaintProperty('muse-route', 'line-opacity', straight ? 0.6 : 1); this.fit(coords, 70); },
+    route(coords, straight) { if (this._pop) { this._pop.remove(); this._pop = null; } map.getSource('muse-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords.map(([la, ln]) => [ln, la]) } }); map.setPaintProperty('muse-route', 'line-opacity', straight ? 0.6 : 1); this.fit(coords, 70); },
     clearRoute() { map.getSource('muse-route').setData({ type: 'FeatureCollection', features: [] }); },
     toggle3d() { const flat = map.getPitch() > 5; map.easeTo({ pitch: flat ? 0 : 60, bearing: flat ? 0 : -18, duration: 700 }); return !flat; },
     resize() { map.resize(); },
@@ -279,12 +308,14 @@ async function engine2D(el) {
   const markers = []; let line = null;
   return {
     kind: '2d',
-    pin(i, p, onClick) { const m = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: pinEl(i).outerHTML, iconSize: [34, 42], iconAnchor: [17, 40] }) }).addTo(map); m.on('click', onClick); markers[i] = m; return m; },
+    pin(i, p, onClick) { const m = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: pinEl(i, p).outerHTML, iconSize: [40, 48], iconAnchor: [20, 48] }) }).addTo(map); m.on('click', onClick); markers[i] = m; return m; },
+    popup(p, el) { L.popup({ offset: [0, -44], closeButton: false, className: 'mpop', maxWidth: 320 }).setLatLng([p.lat, p.lng]).setContent(el).openOn(map); },
+    orbit() {},
     me(pos) { if (this._me) this._me.remove(); this._me = L.marker([pos.lat, pos.lng], { icon: L.divIcon({ className: '', html: meEl().outerHTML, iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000 }).addTo(map); },
-    sel(i) { markers.forEach((m, j) => { if (!m) return; const e = m.getElement() && m.getElement().querySelector('.mpin'); if (e) e.classList.toggle('on', j === i); m.setZIndexOffset(j === i ? 800 : 0); }); },
+    sel(i) { markers.forEach((m, j) => { if (!m) return; const e = m.getElement() && m.getElement().querySelector('.mpinw'); if (e) e.classList.toggle('on', j === i); m.setZIndexOffset(j === i ? 800 : 0); }); },
     fly(p) { map.flyTo([p.lat, p.lng], Math.max(map.getZoom(), 15), { duration: 0.6 }); },
     fit(pts) { if (pts.length > 1) map.fitBounds(L.latLngBounds(pts).pad(0.2)); else if (pts.length) map.setView(pts[0], 15); else map.setView([-18.8792, 47.5079], 13); },
-    route(coords, straight) { if (line) line.forEach((l) => l.remove()); line = [L.polyline(coords, { color: '#fff', weight: 9, opacity: 0.9 }).addTo(map), L.polyline(coords, { color: accColor(), weight: 5, className: 'mline' + (straight ? ' straight' : '') }).addTo(map)]; map.fitBounds(L.latLngBounds(coords).pad(0.25)); },
+    route(coords, straight) { map.closePopup(); if (line) line.forEach((l) => l.remove()); line = [L.polyline(coords, { color: '#fff', weight: 9, opacity: 0.9 }).addTo(map), L.polyline(coords, { color: accColor(), weight: 5, className: 'mline' + (straight ? ' straight' : '') }).addTo(map)]; map.fitBounds(L.latLngBounds(coords).pad(0.25)); },
     clearRoute() { if (line) line.forEach((l) => l.remove()); line = null; },
     toggle3d() { toast('Vue 3D indisponible sur cet appareil'); return false; },
     resize() { map.invalidateSize(); },
@@ -308,10 +339,11 @@ const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000
 const fmtDur = (s) => { const m = Math.max(1, Math.round(s / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
 const gmapsDir = (p, mode) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat != null ? `${p.lat},${p.lng}` : encodeURIComponent(`${p.name} ${p.address}`)}&travelmode=${mode === 'car' ? 'driving' : 'walking'}`;
 const CAT_EMOJI = [[/resto|restaurant|gargote|cuisine|malgache|pizza|grill|burger|snack|plat/i, '🍽️'], [/caf[ée]|coffee|salon de th[ée]|p[âa]tisserie|boulang/i, '☕'], [/bar\b|pub|cocktail|bi[èe]re/i, '🍹'], [/pharma/i, '💊'], [/h[ôo]tel|lodge|auberge|chambre/i, '🏨'], [/station|essence|carburant/i, '⛽'], [/banque|distributeur|atm/i, '🏧'], [/march[ée]|supermarch|magasin|boutique|shop/i, '🛍️'], [/h[ôo]pital|clinique|m[ée]decin/i, '🏥'], [/plage|parc|jardin|lac/i, '🌴'], [/mus[ée]e|monument|palais|[ée]glise|cath[ée]drale/i, '🏛️'], [/gym|sport|fitness|stade/i, '🏋️']];
-const catEmoji = (p) => { const t = `${p.name} ${p.tags.join(' ')} ${p.note}`; for (const [re, e] of CAT_EMOJI) if (re.test(t)) return e; return '📍'; };
+const catEmoji = (p) => { const t = `${p.name} ${p.tags.join(' ')} ${p.note} ${p.ctx || ''}`; for (const [re, e] of CAT_EMOJI) if (re.test(t)) return e; return '📍'; };
 function mapBox(src, atts = []) {
   const d = parseMap(src), box = document.createElement('div'); box.className = 'mapbox';
   if (!d || !d.places.length) { box.textContent = '🗺️ Carte illisible'; return box; }
+  d.places.forEach((p) => { p.ctx = d.title; });
   const st = { mode: d.mode, me: d.me, sel: -1, eng: null, seq: 0 };
   box.innerHTML = `<div class="mhead"><b class="mtitle"></b><div class="mtools"><div class="mseg"><button type="button" data-m="foot">🚶 À pied</button><button type="button" data-m="car">🚗 Voiture</button></div><button type="button" class="mbtn m3d" title="Vue 3D / 2D">3D</button><button type="button" class="mbtn mloc" title="Ma position">📍</button><button type="button" class="mbtn mfull" title="Plein écran">⛶</button></div></div>
     <div class="mmap"><div class="mload"><span class="mspin"></span>Chargement de la carte 3D…</div></div><div class="mroute" hidden></div><div class="mlist"></div>`;
@@ -331,7 +363,7 @@ function mapBox(src, atts = []) {
     if (srcs.length) {
       const im = document.createElement('img'); im.alt = p.name; im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; im.hidden = true;
       let k = 0; const nx = async () => { while (k < srcs.length) { try { im.src = await srcs[k++](); return; } catch { /* source suivante */ } } im.remove(); };
-      im.onload = () => { im.hidden = false; ph0.remove(); }; im.onerror = nx; nx(); ph.appendChild(im);
+      im.onload = () => { im.hidden = false; ph0.remove(); p._src = im.src; }; im.onerror = nx; nx(); ph.appendChild(im);
       ph.onclick = (e) => { if (!im.hidden && im.isConnected) { e.stopPropagation(); openLightbox([{ img: im.src, cap: p.name, page: '' }], 0); } };
     }
     const n = document.createElement('span'); n.className = 'mnum'; n.textContent = i + 1; ph.appendChild(n);
@@ -362,14 +394,26 @@ function mapBox(src, atts = []) {
     st.eng.route(coords, straight);
     routeEl.innerHTML = `<span><b>${fmtDur(dur)}</b> · ${fmtDist(dist)} ${st.mode === 'car' ? 'en voiture' : 'à pied'}${straight ? ' <small>(à vol d\'oiseau)</small>' : ''} → ${esc(p.name)}</span>${go}`;
   }
+  function popCard(p) {
+    const el = document.createElement('div'); el.className = 'mpc';
+    const cat = p.tags[0] || ({ '🍽️': 'Restaurant', '☕': 'Café', '🍹': 'Bar', '💊': 'Pharmacie', '🏨': 'Hôtel', '⛽': 'Station', '🏧': 'Banque', '🛍️': 'Magasin', '🏥': 'Santé', '🌴': 'Nature', '🏛️': 'Culture', '🏋️': 'Sport' })[catEmoji(p)] || 'Lieu';
+    el.innerHTML = `<div class="mpc-top"><div class="mpc-ph">${p._src ? '<img alt="">' : `<b>${catEmoji(p)}</b>`}</div><div class="mpc-tx"><b></b><span></span>${p.open ? `<small class="${/^\s*ferm/i.test(p.open) ? 'closed' : ''}"></small>` : ''}</div></div><div class="mpc-act"><button type="button" class="mpc-go">➤ Itinéraire</button><a class="mpc-gm" target="_blank" rel="noopener" title="Ouvrir dans Google Maps">↗</a></div>`;
+    if (p._src) el.querySelector('img').src = p._src;
+    el.querySelector('.mpc-tx b').textContent = p.name;
+    el.querySelector('.mpc-tx span').textContent = [p.rating != null ? `★ ${String(p.rating).replace('.', ',')}${p.reviews ? ` (${p.reviews})` : ''}` : '', cat, p.price].filter(Boolean).join(' • ');
+    if (p.open) el.querySelector('.mpc-tx small').textContent = p.open;
+    el.querySelector('.mpc-gm').href = gmapsDir(p, st.mode);
+    el.querySelector('.mpc-go').onclick = () => route(p);
+    return el;
+  }
   function select(i, scroll) {
     st.sel = i; const p = d.places[i];
     list.querySelectorAll('.mcard').forEach((c) => c.classList.toggle('on', +c.dataset.i === i));
     if (scroll) list.querySelector(`.mcard[data-i="${i}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    if (st.eng) { st.eng.sel(i); if (p.lat != null && !st.me) st.eng.fly(p); }
-    route(p);
+    if (st.eng && p.lat != null) { st.eng.sel(i); st.eng.fly(p); st.eng.popup(p, popCard(p)); }
+    else if (p.lat == null) route(p);
   }
-  box.querySelectorAll('.mseg button').forEach((b) => { b.onclick = () => { st.mode = b.dataset.m; seg(); if (st.sel >= 0) route(d.places[st.sel]); }; });
+  box.querySelectorAll('.mseg button').forEach((b) => { b.onclick = () => { st.mode = b.dataset.m; seg(); if (st.sel >= 0 && !routeEl.hidden) route(d.places[st.sel]); }; });
   box.querySelector('.m3d').onclick = (e) => { if (st.eng) e.currentTarget.classList.toggle('on', st.eng.toggle3d()); };
   box.querySelector('.mloc').onclick = () => {
     if (!navigator.geolocation) return toast('Position indisponible sur cet appareil');
@@ -387,8 +431,7 @@ function mapBox(src, atts = []) {
     eng.fit(pts);
     const miss = d.places.filter((p) => p.lat == null).length;
     if (miss) { const n = document.createElement('div'); n.className = 'mwarn'; n.textContent = `${miss} lieu${miss > 1 ? 'x' : ''} sans position exacte : utilise « Ouvrir dans Google Maps ».`; box.insertBefore(n, list); }
-    const first = d.places.findIndex((p) => p.lat != null);
-    if (first >= 0) setTimeout(() => select(first, false), 900);
+    setTimeout(() => eng.orbit(), 1200);
   }).catch(() => { mapEl.innerHTML = '<div class="mload">Carte indisponible hors ligne — la liste reste utilisable.</div>'; });
   return box;
 }
