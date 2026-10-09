@@ -117,7 +117,7 @@ class Ask {
 
     /** Texte lisible : sans balises cachées ni mise en forme Markdown. keepEmoji=false pour la voix. */
     static String plain(String raw, boolean forSpeech) {
-        String s = raw.replaceAll("(?s)<!--.*?-->", "").replaceAll("[ \\t]*\\[\\[IMG:[^\\]]*\\]\\][ \\t]*", "");
+        String s = raw.replaceAll("(?s)<!--.*?-->", "").replaceAll("[ \\t]*\\[\\[IMG:[^\\]]*\\]\\][ \\t]*", "").replaceAll("[ \\t]*\\[\\[SRC:[^\\]]*\\]\\]", "");
         {   // cartes d'actualités : on garde titres + texte, sans les lignes techniques (image, sources…)
             java.util.regex.Matcher cm = java.util.regex.Pattern.compile("(?s)```[ \\t]*muse-cards[^\\n]*\\n(.*?)(```|$)").matcher(s);
             StringBuffer sb = new StringBuffer();

@@ -37,12 +37,23 @@ let issueNo = null, busy = false, pollId = 0;
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const strip = (s) => s.replace(/<!--[\s\S]*?-->/g, '').trim();
+function srcHtml(inner) {
+  const list = inner.split(/\s*;\s*/).map((x) => { const [n, u] = x.split('|').map((y) => (y || '').trim()); const url = (u || n || '').replace(/&amp;/g, '&'); return /^https?:\/\//.test(url) ? { name: u ? n : '', url } : null; }).filter(Boolean).slice(0, 6);
+  if (!list.length) return '';
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+  const q = (t) => String(t).replace(/["<>]/g, '');
+  const s0 = list[0], nm = q(s0.name || host(s0.url)), short = nm.length > 18 ? nm.slice(0, 17) + '…' : nm;
+  return `<a class="schip" href="${q(s0.url)}" target="_blank" rel="noopener" title="${q(list.map((x) => x.name || host(x.url)).join(' · '))}"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(host(s0.url))}&amp;sz=32" alt="" referrerpolicy="no-referrer" onerror="this.remove()"><span>${short}</span>${list.length > 1 ? `<small>+${list.length - 1}</small>` : ''}</a>`;
+}
 function render(text) {
   let h = esc(text);
   h = h.replace(/```(\w*)\n([\s\S]*?)(```|$)/g, (_, l, c) => `<pre><code>${c}</code></pre>`);
   h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/(^|\n)# ([^\n]+)\n?/g, '$1<span class="h1">$2</span>').replace(/(^|\n)## ([^\n]+)\n?/g, '$1<span class="h2">$2</span>').replace(/(^|\n)#{3,4} ([^\n]+)/g, '$1<b>$2</b>');
   h = h.replace(/(^|\n)[ \t]*[-*•][ \t]+([^\n]*)/g, '$1<span class="li">$2</span>').replace(/(<span class="li">[^\n]*<\/span>)\n/g, '$1');
+  const srcs = [];
+  h = h.replace(/\[\[SRC:([^\]]+)\]\]/g, (_, inner) => { srcs.push(inner); return `\u0000${srcs.length - 1}\u0000`; });
   h = h.replace(/\b(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  h = h.replace(/\u0000(\d+)\u0000/g, (_, i) => srcHtml(srcs[+i]));
   return h;
 }
 // ---- Galerie d'images : Muse écrit [[IMG:adresse_image|adresse_page|légende]] ; on les montre en vignettes, un clic les agrandit
@@ -144,14 +155,14 @@ function parseCards(src) {
     const h = line.match(/^\s*#{2,3}\s+(.+)/);
     if (h) { cur = { title: h[1].trim(), text: [], sources: [] }; cards.push(cur); continue; }
     if (!cur) continue;
-    const kv = line.match(/^\s*(badge|img|image|sources?|int[ée]r[êe]t|note|date)\s*:\s*(.*)$/i);
+    const kv = line.match(/^\s*(badge|img|image|sources?|int[ée]r[êe]t|note|style|date)\s*:\s*(.*)$/i);
     if (kv) {
       const k = kv[1].toLowerCase(), v = kv[2].trim();
       if (k === 'badge') cur.badge = v.slice(0, 30);
       else if (k === 'img' || k === 'image') { const m = v.match(/\[\[IMG:([^\]]*)\]\]/); cur.img = m ? parseImg(m[1]) : (okUrl(v) ? { img: v, page: '', cap: '' } : null); }
       else if (k.startsWith('source')) cur.sources = v.split(/\s*;\s*/).map((x) => { const [n, u] = x.split('|').map((y) => (y || '').trim()); return okUrl(u) ? { name: n || hostOf(u), url: u } : okUrl(n) ? { name: hostOf(n), url: n } : null; }).filter(Boolean).slice(0, 6);
       else if (k === 'date') cur.date = v.slice(0, 40);
-      else cur.note = v;
+      else { cur.note = v; cur.noteLabel = k === 'style' ? 'Style' : k === 'note' ? 'Note' : 'Intérêt'; }
       continue;
     }
     cur.text.push(line);
@@ -184,12 +195,12 @@ function cardsBox(src) {
       const g = gallery([c.img], allImgs); g.classList.add('nimg'); th.appendChild(g); art.appendChild(th);
     } else art.classList.add('noimg');
     const b = document.createElement('div'); b.className = 'nbody';
-    const h = document.createElement('h4'); h.textContent = `${i + 1}. ${c.title.replace(/^\d+[.)]\s*/, '')}`; b.appendChild(h);
-    if (c.badge || c.date) { const r = document.createElement('div'); r.className = 'nmeta'; if (c.badge) { const p = document.createElement('span'); p.className = 'nbadge'; p.textContent = c.badge; r.appendChild(p); } if (c.date) { const d = document.createElement('span'); d.className = 'ndate'; d.textContent = c.date; r.appendChild(d); } b.appendChild(r); }
+    const h = document.createElement('h4'); const tt = c.title.replace(/^\d+[.)]\s*/, ''); h.textContent = /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|jour|[ée]tape|semaine|matin|midi|soir)\b/i.test(tt) ? tt : `${i + 1}. ${tt}`; b.appendChild(h);
+    if (c.badge || c.date) { const r = document.createElement('div'); r.className = 'nmeta'; if (c.badge) { const p = document.createElement('span'); p.className = 'nbadge ' + (/(averse|pluie|orage|rumeur|attention|alerte|risque|retard|non confirm)/i.test(c.badge) ? 'warn' : /(°|%|ar\b|€|\$|\d)/i.test(c.badge) ? 'neutral' : ''); p.textContent = c.badge; r.appendChild(p); } if (c.date) { const d = document.createElement('span'); d.className = 'ndate'; d.textContent = c.date; r.appendChild(d); } b.appendChild(r); }
     const t = document.createElement('div'); t.className = 'ntext'; t.innerHTML = render(c.text.join('\n').trim());
     if (c.sources.length) t.appendChild(srcChip(c.sources));
     b.appendChild(t);
-    if (c.note) { const n = document.createElement('div'); n.className = 'nnote'; n.textContent = 'Intérêt : ' + c.note; b.appendChild(n); }
+    if (c.note) { const n = document.createElement('div'); n.className = 'nnote'; n.textContent = (c.noteLabel || 'Intérêt') + ' : ' + c.note; b.appendChild(n); }
     if (c.sources.length > 1) {
       const l = document.createElement('div'); l.className = 'slist'; l.hidden = true;
       c.sources.forEach((x) => { const a = document.createElement('a'); a.href = x.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `${x.name} ↗`; l.appendChild(a); });
@@ -317,7 +328,7 @@ function show(c) {
       const { parts, all, plain } = splitParts(seg.t); raws.push(plain);
       parts.forEach((p) => (p.t !== undefined ? d.insertAdjacentHTML('beforeend', render(p.t)) : d.appendChild(gallery(p.imgs, all))));
     });
-    d.dataset.raw = raws.filter(Boolean).join('\n\n');
+    d.dataset.raw = raws.filter(Boolean).join('\n\n').replace(/\[\[SRC:[^\]]*\]\]/g, '');
     if (meta) { const s = document.createElement('span'); s.className = 'meta'; s.textContent = 'Mode : ' + meta; d.appendChild(s); }
     addTts(d);
     if (c.body.includes('<!--propose-->')) { // proposition d'une automatisation : validation en un clic (ou écris ta version)

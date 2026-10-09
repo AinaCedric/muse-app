@@ -105,24 +105,28 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 .m .ncards{white-space:normal;margin:12px 0 6px;display:flex;flex-direction:column}
 .m .ncard{display:flex;gap:16px;padding:16px 0;border-top:1px solid var(--bd)}
 .m .ncard:first-child{border-top:0;padding-top:4px}
-.m .nthumb{flex:0 0 124px}
+.m .nthumb{flex:0 0 128px}
 .m .nthumb .gallery{margin:0;display:block}
 .m .nthumb figure{margin:0}
-.m .nthumb img{width:124px;height:124px;object-fit:cover;border-radius:14px;display:block;background:var(--soft)}
+.m .nthumb img{width:128px;height:160px;object-fit:cover;border-radius:14px;display:block;background:var(--soft)}
 .m .nthumb figcaption{display:none}
 .m .nbody{min-width:0;flex:1}
 .m .nbody h4{margin:0 0 4px;font-size:1.08em;font-weight:600;line-height:1.35}
 .m .nmeta{display:flex;gap:8px;align-items:center;margin:2px 0 6px}
 .m .nbadge{font-size:12px;color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent);border-radius:6px;padding:1px 8px;font-weight:500}
+.m .nbadge.warn{color:#E8743B;background:color-mix(in srgb,#E8743B 14%,transparent)}
+.m .nbadge.neutral{color:var(--mut);background:var(--soft)}
+.m .ncard .li::before{content:'•';color:var(--txt)}
 .m .ndate{font-size:12px;color:var(--faint)}
 .m .ntext{line-height:1.6}
+.m a.schip{text-decoration:none}
 .m .schip{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;margin-left:6px;padding:2px 8px 2px 4px;border-radius:999px;background:var(--soft);border:1px solid var(--bd);font-size:11.5px;color:var(--mut);cursor:pointer;line-height:1.6;white-space:nowrap}
 .m .schip:hover{color:var(--txt)}
 .m .schip img{width:14px;height:14px;border-radius:50%}
 .m .schip small{color:var(--faint);font-size:11px}
 .m .nnote{margin-top:6px;font-size:13.5px;color:var(--mut)}
 .m .slist{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:13px}
-@media(max-width:520px){.m .nthumb{flex-basis:84px}.m .nthumb img{width:84px;height:84px;border-radius:12px}.m .ncard{gap:12px}}
+@media(max-width:520px){.m .nthumb{flex-basis:88px}.m .nthumb img{width:88px;height:112px;border-radius:12px}.m .ncard{gap:12px}}
 .m .uibox{white-space:normal;margin:10px -6px;border:1px solid var(--bd);border-radius:16px;overflow:hidden;background:var(--panel)}
 .m .uibar{display:flex;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid var(--bd);background:var(--soft)}
 .m .uitag{flex:1;font-size:12.5px;color:var(--acc);font-weight:500}
