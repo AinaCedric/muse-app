@@ -42,7 +42,8 @@ class Loc {
                     if (!lm.isProviderEnabled(p)) continue;
                     final CountDownLatch done = new CountDownLatch(1);
                     final AtomicReference<Location> got = new AtomicReference<>();
-                    lm.getCurrentLocation(p, new CancellationSignal(), c.getMainExecutor(), new java.util.function.Consumer<Location>() {
+                    lm.getCurrentLocation(p, new CancellationSignal(), c.getMainExecutor(), // API 30+ (vérifié au-dessus)
+                             new java.util.function.Consumer<Location>() {
                         @Override
                         public void accept(Location l) { got.set(l); done.countDown(); }
                     });
@@ -53,7 +54,7 @@ class Loc {
         }
         if (best == null) {
             boolean on = false;
-            try { on = lm.isLocationEnabled(); } catch (Throwable ignore) { }
+            try { on = Build.VERSION.SDK_INT >= 28 ? lm.isLocationEnabled() : (lm.isProviderEnabled(LocationManager.GPS_PROVIDER) || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)); } catch (Throwable ignore) { }
             throw new Exception(on ? (background(c) ? "Position introuvable pour l'instant (GPS sans signal) : réessaie dehors ou près d'une fenêtre." : "Position refusée en arrière-plan : étape 10 de l'appli Muse, choisis « Toujours autoriser ».") : "La localisation du téléphone est coupée : active-la dans le volet des réglages rapides.");
         }
         JSONObject o = new JSONObject();
