@@ -714,9 +714,42 @@ async function openConv(n) {
   } catch (e) { add('bot', '' + e.message, 'err'); }
   loadList();
 }
-function newChat() { if (window.autosClose) autosClose(); stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
+function newChat() { if (window.autosClose) autosClose(); try { $('#agentPane').hidden = true; $('#agentMini').hidden = true; } catch {} stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
 
 // 🖥️ Carte « Muse travaille » : dernière capture du navigateur, étape en cours, étapes déjà faites
+// ---- 🖥️ Panneau « Ordinateur de Muse » (mode agent) : bureau virtuel, fenêtre de navigateur, dock, étapes
+const AP = {
+  el: () => $('#agentPane'), wide: () => matchMedia('(min-width:1100px)').matches, t0: 0, last: null, userClosed: false,
+  open() { const p = this.el(); p.hidden = false; $('#agentMini').hidden = true; },
+  close() { const p = this.el(); p.hidden = true; p.classList.remove('max'); this.userClosed = true; if (!p.classList.contains('done') && this.last) $('#agentMini').hidden = false; },
+  start() { const p = this.el(); p.classList.remove('done'); this.userClosed = false; this.last = null; p.querySelector('.apSteps').innerHTML = ''; p.querySelector('.apState').textContent = 'Muse a le contrôle'; if (this.wide()) this.open(); else $('#agentMini').hidden = false; },
+  update(o) {
+    const p = this.el(); this.last = o;
+    const url = /^https?:/i.test(o.url || '') ? o.url : '';
+    p.querySelector('.apUrlT').textContent = o.masked ? 'Page de connexion (masquée)' : (url || 'about:blank');
+    p.querySelector('.apTitle').textContent = o.masked ? 'Connexion' : (url ? hostOf(url) : 'Nouvel onglet');
+    const fav = p.querySelector('.apFav'); if (url) fav.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostOf(url))}&sz=32`; else fav.removeAttribute('src');
+    p.querySelector('.apT').textContent = Math.max(0, Math.round((Date.now() - (o.t0 || Date.now())) / 1000)) + ' s';
+    const img = p.querySelector('.apImg'), ph = p.querySelector('.apPh');
+    if (o.img && /^[A-Za-z0-9+/=]+$/.test(o.img)) { const src = 'data:image/jpeg;base64,' + o.img; if (img.src !== src) { img.src = src; $('#agentMini img').src = src; } img.hidden = false; ph.hidden = true; }
+    else { img.hidden = true; ph.hidden = false; p.querySelector('.apPhT').textContent = o.masked ? 'Capture masquée : page de connexion' : 'L’ordinateur démarre…'; }
+    const lab = String(o.label || ''); p.querySelector('.apNow').textContent = lab;
+    const dock = /(commande|terminal|script|python|node|bash|code|calcul|exécut)/i.test(lab) ? 'term' : /(fichier|dossier|enregistr|télécharg|pdf|excel|word|document)/i.test(lab) ? 'files' : 'web';
+    p.querySelectorAll('.apDock span').forEach((x) => x.classList.toggle('on', x.dataset.d === dock));
+    const ol = p.querySelector('.apSteps'), steps = (o.steps || []).map(String);
+    if (ol.dataset.n !== String(steps.length)) { ol.dataset.n = String(steps.length); ol.innerHTML = ''; steps.forEach((t) => { const li = document.createElement('li'); li.textContent = t.replace(/…$/, ''); ol.appendChild(li); }); }
+    $('#agentMini span').textContent = '🖥️ ' + (lab ? lab.slice(0, 40) : 'Muse travaille');
+  },
+  done(ok = true) {
+    const p = this.el(); if (!this.last) { p.hidden = true; $('#agentMini').hidden = true; return; }
+    p.classList.add('done'); p.querySelector('.apState').textContent = ok ? 'Tâche terminée ✓' : 'Tâche interrompue';
+    $('#agentMini').hidden = true;
+  },
+};
+$('#agentPane .apClose').onclick = () => AP.close();
+$('#agentPane .apMax').onclick = () => $('#agentPane').classList.toggle('max');
+$('#agentMini').onclick = () => AP.open();
+$('#agentPane .apImg').onclick = (e) => openLightbox([{ img: e.target.src, cap: $('#agentPane .apNow').textContent, page: (AP.last && AP.last.url) || '' }], 0);
 function liveCard() {
   const d = document.createElement('div'); d.className = 'm bot live';
   d.innerHTML = '<div class="lv-head"><span class="lv-dot"></span><b>Muse travaille</b><span class="lv-t"></span></div>'
@@ -724,9 +757,14 @@ function liveCard() {
     + '<div class="lv-now"></div><ul class="lv-steps"></ul>';
   const img = d.querySelector('img');
   img.onclick = () => openLightbox([{ img: img.src, cap: d.querySelector('.lv-now').textContent, page: d.dataset.url || '' }], 0);
+  // L'écran complet est dans le panneau « Ordinateur de Muse » : ici, une carte compacte avec un bouton pour l'ouvrir
+  d.classList.add('compact');
+  const ob = document.createElement('button'); ob.type = 'button'; ob.className = 'lv-open'; ob.textContent = '🖥️ Voir l’ordinateur de Muse'; ob.onclick = () => AP.open(); d.appendChild(ob);
+  AP.start();
   msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d;
 }
 function liveUpdate(d, o) {
+  try { AP.update(o); } catch { /* panneau absent */ }
   d.querySelector('.lv-now').textContent = o.label || '';
   d.querySelector('.lv-t').textContent = Math.max(0, Math.round((Date.now() - (o.t0 || Date.now())) / 1000)) + ' s';
   const img = d.querySelector('img'), ph = d.querySelector('.lv-ph');
@@ -761,12 +799,12 @@ async function wait(n, since) {
       const cs = all.filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
       const lv = cs.length ? null : liveOf(all);
       if (lv) { if (!card) { card = liveCard(); bubble.style.display = 'none'; avatar('working'); } liveUpdate(card, lv); }
-      else if (card && !cs.length) { card.remove(); card = null; bubble.style.display = ''; avatar(workMode ? 'working' : 'thinking'); }
-      if (cs.length) { if (card) card.remove(); bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
+      else if (card && !cs.length) { card.remove(); card = null; AP.done(); bubble.style.display = ''; avatar(workMode ? 'working' : 'thinking'); }
+      if (cs.length) { if (card) { card.remove(); AP.done(!cs.some((c) => c.body.includes(ERROR))); } bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }
   if (my === pollId) {
-    if (card) card.remove();
+    if (card) { card.remove(); AP.done(false); }
     if (Date.now() - t0 >= MAXW) { bubble.className = 'm bot err'; bubble.textContent = 'Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
     busy = false; $('#send').disabled = false; loadList();
   }
