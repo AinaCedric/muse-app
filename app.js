@@ -50,16 +50,48 @@ function srcHtml(inner) {
   const s0 = list[0], nm = q(s0.name || host(s0.url)), short = nm.length > 18 ? nm.slice(0, 17) + '…' : nm;
   return `<a class="schip" href="${q(s0.url)}" target="_blank" rel="noopener" title="${q(list.map((x) => x.name || host(x.url)).join(' · '))}"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(host(s0.url))}&amp;sz=32" alt="" referrerpolicy="no-referrer" onerror="this.remove()"><span>${short}</span>${list.length > 1 ? `<small>+${list.length - 1}</small>` : ''}</a>`;
 }
+// Tableau Markdown (| a | b |) → vrai tableau
+function mdTables(h) {
+  return h.replace(/(^|\n)((?:[ \t]*\|[^\n]*\|[ \t]*(?:\n|$)){2,})/g, (all, pre, blk) => {
+    const rows = blk.trim().split('\n').map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));
+    if (rows.length < 2 || !rows[1].every((c) => /^:?-{2,}:?$/.test(c))) return all;
+    const al = rows[1].map((c) => (/^-+:$/.test(c) ? 'right' : /^:-+:$/.test(c) ? 'center' : ''));
+    const cell = (t, i, tag) => `<${tag}${al[i] ? ` style="text-align:${al[i]}"` : ''}>${t}</${tag}>`;
+    const head = `<tr>${rows[0].map((c, i) => cell(c, i, 'th')).join('')}</tr>`;
+    const body = rows.slice(2).map((r) => `<tr${/^\*\*|^total/i.test(r[0]) ? ' class="tot"' : ''}>${r.map((c, i) => cell(c, i, 'td')).join('')}</tr>`).join('');
+    return `${pre}<div class="mtw"><table class="mt"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  });
+}
+const TAG_CLS = (t) => (/(v[ée]rifi|confirm[ée]|officiel|ouvert|disponible|gratuit)/i.test(t) && !/à confirmer/i.test(t) ? 'ok' : /(à confirmer|attention|incertain|ferm|risque|rumeur|non publi|cher)/i.test(t) ? 'warn' : 'est');
 function render(text) {
   let h = esc(text);
   h = h.replace(/```(\w*)\n([\s\S]*?)(```|$)/g, (_, l, c) => `<pre><code>${c}</code></pre>`);
-  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/(^|\n)# ([^\n]+)\n?/g, '$1<span class="h1">$2</span>').replace(/(^|\n)## ([^\n]+)\n?/g, '$1<span class="h2">$2</span>').replace(/(^|\n)#{3,4} ([^\n]+)/g, '$1<b>$2</b>');
+  h = mdTables(h);
+  h = h.replace(/\[\[TAG:([^\]]{1,30})\]\]/g, (_, t) => `<span class="tag ${TAG_CLS(t)}">${t}</span>`);
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/(^|[\s(])[*_]([^*_\n<>]{2,80})[*_](?=[\s.,;:!?)]|$)/g, '$1<i>$2</i>').replace(/(^|\n)# ([^\n]+)\n?/g, '$1<span class="h1">$2</span>').replace(/(^|\n)## ([^\n]+)\n?/g, '$1<span class="h2">$2</span>').replace(/(^|\n)#{3,4} ([^\n]+)/g, '$1<b>$2</b>');
   h = h.replace(/(^|\n)[ \t]*[-*•][ \t]+([^\n]*)/g, '$1<span class="li">$2</span>').replace(/(<span class="li">[^\n]*<\/span>)\n/g, '$1');
   const srcs = [];
   h = h.replace(/\[\[SRC:([^\]]+)\]\]/g, (_, inner) => { srcs.push(inner); return `\u0000${srcs.length - 1}\u0000`; });
   h = h.replace(/\b(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   h = h.replace(/\u0000(\d+)\u0000/g, (_, i) => srcHtml(srcs[+i]));
   return h;
+}
+// Mosaïque d'ouverture (1 grande + 2 petites, « +N » pour voir les autres), comme un guide de voyage
+function mosaic(group, all) {
+  const g = document.createElement('div'); g.className = 'mosaic';
+  const live = () => all.filter((x) => !x.dead);
+  group.slice(0, 3).forEach((it, k) => {
+    const f = document.createElement('figure'); f.className = 'mz' + k;
+    const im = document.createElement('img'); im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; im.alt = it.cap || '';
+    const srcs = []; if (it.local) srcs.push(() => fetchBlob(it.local, '')); if (it.img) srcs.push(async () => it.img);
+    let i = 0; const nx = async () => { while (i < srcs.length) { try { im.src = await srcs[i++](); return; } catch { /* suivante */ } } it.dead = true; f.classList.add('dead'); };
+    im.onerror = nx; im.onload = () => { it.shown = im.currentSrc || im.src; }; nx();
+    f.appendChild(im);
+    if (k === 2 && group.length > 3) { const m = document.createElement('span'); m.className = 'more'; m.textContent = '⧉ ' + group.length; f.appendChild(m); }
+    f.onclick = () => { const l = live(); openLightbox(l.map((x) => ({ img: x.shown || x.img, cap: x.cap, page: x.page })), Math.max(0, l.indexOf(it))); };
+    g.appendChild(f);
+  });
+  return g;
 }
 // ---- Galerie d'images : Muse écrit [[IMG:adresse_image|adresse_page|légende]] ; on les montre en vignettes, un clic les agrandit
 const IMG_RE = /[ \t]*\[\[IMG:([^\]]*)\]\][ \t]*/g;
@@ -90,7 +122,7 @@ function splitParts(text) {
 }
 
 // ---- 🧩 Interfaces interactives : Muse écrit un bloc ```muse-ui … ``` ; on l'affiche comme un mini-outil vivant dans une bulle isolée
-const UI_RE = /```[ \t]*(muse-ui|muse-cards|muse-map)[ \t]*\r?\n([\s\S]*?)(```|$)/g;
+const UI_RE = /```[ \t]*(muse-ui|muse-cards|muse-map|muse-stats)[ \t]*\r?\n([\s\S]*?)(```|$)/g;
 const UI_VARS = ['bg', 'panel', 'soft', 'txt', 'mut', 'acc', 'acc-soft', 'bd', 'code', 'ok', 'err'];
 function uiTheme() {
   const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue('--' + n).trim();
@@ -147,12 +179,13 @@ function splitUI(text) {
   while ((m = UI_RE.exec(text))) {
     out.push({ t: text.slice(pos, m.index) });
     if (m[1] === 'muse-cards') out.push({ cards: m[2] });
+    else if (m[1] === 'muse-stats') out.push({ stats: m[2] });
     else if (m[1] === 'muse-map') out.push(m[3] ? { map: m[2] } : { t: '🗺️ _(carte incomplète : réponse coupée)_' });
     else if (m[3]) out.push({ ui: m[2] }); else out.push({ t: '🧩 _(interface incomplète : réponse coupée)_' });
     pos = UI_RE.lastIndex;
   }
   out.push({ t: text.slice(pos) });
-  return out.filter((x) => x.ui || x.cards || x.map || x.t.trim());
+  return out.filter((x) => x.ui || x.cards || x.map || x.stats || x.t.trim());
 }
 // ---- 📰 Cartes d'actualités / résultats : bloc ```muse-cards (## Titre, puis badge:, img:, sources:, intérêt:, et le texte)
 function parseCards(src) {
@@ -479,8 +512,9 @@ function openLightbox(list, k) {
   lb.list = list; lb.el.hidden = false; lbShow(k);
 }
 // Chaque image est cherchée dans l'ordre : copie gardée dans ton dépôt privé (jamais bloquée) → adresse d'origine → carte « voir la source »
-function gallery(group, all) {
-  const g = document.createElement('div'); g.className = 'gallery' + (group.length === 1 ? ' one' : '');
+function gallery(group, all, hero) {
+  if (hero && group.length >= 3) return mosaic(group, all);
+  const g = document.createElement('div'); g.className = 'gallery' + (group.length === 1 ? ' one' : group.length === 2 ? ' two' : '');
   group.forEach((it) => {
     const f = document.createElement('figure');
     const im = document.createElement('img'); im.loading = 'lazy'; im.referrerPolicy = 'no-referrer'; im.alt = it.cap || '';
@@ -677,10 +711,15 @@ function show(c) {
     const d = add('bot', ''); const raws = [];
     splitUI(txt).forEach((seg) => {
       if (seg.ui) { d.appendChild(uiBox(seg.ui)); d.classList.add('hasUi'); raws.push("J'ai préparé une interface interactive."); return; }
+      if (seg.stats) {
+        const box = document.createElement('div'); box.className = 'stats';
+        seg.stats.split(/\r?\n/).map((l) => l.split('|').map((x) => x.trim())).filter((x) => x[0] && x[1]).slice(0, 6).forEach(([k, v]) => { const t = document.createElement('div'); t.className = 'stat'; t.innerHTML = '<small></small><b></b>'; t.querySelector('small').textContent = k; t.querySelector('b').textContent = v; box.appendChild(t); });
+        d.appendChild(box); raws.push(seg.stats.replace(/\|/g, ' : ')); return;
+      }
       if (seg.map) { d.appendChild(mapBox(seg.map, attsIn(c.body))); d.classList.add('hasUi'); raws.push(mapPlain(seg.map)); return; }
       if (seg.cards) { d.appendChild(cardsBox(seg.cards)); d.classList.add('hasUi'); raws.push(cardsPlain(seg.cards)); return; }
       const { parts, all, plain } = splitParts(seg.t); raws.push(plain);
-      parts.forEach((p) => (p.t !== undefined ? d.insertAdjacentHTML('beforeend', render(p.t)) : d.appendChild(gallery(p.imgs, all))));
+      parts.forEach((p) => { if (p.t !== undefined) d.insertAdjacentHTML('beforeend', render(p.t)); else { d.appendChild(gallery(p.imgs, all, !d.querySelector('.gallery,.mosaic'))); } });
     });
     d.dataset.raw = raws.filter(Boolean).join('\n\n').replace(/\[\[SRC:[^\]]*\]\]/g, '');
     if (meta) { const s = document.createElement('span'); s.className = 'meta'; s.textContent = 'Mode : ' + meta; d.appendChild(s); }
