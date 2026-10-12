@@ -50,8 +50,24 @@ svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6;stro
 .item:hover,.item.on{background:var(--soft);color:var(--txt)}
 .item b{font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item.on b{font-weight:500}
-.item i{font-style:normal;opacity:0;color:var(--faint);padding:0 2px}
-.item:hover i,.item.on i{opacity:1}
+.item b{flex:1}
+.item .pinI{display:grid;color:var(--acc);flex:0 0 auto}.item .pinI svg{width:14px;height:14px}
+.item i.more{font-style:normal;opacity:0;color:var(--mut);display:grid;place-items:center;width:28px;height:28px;border-radius:8px;flex:0 0 auto}
+.item i.more svg{width:18px;height:18px}
+.item i.more:hover{background:var(--bd);color:var(--txt)}
+.item:hover i.more,.item.on i.more{opacity:1}
+@media(hover:none){.item i.more{opacity:.7}}
+.item.arch b{opacity:.75}
+.lhead{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:12px 12px 4px}
+.archBtn{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;color:var(--mut);padding:10px 12px;margin-top:8px;border-radius:12px;font-size:13.5px;cursor:pointer}
+.archBtn:hover{background:var(--soft);color:var(--txt)}.archBtn svg{width:16px;height:16px}.archBtn span{flex:1;text-align:left}
+.cmenu{position:fixed;z-index:200;min-width:210px;background:var(--panel);border:1px solid var(--bd);border-radius:16px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,.25);animation:cmin .12s ease-out}
+@keyframes cmin{from{opacity:0;transform:scale(.96) translateY(-4px)}}
+.cmenu button{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;color:var(--txt);font-size:14.5px;padding:10px 12px;border-radius:10px;cursor:pointer;text-align:left}
+.cmenu button:hover{background:var(--soft)}
+.cmenu button svg{width:18px;height:18px;color:var(--mut)}
+.cmenu button.danger,.cmenu button.danger svg{color:var(--err)}
+.item input.rename{flex:1;min-width:0;font:inherit;color:var(--txt);background:var(--panel);border:1.5px solid var(--acc);border-radius:8px;padding:4px 8px;outline:0}
 #side footer{padding:10px;border-top:1px solid var(--bd);display:flex;gap:4px}
 #side footer button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border:0;background:transparent;color:var(--mut);border-radius:14px;padding:8px 6px;font-size:13.5px}
 #side footer button:hover{background:var(--soft);color:var(--txt)}

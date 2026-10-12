@@ -25,6 +25,11 @@ const ICON = {
   bolt: '<path d="M13 3 5 14h6l-1 7 8-11h-6Z"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
   phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  share: '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/>',
+  pin: '<path d="M9 4h6l-1 6 4 4H6l4-4Z"/><path d="M12 14v7"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
+  unarchive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M12 17v-5M9.5 14.5 12 12l2.5 2.5"/>',
+  dots: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
   folder: '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/>',
 };
 const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
@@ -526,23 +531,132 @@ function empty() {
   document.querySelectorAll('.chip').forEach((b) => (b.onclick = () => { input.value = b.dataset.q; send(); }));
 }
 
+// ---- Liste des discussions : épinglées en haut, menu ⋯ (partager, renommer, épingler, archiver, supprimer), archives repliables
+const L_PIN = 'muse-epinglee', L_ARC = 'muse-archivee';
+const hasL = (i, n) => (i.labels || []).some((l) => (l.name || l) === n);
+let archOpen = false;
+async function ensureLabel(name, color) {
+  try { await gh(`/repos/${cfg.repo}/labels`, { method: 'POST', body: JSON.stringify({ name, color }) }); } catch (e) { if (e.status !== 422) throw e; }
+}
+async function addLabel(n, name, color) {
+  try { await gh(`/repos/${cfg.repo}/issues/${n}/labels`, { method: 'POST', body: JSON.stringify({ labels: [name] }) }); }
+  catch (e) { await ensureLabel(name, color); await gh(`/repos/${cfg.repo}/issues/${n}/labels`, { method: 'POST', body: JSON.stringify({ labels: [name] }) }); }
+}
+const delLabel = (n, name) => gh(`/repos/${cfg.repo}/issues/${n}/labels/${encodeURIComponent(name)}`, { method: 'DELETE' }).catch(() => {});
+function closeMenu() { document.querySelector('.cmenu')?.remove(); }
+function convMenu(anchor, i, archived) {
+  closeMenu();
+  const m = document.createElement('div'); m.className = 'cmenu';
+  const pinned = hasL(i, L_PIN);
+  const items = archived
+    ? [['share', 'Partager', () => shareConv(i)], ['unarchive', 'Désarchiver', () => unarchiveConv(i)], ['trash', 'Supprimer', () => deleteConv(i), 'danger']]
+    : [['share', 'Partager', () => shareConv(i)], ['edit', 'Renommer', () => renameConv(i)], ['pin', pinned ? 'Désépingler' : 'Épingler le chat', () => pinConv(i, !pinned)], ['archive', 'Archiver', () => archiveConv(i)], ['trash', 'Supprimer', () => deleteConv(i), 'danger']];
+  items.forEach(([icon, label, fn, cls]) => {
+    const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls;
+    b.innerHTML = `${ic(icon)}<span></span>`; b.querySelector('span').textContent = label;
+    b.onclick = (e) => { e.stopPropagation(); closeMenu(); fn(); };
+    m.appendChild(b);
+  });
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(innerWidth - mw - 8, r.right - 24)) + 'px';
+  m.style.top = (r.bottom + mh + 8 > innerHeight ? Math.max(8, r.top - mh - 4) : r.bottom + 4) + 'px';
+  setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { closeMenu(); document.removeEventListener('pointerdown', off, true); } }, true), 0);
+}
+function convItem(i, archived) {
+  const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '') + (archived ? ' arch' : '');
+  d.innerHTML = `${hasL(i, L_PIN) && !archived ? `<span class="pinI">${ic('pin')}</span>` : ''}<b></b><i class="more" title="Options">${ic('dots')}</i>`;
+  d.querySelector('b').textContent = i.title;
+  d.onclick = () => { closeMenu(); openConv(i.number); };
+  const more = d.querySelector('.more');
+  more.onclick = (e) => { e.stopPropagation(); convMenu(more, i, archived); };
+  d.oncontextmenu = (e) => { e.preventDefault(); convMenu(more, i, archived); };
+  let lp = null; // appui long sur mobile
+  d.addEventListener('touchstart', () => { lp = setTimeout(() => { lp = 'done'; convMenu(more, i, archived); }, 550); }, { passive: true });
+  d.addEventListener('touchend', (e) => { if (lp === 'done') e.preventDefault(); clearTimeout(lp); lp = null; });
+  d.addEventListener('touchmove', () => { clearTimeout(lp); lp = null; }, { passive: true });
+  return d;
+}
 async function loadList() {
   if (!cfg.repo || !cfg.token) return;
   try {
-    const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=50`)).filter((i) => !i.pull_request && !(i.body || '').startsWith('<!--auto:')); // les historiques d'automatisations vivent dans l'onglet ⚡
-    $('#list').innerHTML = '';
-    l.forEach((i) => {
-      const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '');
-      d.innerHTML = `<b>${esc(i.title)}</b><i title="Supprimer">✕</i>`;
-      d.onclick = () => openConv(i.number);
-      d.querySelector('i').onclick = async (e) => {
-        e.stopPropagation();
-        await gh(`/repos/${cfg.repo}/issues/${i.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) });
-        if (i.number === issueNo) newChat(); loadList();
-      };
-      $('#list').appendChild(d);
-    });
+    const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request && !(i.body || '').startsWith('<!--auto:')); // les historiques d'automatisations vivent dans l'onglet ⚡
+    const list = $('#list'); list.innerHTML = '';
+    const pins = l.filter((i) => hasL(i, L_PIN)), rest = l.filter((i) => !hasL(i, L_PIN));
+    const head = (t) => { const h = document.createElement('div'); h.className = 'lhead'; h.textContent = t; list.appendChild(h); };
+    if (pins.length) { head('Épinglées'); pins.forEach((i) => list.appendChild(convItem(i))); if (rest.length) head('Récentes'); }
+    rest.forEach((i) => list.appendChild(convItem(i)));
+    const ab = document.createElement('button'); ab.type = 'button'; ab.className = 'archBtn'; ab.innerHTML = `${ic('archive')}<span>Archivées</span><small>${archOpen ? '▾' : '▸'}</small>`;
+    const box = document.createElement('div'); box.className = 'archBox'; box.hidden = !archOpen;
+    ab.onclick = () => { archOpen = !archOpen; box.hidden = !archOpen; ab.querySelector('small').textContent = archOpen ? '▾' : '▸'; if (archOpen) loadArchived(box); };
+    list.append(ab, box); if (archOpen) loadArchived(box);
   } catch (e) { toast('' + e.message); }
+}
+async function loadArchived(box) {
+  box.innerHTML = '<div class="lhead">Chargement…</div>';
+  try {
+    const a = (await gh(`/repos/${cfg.repo}/issues?state=closed&labels=${L_ARC}&sort=updated&per_page=50`)).filter((i) => !i.pull_request);
+    box.innerHTML = a.length ? '' : '<div class="lhead">Aucune discussion archivée</div>';
+    a.forEach((i) => box.appendChild(convItem(i, true)));
+  } catch (e) { box.innerHTML = ''; if (e.status === 422 || e.status === 404) box.innerHTML = '<div class="lhead">Aucune discussion archivée</div>'; else toast('' + e.message); }
+}
+async function shareConv(i) {
+  try {
+    toast('Préparation du partage…');
+    const cs = await fetchComments(i.number);
+    const clean = (t) => strip(t).replace(/```[ \t]*muse-ui[\s\S]*?(```|$)/g, '[interface interactive]').replace(/```[ \t]*muse-map[\s\S]*?(```|$)/g, '[carte]').replace(/```[ \t]*muse-cards[\s\S]*?(```|$)/g, (b) => b.replace(/^```.*$/gm, '').replace(/^\s*(img|image|sources?|badge)\s*:.*$/gim, '')).replace(/\[\[(IMG|SRC):[^\]]*\]\]/g, '').trim();
+    const parts = [strip(i.body || '') ? `Cédric : ${clean(i.body)}` : '', ...cs.filter((c) => !c.body.includes(LIVE) && !c.body.includes(ERROR)).map((c) => `${c.body.includes(REPLY) ? 'Muse' : 'Cédric'} : ${clean(c.body)}`)].filter(Boolean);
+    const text = `${i.title}\n\n${parts.join('\n\n')}`;
+    if (navigator.share) { try { await navigator.share({ title: i.title, text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(text); toast('Discussion copiée : colle-la où tu veux'); }
+    catch { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = (i.title || 'discussion').replace(/[^\w\- ]+/g, '').slice(0, 50) + '.txt'; a.click(); toast('Discussion téléchargée'); }
+  } catch (e) { toast('Partage impossible : ' + e.message); }
+}
+function renameConv(i) {
+  const it = [...$('#list').querySelectorAll('.item')].find((x) => x.querySelector('b')?.textContent === i.title); 
+  const b = it && it.querySelector('b'); if (!b) return;
+  const inp = document.createElement('input'); inp.className = 'rename'; inp.value = i.title; inp.maxLength = 120;
+  b.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const save = async (ok) => {
+    if (done) return; done = true;
+    const t = inp.value.trim();
+    if (ok && t && t !== i.title) {
+      try { await gh(`/repos/${cfg.repo}/issues/${i.number}`, { method: 'PATCH', body: JSON.stringify({ title: t }) }); toast('Discussion renommée'); } catch (e) { toast('' + e.message); }
+    }
+    loadList();
+  };
+  inp.onclick = (e) => e.stopPropagation();
+  inp.onkeydown = (e) => { if (e.key === 'Enter') save(true); if (e.key === 'Escape') save(false); };
+  inp.onblur = () => save(true);
+}
+async function pinConv(i, on) {
+  try { if (on) await addLabel(i.number, L_PIN, 'f9d65c'); else await delLabel(i.number, L_PIN); toast(on ? 'Discussion épinglée' : 'Discussion désépinglée'); } catch (e) { toast('' + e.message); }
+  loadList();
+}
+async function archiveConv(i) {
+  try {
+    await addLabel(i.number, L_ARC, 'c5c3d6');
+    await gh(`/repos/${cfg.repo}/issues/${i.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) });
+    toast('Discussion archivée'); if (i.number === issueNo) newChat();
+  } catch (e) { toast('' + e.message); }
+  loadList();
+}
+async function unarchiveConv(i) {
+  try { await gh(`/repos/${cfg.repo}/issues/${i.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'open' }) }); await delLabel(i.number, L_ARC); toast('Discussion désarchivée'); } catch (e) { toast('' + e.message); }
+  loadList();
+}
+async function deleteConv(i) {
+  if (!confirm(`Supprimer définitivement « ${i.title} » ?`)) return;
+  try {
+    // Vraie suppression (GraphQL) ; si le jeton ne le permet pas, la discussion est fermée et disparaît de la liste
+    const r = await fetch(API.replace(/\/$/, '') + '/graphql', { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'mutation($id:ID!){deleteIssue(input:{issueId:$id}){clientMutationId}}', variables: { id: i.node_id } }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.errors) await gh(`/repos/${cfg.repo}/issues/${i.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) });
+    if (hasL(i, L_ARC)) await delLabel(i.number, L_ARC);
+    toast('Discussion supprimée'); if (i.number === issueNo) newChat();
+  } catch (e) { toast('' + e.message); }
+  loadList();
 }
 
 async function fetchComments(n, since) {
