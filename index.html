@@ -461,6 +461,22 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 .m.live.compact .lv-screen,.m.live.compact .lv-steps{display:none}
 .lv-open{margin-top:8px;border:0;background:var(--acc-soft);color:var(--acc);border-radius:999px;padding:7px 14px;font-weight:500;cursor:pointer}
 @media(max-width:1099px){#agentPane{position:fixed;inset:0;z-index:60;width:auto;border:0}#agentPane .apMax{display:none}#agentPane .apClose{margin-left:auto}}
+
+#agentPane.help .apStage{box-shadow:0 0 0 3px #E8743B,var(--shadow)}
+.apHelp{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;background:color-mix(in srgb,#E8743B 12%,var(--panel));border:1px solid color-mix(in srgb,#E8743B 40%,transparent);border-radius:16px;padding:12px 14px}
+.apHelp[hidden]{display:none}.apHelp b{font-size:15px}.apReason{font-size:13.5px;color:var(--txt)}
+.apTake{border:0;background:#E8743B;color:#fff;border-radius:999px;padding:8px 18px;font-weight:600;cursor:pointer;margin-top:4px}
+.apBar{display:flex;flex-direction:column;gap:8px}.apBar[hidden]{display:none}
+.apType{display:flex;gap:6px}.apText{flex:1;min-width:0;border:1px solid var(--bd);background:var(--panel);color:var(--txt);border-radius:12px;padding:9px 12px;font:inherit}
+.apSend,.apKeys button{border:1px solid var(--bd);background:var(--panel);color:var(--txt);border-radius:10px;padding:8px 12px;cursor:pointer;font-size:13px}
+.apKeys{display:flex;flex-wrap:wrap;gap:6px}
+.apDone{border:0;background:var(--ok);color:#fff;border-radius:999px;padding:10px;font-weight:600;cursor:pointer}
+.apTip{color:var(--mut);font-size:12px;line-height:1.4}
+#agentPane.ctl .apImg{cursor:crosshair;object-fit:fill}
+#agentPane.ctl .apView{outline:2px solid #E8743B;outline-offset:-2px}
+.apTap{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid #E8743B;pointer-events:none;animation:aptap .9s ease-out forwards}
+@keyframes aptap{from{transform:scale(.4);opacity:1}to{transform:scale(1.6);opacity:0}}
+#agentPane.help .apDot{background:#E8743B}
 </style>
 </head>
 <body>
@@ -526,6 +542,7 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 </main>
 <aside id="agentPane" hidden aria-label="Ordinateur de Muse">
   <div class="apHead"><span class="apIco">🖥️</span><b>Ordinateur de Muse</b><span class="apT"></span><button type="button" class="apBtn apMax" title="Agrandir">⤢</button><button type="button" class="apBtn apClose" title="Fermer">✕</button></div>
+<div class="apHelp" hidden><b>🖐️ Muse a besoin de toi</b><span class="apReason"></span><button type="button" class="apTake">Prendre la main</button></div>
   <div class="apStage">
     <div class="apDesk">
       <div class="apWin">
@@ -535,6 +552,13 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
       </div>
       <div class="apDock"><span data-d="web" title="Navigateur">🌐</span><span data-d="term" title="Terminal">⌨️</span><span data-d="files" title="Fichiers">📁</span></div>
     </div>
+  </div>
+  
+  <div class="apBar" hidden>
+    <div class="apType"><input type="text" class="apText" placeholder="Texte à taper dans la page…" autocomplete="off"><button type="button" class="apSend" title="Taper ce texte">Taper</button></div>
+    <div class="apKeys"><button type="button" data-k="Enter">↵ Entrée</button><button type="button" data-k="Tab">⇥ Tab</button><button type="button" data-s="up">↑</button><button type="button" data-s="down">↓</button><button type="button" data-k="Escape">Échap</button></div>
+    <button type="button" class="apDone">✅ J'ai fini, rends la main à Muse</button>
+    <small class="apTip">Touche l'écran ci-dessus pour cliquer. Chaque action met ~5 s à s'afficher. Évite d'écrire un mot de passe ici : connecte-toi plutôt une fois sur ton PC avec « node pc/muse-pc.mjs --login ».</small>
   </div>
   <div class="apCtl"><span class="apDot"></span><span class="apState">Muse a le contrôle</span></div>
   <div class="apNow"></div>

@@ -669,6 +669,7 @@ async function fetchComments(n, since) {
 }
 const attsIn = (body) => [...body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)-->/g)].map((m) => ({ path: m[1].trim(), name: m[2].trim(), type: m[3].trim() }));
 function show(c) {
+  if (c.body.startsWith('<!--muse-ctl-->')) return null;
   if (c.body.includes(LIVE)) return null;
   if (c.body.includes(REPLY)) {
     let txt = strip(c.body), meta = '';
@@ -722,7 +723,8 @@ const AP = {
   el: () => $('#agentPane'), wide: () => matchMedia('(min-width:1100px)').matches, t0: 0, last: null, userClosed: false,
   open() { const p = this.el(); p.hidden = false; $('#agentMini').hidden = true; },
   close() { const p = this.el(); p.hidden = true; p.classList.remove('max'); this.userClosed = true; if (!p.classList.contains('done') && this.last) $('#agentMini').hidden = false; },
-  start() { const p = this.el(); p.classList.remove('done'); this.userClosed = false; this.last = null; p.querySelector('.apSteps').innerHTML = ''; p.querySelector('.apState').textContent = 'Muse a le contrôle'; if (this.wide()) this.open(); else $('#agentMini').hidden = false; },
+  ctl: false, issue: null,
+  start() { const p = this.el(); this.issue = issueNo; this.ctl = false; p.classList.remove('done', 'help', 'ctl'); p.querySelector('.apHelp').hidden = true; p.querySelector('.apBar').hidden = true; this.userClosed = false; this.last = null; p.querySelector('.apSteps').innerHTML = ''; p.querySelector('.apState').textContent = 'Muse a le contrôle'; if (this.wide()) this.open(); else $('#agentMini').hidden = false; },
   update(o) {
     const p = this.el(); this.last = o;
     const url = /^https?:/i.test(o.url || '') ? o.url : '';
@@ -734,6 +736,17 @@ const AP = {
     if (o.img && /^[A-Za-z0-9+/=]+$/.test(o.img)) { const src = 'data:image/jpeg;base64,' + o.img; if (img.src !== src) { img.src = src; $('#agentMini img').src = src; } img.hidden = false; ph.hidden = true; }
     else { img.hidden = true; ph.hidden = false; p.querySelector('.apPhT').textContent = o.masked ? 'Capture masquée : page de connexion' : 'L’ordinateur démarre…'; }
     const lab = String(o.label || ''); p.querySelector('.apNow').textContent = lab;
+    p.querySelector('.apHead b').textContent = o.src === 'pc' ? 'Ordinateur de Muse · sur ton PC' : 'Ordinateur de Muse';
+    // 🖐️ Prise de main : Muse attend Cédric (CAPTCHA, connexion…)
+    const help = !!o.help; p.classList.toggle('help', help);
+    if (help && !this._helped) { this._helped = true; this.open(); try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {} toast('🖐️ Muse a besoin de toi dans son ordinateur'); }
+    if (!help) { this._helped = false; this.ctl = false; }
+    p.classList.toggle('ctl', help && this.ctl);
+    p.querySelector('.apHelp').hidden = !help || this.ctl;
+    p.querySelector('.apReason').textContent = o.reason || '';
+    p.querySelector('.apBar').hidden = !(help && this.ctl);
+    p.querySelector('.apState').textContent = help ? (this.ctl ? 'Tu as le contrôle' : 'Muse attend ton aide') : 'Muse a le contrôle';
+    if (o.err && help) toast('Action impossible : ' + o.err);
     const dock = /(commande|terminal|script|python|node|bash|code|calcul|exécut)/i.test(lab) ? 'term' : /(fichier|dossier|enregistr|télécharg|pdf|excel|word|document)/i.test(lab) ? 'files' : 'web';
     p.querySelectorAll('.apDock span').forEach((x) => x.classList.toggle('on', x.dataset.d === dock));
     const ol = p.querySelector('.apSteps'), steps = (o.steps || []).map(String);
@@ -747,9 +760,29 @@ const AP = {
   },
 };
 $('#agentPane .apClose').onclick = () => AP.close();
+// Envoi d'une action de Cédric au navigateur de Muse (commentaire de contrôle, jamais traité comme un message)
+async function apSend(o) {
+  if (!AP.issue) return;
+  try { await gh(`/repos/${cfg.repo}/issues/${AP.issue}/comments`, { method: 'POST', body: JSON.stringify({ body: '<!--muse-ctl-->' + JSON.stringify(o) }) }); }
+  catch (e) { toast('Envoi impossible : ' + e.message); }
+}
+$('#agentPane .apTake').onclick = () => { AP.ctl = true; const p = $('#agentPane'); p.classList.add('ctl'); p.querySelector('.apHelp').hidden = true; p.querySelector('.apBar').hidden = false; p.querySelector('.apState').textContent = 'Tu as le contrôle'; };
+$('#agentPane .apImg').addEventListener('load', (e) => { const im = e.target; if (im.naturalWidth) im.parentElement.style.aspectRatio = `${im.naturalWidth}/${im.naturalHeight}`; });
+$('#agentPane .apView').addEventListener('click', (e) => {
+  if (!AP.ctl) return; e.stopPropagation(); e.preventDefault();
+  const im = $('#agentPane .apImg'); if (im.hidden) return;
+  const r = im.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  const dot = document.createElement('span'); dot.className = 'apTap'; dot.style.left = (e.clientX - r.left) + 'px'; dot.style.top = (e.clientY - r.top) + 'px'; im.parentElement.appendChild(dot); setTimeout(() => dot.remove(), 1000);
+  apSend({ a: 'click', x: +x.toFixed(4), y: +y.toFixed(4) });
+}, true);
+$('#agentPane .apSend').onclick = () => { const t = $('#agentPane .apText'); if (!t.value) return; apSend({ a: 'type', text: t.value }); t.value = ''; };
+$('#agentPane .apText').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); const t = e.target; if (t.value) { apSend({ a: 'type', text: t.value, enter: true }); t.value = ''; } else apSend({ a: 'key', key: 'Enter' }); } };
+$('#agentPane .apKeys').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.k) apSend({ a: 'key', key: b.dataset.k }); else apSend({ a: 'scroll', dir: b.dataset.s }); };
+$('#agentPane .apDone').onclick = () => { apSend({ a: 'done' }); AP.ctl = false; $('#agentPane').classList.remove('ctl'); $('#agentPane .apBar').hidden = true; $('#agentPane .apState').textContent = 'Muse reprend la main…'; };
 $('#agentPane .apMax').onclick = () => $('#agentPane').classList.toggle('max');
 $('#agentMini').onclick = () => AP.open();
-$('#agentPane .apImg').onclick = (e) => openLightbox([{ img: e.target.src, cap: $('#agentPane .apNow').textContent, page: (AP.last && AP.last.url) || '' }], 0);
+$('#agentPane .apImg').onclick = (e) => AP.ctl ? null : openLightbox([{ img: e.target.src, cap: $('#agentPane .apNow').textContent, page: (AP.last && AP.last.url) || '' }], 0);
 function liveCard() {
   const d = document.createElement('div'); d.className = 'm bot live';
   d.innerHTML = '<div class="lv-head"><span class="lv-dot"></span><b>Muse travaille</b><span class="lv-t"></span></div>'
