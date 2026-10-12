@@ -272,7 +272,7 @@ async function engine3D(el, dark) {
   let map = null, last = null;
   for (const style of styles) {
     try {
-      map = new ml.Map({ container: el, style, center: [47.5079, -18.8792], zoom: 13, pitch: 55, bearing: -18, maxPitch: 70, antialias: true, attributionControl: { compact: true }, cooperativeGestures: false, dragRotate: true });
+      map = new ml.Map({ container: el, style, center: [47.5079, -18.8792], zoom: 13, fadeDuration: 120, pitch: 55, bearing: -18, maxPitch: 70, antialias: true, attributionControl: { compact: true }, cooperativeGestures: false, dragRotate: true });
       await new Promise((ok, ko) => { const t = setTimeout(() => ko(new Error('délai')), 12000); map.once('load', () => { clearTimeout(t); ok(); }); map.once('error', (e) => { if (!map.loaded()) { clearTimeout(t); ko(e.error || new Error('style')); } }); });
       break;
     } catch (e) { last = e; try { map && map.remove(); } catch {} map = null; el.innerHTML = ''; }
@@ -312,12 +312,9 @@ async function engine3D(el, dark) {
   map.addLayer({ id: 'muse-route-glow', type: 'line', source: 'muse-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': acc, 'line-width': 16, 'line-opacity': 0.25, 'line-blur': 6 } });
   map.addLayer({ id: 'muse-route-case', type: 'line', source: 'muse-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 9 } });
   map.addLayer({ id: 'muse-route', type: 'line', source: 'muse-route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': acc, 'line-width': 5 } });
-  map.addLayer({ id: 'muse-route-dash', type: 'line', source: 'muse-route', layout: { 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 2.5, 'line-opacity': 0.9, 'line-dasharray': [0, 4, 3] } });
-  // Petits tirets qui avancent le long du chemin
-  const steps = [[0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0], [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5]];
-  let k = 0, alive = true;
-  const tick = () => { if (!alive) return; if (document.visibilityState === 'visible' && el.isConnected) { try { map.setPaintProperty('muse-route-dash', 'line-dasharray', steps[k = (k + 1) % steps.length]); } catch {} } setTimeout(() => requestAnimationFrame(tick), 70); };
-  tick();
+  map.addLayer({ id: 'muse-route-dash', type: 'line', source: 'muse-route', layout: { 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 2.5, 'line-opacity': 0.85, 'line-dasharray': [1, 2.5] } });
+  // (tirets du chemin fixes : une animation image par image faisait clignoter toute la carte)
+  let alive = true;
   const markers = [];
   return {
     kind: '3d',
