@@ -495,7 +495,8 @@ public class MuseService extends AccessibilityService {
             case "shot": {
                 prep();
                 denyCheck();
-                return shot(c.optJSONObject("region"));
+                Bubble.ghost(true);   // la mascotte ne doit pas apparaître sur la capture
+                try { return shot(c.optJSONObject("region")); } finally { Bubble.ghost(false); }
             }
             case "tap": {
                 prep();
