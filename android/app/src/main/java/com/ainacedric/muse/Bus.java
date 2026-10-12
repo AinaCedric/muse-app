@@ -211,7 +211,8 @@ class Bus {
                     MuseService s = MuseService.inst;
                     if (s == null) throw new Exception("Le service d'accessibilité de Muse est désactivé sur le téléphone : va dans Réglages → Accessibilité → Muse et réactive-le (Xiaomi le coupe parfois : active aussi « Démarrage automatique » et verrouille l'appli dans les récentes).");
                     Bubble.act(opName, cmd);
-                    try { out = s.exec(cmd); } finally { Bubble.done(); }
+                    boolean okOp = false;
+                    try { out = s.exec(cmd); okOp = true; } finally { Bubble.done(okOp); }
                 }
                 res.put("ok", true);
                 res.put("data", out);

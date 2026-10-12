@@ -31,7 +31,9 @@ import java.util.concurrent.TimeUnit;
 class Bubble {
     private static ImageView v;
     private static TextView say;
-    private static Drawable[] idle, think;
+    private static Drawable[] idle, think, work, happy, sad;
+    private static volatile String react = null;
+    private static volatile long reactUntil = 0, nextWiggle = System.currentTimeMillis() + 30000;
     private static int frame = 0, dir = 1;
     private static final Handler H = new Handler(Looper.getMainLooper());
     private static Runnable tick, move;
@@ -67,7 +69,11 @@ class Bubble {
             sh = s.getResources().getDisplayMetrics().heightPixels;
             final SharedPreferences sp = s.getSharedPreferences("muse_bubble", Context.MODE_PRIVATE);
 
-            if (idle == null) { idle = load(s, "muse_idle"); think = load(s, "muse_think"); }
+            if (idle == null) {
+                idle = load(s, "muse_idle"); think = load(s, "muse_think");
+                work = load(s, "muse_work"); happy = load(s, "muse_happy"); sad = load(s, "muse_sad");
+                if (work == null) work = think; if (happy == null) happy = idle; if (sad == null) sad = idle;
+            }
             final ImageView t = new ImageView(s);
             t.setScaleType(ImageView.ScaleType.FIT_CENTER);
             if (idle != null) t.setImageDrawable(idle[0]);
@@ -80,8 +86,14 @@ class Bubble {
                     if (v != t) return;
                     try {
                         if (idle != null && (pm == null || pm.isInteractive())) {
-                            boolean busy = System.currentTimeMillis() < Bus.activeUntil && think != null;
-                            Drawable[] set = busy ? think : idle;
+                            long now = System.currentTimeMillis();
+                            boolean busy = now < Bus.activeUntil && now - lastOp < 45000;
+                            if (react != null && now > reactUntil) react = null;
+                            // au repos, de temps en temps, un petit sourire tout seul
+                            if (!busy && react == null && now > nextWiggle) { reaction("happy", 1800); nextWiggle = now + 30000 + (long) (Math.random() * 40000); }
+                            Drawable[] set = "happy".equals(react) ? happy : "sad".equals(react) ? sad
+                                    : busy ? ((inOp || now - lastOp < 1500) ? work : think) : idle;
+                            if (set == null) set = idle;
                             frame += dir;
                             if (frame >= set.length - 1) { frame = set.length - 1; dir = -1; }
                             if (frame <= 0) { frame = 0; dir = 1; }
@@ -131,6 +143,7 @@ class Bubble {
                                 placeSay();
                             } else {
                                 MuseService.lastClick = System.currentTimeMillis();
+                                reaction("happy", 1500);
                                 Bus.log("Bulle touchée");
                                 try { Panel.toggle(s); } catch (Throwable x) { s.failOpen(x); }
                             }
@@ -182,6 +195,8 @@ class Bubble {
         }
     }
 
+    static void reaction(String kind, long ms) { react = kind; reactUntil = System.currentTimeMillis() + ms; frame = 0; dir = 1; }
+
     private static void step() {
         long now = System.currentTimeMillis();
         boolean active = now < Bus.activeUntil && now - lastOp < 45000;
@@ -195,6 +210,7 @@ class Bubble {
                 drift(tx + wx, ty + wy);
             } else drift(tx, ty);
         } else {
+            if (roaming && (tx != homeX || ty != homeY)) reaction("happy", 2600);   // travail fini : petit saut de joie en rentrant
             if (roaming) { tx = homeX; ty = homeY; setLabel(""); }
             drift(tx, ty);
             if (roaming && Math.abs(cx - homeX) < 2 && Math.abs(cy - homeY) < 2) roaming = false;
@@ -291,8 +307,12 @@ class Bubble {
     }
 
     /** Après l'action : la bulle redevient touchable un peu plus tard. */
-    static void done() {
+    static void done() { done(true); }
+
+    static void done(boolean ok) {
         inOp = false;
+        lastOp = System.currentTimeMillis();
+        if (!ok) { reaction("sad", 2800); H.post(new Runnable() { @Override public void run() { setLabel("Oups, ça n'a pas marché…"); } }); }
         H.postDelayed(new Runnable() { @Override public void run() { if (!inOp) touchable(true); } }, 600);
     }
 
