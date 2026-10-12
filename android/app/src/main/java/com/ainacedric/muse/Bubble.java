@@ -2,22 +2,39 @@ package com.ainacedric.muse;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.graphics.PixelFormat;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.PowerManager;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.TextView;
+import android.widget.ImageView;
 
 /**
- * La bulle Muse : notre propre fenêtre flottante (calque d'accessibilité), toujours visible, glissable.
+ * La bulle Muse : la mascotte 3D de Muse (images de l'avatar de l'appli, animées), toujours visible, glissable.
+ * Au repos elle flotte et cligne des yeux ; quand Muse agit sur le téléphone, elle « réfléchit » (anneaux, comètes).
  * Remplace le bouton système d'accessibilité, qui se réduisait/s'estompait et n'avalait parfois que le 1er toucher.
  * Un toucher = ouvre/ferme le panneau. Glisser = déplacer ; au lâcher, elle se colle au bord le plus proche.
  */
 class Bubble {
-    private static TextView v;
+    private static ImageView v;
+    private static Drawable[] idle, think;
+    private static int frame = 0, dir = 1;
+    private static final Handler H = new Handler(Looper.getMainLooper());
+    private static Runnable tick;
+
+    private static Drawable[] load(MuseService s, String base) {
+        Drawable[] out = new Drawable[24];
+        for (int i = 0; i < 24; i++) {
+            int id = s.getResources().getIdentifier(base + (i < 10 ? "_0" : "_") + i, "drawable", s.getPackageName());
+            if (id == 0) return null;
+            out[i] = s.getDrawable(id);
+        }
+        return out;
+    }
     private static WindowManager.LayoutParams lp;
 
     static void show(final MuseService s) {
@@ -25,22 +42,34 @@ class Bubble {
         try {
             final WindowManager wm = (WindowManager) s.getSystemService(Context.WINDOW_SERVICE);
             final float d = s.getResources().getDisplayMetrics().density;
-            final int size = (int) (54 * d);
+            final int size = (int) (72 * d);
             final int sw = s.getResources().getDisplayMetrics().widthPixels;
             final int sh = s.getResources().getDisplayMetrics().heightPixels;
             final SharedPreferences sp = s.getSharedPreferences("muse_bubble", Context.MODE_PRIVATE);
 
-            TextView t = new TextView(s);
-            t.setText("M");
-            t.setTextColor(Color.WHITE);
-            t.setTextSize(22);
-            t.setGravity(Gravity.CENTER);
-            GradientDrawable g = new GradientDrawable();
-            g.setShape(GradientDrawable.OVAL);
-            g.setColor(Color.parseColor("#5B3FD6"));
-            t.setBackground(g);
-            t.setAlpha(0.92f);
-
+            if (idle == null) { idle = load(s, "muse_idle"); think = load(s, "muse_think"); }
+            final ImageView t = new ImageView(s);
+            t.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            if (idle != null) t.setImageDrawable(idle[0]);
+            final PowerManager pm = (PowerManager) s.getSystemService(Context.POWER_SERVICE);
+            // Animation aller-retour à 12 images/s (boucle sans saut)
+            tick = new Runnable() {
+                @Override
+                public void run() {
+                    if (v != t) return;
+                    try {
+                        if (idle != null && (pm == null || pm.isInteractive())) {
+                            boolean busy = System.currentTimeMillis() < Bus.activeUntil && think != null;
+                            Drawable[] set = busy ? think : idle;
+                            frame += dir;
+                            if (frame >= set.length - 1) { frame = set.length - 1; dir = -1; }
+                            if (frame <= 0) { frame = 0; dir = 1; }
+                            t.setImageDrawable(set[frame]);
+                        }
+                    } catch (Throwable ignore) { }
+                    H.postDelayed(this, 83);
+                }
+            };
             lp = new WindowManager.LayoutParams(size, size,
                     WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
@@ -86,6 +115,8 @@ class Bubble {
             });
             wm.addView(t, lp);
             v = t;
+            H.removeCallbacksAndMessages(null);
+            H.postDelayed(tick, 83);
             Bus.log("Bulle affichée");
         } catch (Throwable x) {
             v = null;
@@ -98,6 +129,7 @@ class Bubble {
             if (v != null) ((WindowManager) s.getSystemService(Context.WINDOW_SERVICE)).removeView(v);
         } catch (Throwable ignore) { }
         v = null;
+        H.removeCallbacksAndMessages(null);
     }
 
     static boolean shown() { return v != null; }
