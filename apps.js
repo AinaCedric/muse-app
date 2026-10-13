@@ -64,7 +64,17 @@
       }
     }, 700);
   }
-  const icon = (a) => `<span class="apIc"><i style="background:${a[3]}">${h(a[4])}</i></span>`;
+  // Vraies icônes des marques : chargées depuis leurs sites officiels (service d'icônes de Google), pastille en secours
+  const DOMAIN = {
+    gmail: 'mail.google.com', agenda: 'calendar.google.com', drive: 'drive.google.com',
+    whatsapp: 'whatsapp.com', messenger: 'messenger.com', telegram: 'telegram.org', messages: 'messages.google.com',
+    facebook: 'facebook.com', instagram: 'instagram.com', tiktok: 'tiktok.com', linkedin: 'linkedin.com',
+    youtube: 'youtube.com', spotify: 'spotify.com', photos: 'photos.google.com', maps: 'maps.google.com',
+    chrome: 'google.com/chrome', notes: 'keep.google.com', fichiers: 'files.google.com', contacts: 'contacts.google.com',
+    chatgpt: 'chatgpt.com', gemini: 'gemini.google.com', copilot: 'copilot.microsoft.com', 'meta ai': 'meta.ai',
+  };
+  const logo = (id) => DOMAIN[id] ? `https://www.google.com/s2/favicons?sz=128&domain_url=https://${DOMAIN[id]}` : '';
+  const icon = (a) => { const u = logo(a[0]); return `<span class="apIc${u ? ' hasLogo' : ''}">${u ? `<img src="${u}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.remove('hasLogo');this.remove()">` : ''}<i style="background:${a[3]}">${h(a[4])}</i></span>`; };
   const addedCount = () => BUILTIN.length + (st.added || []).length;
 
   function draw() {
