@@ -212,7 +212,7 @@
     apps: () => window.museApps?.open(),
     cfg: () => openCfg(),
     link: openLink,
-    google: () => { if (window.museGoogle?.state === 'ok') ask('Teste mon compte Google : dis-moi mon prochain rendez-vous et mon dernier e-mail reçu (expéditeur et sujet seulement).', 'perso'); else window.museGoogle?.connect(); },
+    google: () => { const g = window.museGoogle; if (!g || g.state === 'none' || g.state === 'unknown') g?.connect(); else window.museApps?.openGoogle(); },
   };
   P.querySelectorAll('.pfRow[data-go]').forEach((b) => (b.onclick = () => GO[b.dataset.go]()));
 

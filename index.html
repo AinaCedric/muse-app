@@ -603,6 +603,29 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 .ggSteps a{color:var(--acc)}
 .ggCopy{display:block;margin-top:6px;border:1px dashed var(--bd2);background:var(--soft);color:var(--txt);border-radius:10px;padding:7px 10px;font:12.5px var(--mono);word-break:break-all;text-align:left;cursor:pointer;width:100%}
 #ggDlg{max-height:92vh;overflow:auto}
+.apDet{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 26px 4px}
+.apBig .apIc{width:88px;height:88px;border-radius:26px}
+.apBig .apIc img{width:56px;height:56px;border-radius:12px}
+.apBig .apIc i{width:56px;height:56px;border-radius:16px;font-size:26px}
+.apDet h2{font:600 22px var(--sans);margin:14px 0 6px}
+.apDet p{margin:0;color:var(--mut);font-size:15.5px;line-height:1.5;max-width:460px}
+.apAv{width:42px;height:42px;border-radius:50%;background:var(--acc-soft);color:var(--acc);display:grid;place-items:center;font:600 18px var(--sans);flex:0 0 auto;overflow:hidden}
+.apAv img{width:100%;height:100%;object-fit:cover;display:block}
+.apPlus{width:42px;height:42px;display:grid;place-items:center;color:var(--txt);flex:0 0 auto}
+.apPlus svg{width:24px;height:24px}
+.apMore{width:38px;height:38px;border-radius:50%;border:0;background:none;color:var(--mut);display:grid;place-items:center;cursor:pointer;flex:0 0 auto}
+.apMore svg{width:22px;height:22px}
+.apVal{color:var(--mut);font-size:15px;white-space:nowrap}
+.apTx small.wrap{white-space:normal;line-height:1.45;margin-top:3px}
+a.apItem{text-decoration:none}
+.apItem svg.i{flex:0 0 auto}
+.apItem.gRow,.apItem.gAcc{cursor:pointer}
+.apItem.gRow>svg{width:20px;height:20px;color:var(--faint)}
+.apItem+.apItem::before{left:16px!important}
+.apItem:has(.apIc)+.apItem::before,.apItem:has(.apAv)+.apItem::before{left:86px!important}
+.ggImp{width:100%;margin:2px 0 8px}
+.ggMan{margin:4px 0 6px;color:var(--mut);font-size:13.5px}
+.ggMan summary{cursor:pointer;padding:6px 0}
 </style>
 </head>
 <body>

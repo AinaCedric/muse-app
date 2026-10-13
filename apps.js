@@ -81,21 +81,23 @@
   const gOk = () => window.museGoogle?.state === 'ok';
   const addedCount = () => BUILTIN.length + (gOk() ? GOOGLE.length : 0) + (st.added || []).length;
   // Ligne d'une appli Google : « + » = connecter · ✓ = connectée · ! = à reconnecter
-  const gSub = (a) => { const g = window.museGoogle, s = g?.state; return s === 'ok' ? `Connecté${g.email ? ' · ' + g.email : ''}` : s === 'expired' ? 'Connexion expirée : touche pour reconnecter' : a[5]; };
+  const gSub = (a) => { const g = window.museGoogle, s = g?.state, n = (g?.accounts || []).filter((x) => x.state === 'ok').length; return s === 'ok' ? (n > 1 ? `${n} comptes connectés` : `Connecté · ${g.email}`) : s === 'expired' ? 'Connexion expirée : touche pour reconnecter' : a[5]; };
 
   function draw() {
     const body = $('#apBody');
     if (!st.loaded) { body.innerHTML = '<div class="pfEmpty">Chargement…</div>'; return; }
+    if (view.startsWith('google:')) { drawGoogle(view.slice(7)); return; }
     if (view === 'added') {
       $('#apTitle').textContent = 'Applications ajoutées';
       const ph = st.added.map((id) => byId[id]);
       const gl = gOk() ? GOOGLE : [];
       body.innerHTML = `<div class="apSecT">Toujours actives</div><div class="apCard">${BUILTIN.map((a) => `<div class="apItem">${icon(a)}<span class="apTx"><b>${h(a[1])}<em>intégrée</em></b><small>${h(a[5])}</small></span></div>`).join('')}</div>
-        ${gl.length ? `<div class="apSecT">Compte Google</div><div class="apCard">${gl.map((a) => `<div class="apItem">${icon(a)}<span class="apTx"><b>${h(a[1])}<em>connectée</em></b><small>${h(gSub(a))}</small></span></div>`).join('')}</div>` : ''}
+        ${gl.length ? `<div class="apSecT">Compte Google</div><div class="apCard">${gl.map((a) => `<div class="apItem gRow" data-gid="${a[0]}" role="button" tabindex="0">${icon(a)}<span class="apTx"><b>${h(a[1])}<em>connectée</em></b><small>${h(gSub(a))}</small></span>${ic('right')}</div>`).join('')}</div>` : ''}
         <div class="apSecT">Sur ton téléphone</div>
         ${ph.length ? `<div class="apCard">${ph.map((a) => `<button type="button" class="apItem" data-id="${a[0]}">${icon(a)}<span class="apTx"><b>${h(a[1])}</b><small>${h(a[5])}</small></span>${ic('right')}</button>`).join('')}</div>` : '<div class="pfEmpty">Aucune appli du téléphone. Ajoute-en depuis la liste.</div>'}
         <p class="apNote">Muse les ouvre sur ton téléphone quand c’est utile, avec la bulle qui montre ce qu’elle fait. Envoyer, publier ou supprimer demande toujours ta confirmation.</p>`;
       body.querySelectorAll('.apItem[data-id]').forEach((b) => (b.onclick = (e) => itemMenu(b.dataset.id, e)));
+      body.querySelectorAll('.apItem[data-gid]').forEach((r) => (r.onclick = () => gOpen(r.dataset.gid)));
       return;
     }
     $('#apTitle').textContent = 'Applications';
@@ -106,7 +108,7 @@
       <button type="button" class="apAdded" id="apAddedBtn"><span class="bx">${ic('cube')}</span><span><b>Applications ajoutées</b><small>${addedCount()} applications</small></span><span class="mini"></span></button>
       <div class="apChips">${CATS.map(([k, t]) => `<button type="button" data-c="${k}" class="${cat === k ? 'on' : ''}">${h(t)}</button>`).join('')}</div>
       ${list.length ? `<div class="apCard">${list.map((a) => {
-        if (GOOGLE.includes(a)) { const gs = window.museGoogle?.state, on = gs === 'ok', exp = gs === 'expired'; return `<div class="apItem">${icon(a)}<span class="apTx"><b>${h(a[1])}</b><small>${h(gSub(a))}</small></span><button type="button" class="apAdd ${on ? 'on' : exp ? 'warn' : ''}" data-g="${a[0]}" aria-label="${on ? 'Google connecté' : 'Connecter'} ${h(a[1])}">${exp ? '!' : ic(on ? 'check' : 'plus')}</button></div>`; }
+        if (GOOGLE.includes(a)) { const gs = window.museGoogle?.state, on = gs === 'ok', exp = gs === 'expired'; return `<div class="apItem gRow" data-gid="${a[0]}" role="button" tabindex="0">${icon(a)}<span class="apTx"><b>${h(a[1])}</b><small>${h(gSub(a))}</small></span><span class="apAdd ${on ? 'on' : exp ? 'warn' : ''}">${exp ? '!' : ic(on ? 'check' : 'plus')}</span></div>`; }
         const on = st.added.includes(a[0]); return `<div class="apItem">${icon(a)}<span class="apTx"><b>${h(a[1])}</b><small>${h(a[5])}</small></span><button type="button" class="apAdd ${on ? 'on' : ''}" data-id="${a[0]}" aria-label="${on ? 'Retirer' : 'Ajouter'} ${h(a[1])}">${ic(on ? 'check' : 'plus')}</button></div>`; }).join('')}</div>` : ''}
       ${built.length ? `<div class="apSecT">Intégrées à Muse</div><div class="apCard">${built.map((a) => `<div class="apItem">${icon(a)}<span class="apTx"><b>${h(a[1])}<em>intégrée</em></b><small>${h(a[5])}</small></span></div>`).join('')}</div>` : ''}
       ${!list.length && !built.length ? '<div class="pfEmpty">Aucune application ne correspond.</div>' : ''}
@@ -117,21 +119,51 @@
     body.querySelectorAll('.apChips button').forEach((b) => (b.onclick = () => { cat = b.dataset.c; draw(); }));
     const chip = body.querySelector('.apChips button.on'); if (chip) chip.scrollIntoView({ inline: 'center', block: 'nearest' });
     body.querySelectorAll('.apAdd[data-id]').forEach((b) => (b.onclick = () => toggle(b.dataset.id)));
-    body.querySelectorAll('.apAdd[data-g]').forEach((b) => (b.onclick = (e) => gTap(e)));
+    body.querySelectorAll('.apItem[data-gid]').forEach((r) => (r.onclick = () => gOpen(r.dataset.gid)));
   }
-  function gTap(e) {
+  async function gOpen(id) {
     const g = window.museGoogle; if (!g) return;
-    if (g.state === 'ok') {          // déjà connecté : petit menu
-      document.querySelectorAll('.cmenu.apm').forEach((m) => m.remove());
-      const m = document.createElement('div'); m.className = 'cmenu apm';
-      m.innerHTML = `<button type="button" data-a="re">${ic('bolt')}Reconnecter / changer de compte</button><button type="button" data-a="cfg">${ic('gear')}Changer l’ID client Google</button><button type="button" data-a="out">${ic('trash')}Déconnecter Google</button>`;
-      document.body.appendChild(m);
-      const r = e.currentTarget.getBoundingClientRect();
-      m.style.left = Math.max(10, Math.min(innerWidth - m.offsetWidth - 10, r.right - m.offsetWidth)) + 'px';
-      m.style.top = Math.min(innerHeight - m.offsetHeight - 10, r.bottom + 4) + 'px';
-      m.onclick = (ev) => { const b = ev.target.closest('button'); if (!b) return; m.remove(); ({ re: () => g.connect(), cfg: () => g.reset(), out: () => g.disconnect() })[b.dataset.a](); };
-      setTimeout(() => document.addEventListener('click', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', off, true); } }, true), 0);
-    } else g.connect();             // pas connecté ou expiré : direct vers la connexion Google
+    if (g.state === 'unknown') await g.check();
+    if (g.state === 'none') { g.connect(); return; }      // aucun compte : direct vers la connexion Google
+    view = 'google:' + id; push(); draw();
+  }
+  const G_INFO = {
+    gmail: ['Accédez, recherchez, organisez et répondez facilement à vos e-mails avec Muse pour améliorer votre productivité.', 'Lire et rechercher tes e-mails · préparer des brouillons · envoyer seulement après ton OUI et un code de confirmation'],
+    agenda: ['Consultez votre programme, trouvez des créneaux et gérez vos rendez-vous avec Muse.', 'Lire ton agenda · créer, modifier ou supprimer un événement seulement après ton OUI et un code de confirmation'],
+    drive: ['Retrouvez et lisez vos documents Google avec Muse, sans jamais les modifier.', 'Chercher et lire tes fichiers Drive (lecture seule : rien n’est écrit ni supprimé)'],
+  };
+  const avatar = (a) => a.picture ? `<span class="apAv"><img src="${h(a.picture)}" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.textContent='${h((a.email || '?')[0].toUpperCase())}'"></span>` : `<span class="apAv">${h((a.email || '?')[0].toUpperCase())}</span>`;
+  function drawGoogle(id) {
+    const g = window.museGoogle, a = byId[id] || GOOGLE[0], info = G_INFO[id] || G_INFO.gmail, list = g?.accounts || [];
+    $('#apTitle').textContent = '';
+    $('#apBody').innerHTML = `<div class="apDet"><span class="apBig">${icon(a)}</span><h2>${h(a[1])}</h2><p>${h(info[0])}</p></div>
+      <div class="apSecT">Comptes</div>
+      <div class="apCard" id="gAccs">${list.map((x) => `<div class="apItem gAcc" data-e="${h(x.email)}">${avatar(x)}<span class="apTx"><b>${h(x.email)}</b><small>${x.state === 'expired' ? 'Connexion expirée : touche pour reconnecter' : x.state === 'ok' ? `Connecté${x.email === g.default ? ' · par défaut' : ''}` : `Vérification…${x.email === g.default ? ' · par défaut' : ''}`}</small></span><button type="button" class="apMore" data-e="${h(x.email)}" aria-label="Options">${ic('dots')}</button></div>`).join('')}
+        <button type="button" class="apItem" id="gAdd"><span class="apPlus">${ic('plus')}</span><span class="apTx"><b>${list.length ? 'Connecter un autre compte' : 'Connecter un compte'}</b></span></button></div>
+      <div class="apSecT">Détails</div>
+      <div class="apCard">
+        <div class="apItem"><span class="apTx"><b>Type d’application</b></span><span class="apVal">Intégration Google</span></div>
+        <div class="apItem"><span class="apTx"><b>Ce que Muse peut faire</b><small class="wrap">${h(info[1])}</small></span></div>
+        <a class="apItem" href="https://policies.google.com/privacy" target="_blank" rel="noopener"><span class="apTx"><b>Politique de confidentialité</b></span>${ic('out')}</a>
+        <a class="apItem" href="https://myaccount.google.com/permissions" target="_blank" rel="noopener"><span class="apTx"><b>Gérer l’accès sur mon compte Google</b></span>${ic('out')}</a>
+      </div>
+      <p class="apNote">Les comptes connectés servent pour Gmail, Agenda et Drive en même temps. Muse précise toujours quel compte elle utilise.</p>`;
+    const body = $('#apBody');
+    $('#gAdd').onclick = () => g.connect();
+    body.querySelectorAll('.gAcc').forEach((r) => (r.onclick = (e) => { if (e.target.closest('.apMore')) return; const x = list.find((q) => q.email === r.dataset.e); if (x && x.state === 'expired') g.connect(x.email); }));
+    body.querySelectorAll('.apMore').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); acctMenu(b.dataset.e, e); }));
+  }
+  function acctMenu(email, e) {
+    const g = window.museGoogle;
+    document.querySelectorAll('.cmenu.apm').forEach((m) => m.remove());
+    const m = document.createElement('div'); m.className = 'cmenu apm';
+    m.innerHTML = `<button type="button" data-a="re">${ic('bolt')}Reconnecter</button>${email !== g.default ? `<button type="button" data-a="def">${ic('check')}Compte par défaut</button>` : ''}<button type="button" data-a="out">${ic('trash')}Déconnecter</button><button type="button" data-a="cfg">${ic('gear')}Changer l’ID client Google</button>`;
+    document.body.appendChild(m);
+    const r = e.currentTarget.getBoundingClientRect();
+    m.style.left = Math.max(10, Math.min(innerWidth - m.offsetWidth - 10, r.right - m.offsetWidth)) + 'px';
+    m.style.top = Math.min(innerHeight - m.offsetHeight - 10, r.bottom + 4) + 'px';
+    m.onclick = (ev) => { const b = ev.target.closest('button'); if (!b) return; m.remove(); ({ re: () => g.connect(email), def: () => g.setDefault(email), out: () => g.disconnect(email), cfg: () => g.reset() })[b.dataset.a](); };
+    setTimeout(() => document.addEventListener('click', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', off, true); } }, true), 0);
   }
   function toggle(id) {
     const i = st.added.indexOf(id);
@@ -160,7 +192,7 @@
     m.onclick = (ev) => {
       const b = ev.target.closest('button'); if (!b) return; m.remove();
       if (b.dataset.a === 'del') toggle(id);
-      else { const depth = (view === 'added' ? 2 : 1) + 1; close(true); window.museProfile?.close(true); try { history.go(-depth); } catch { /* rien */ } newChat(); modeSel.value = 'phone'; input.value = TRY[id] || `Ouvre ${a[1]} sur mon téléphone et montre-moi ce qu’il y a de nouveau.`; input.dispatchEvent(new Event('input')); input.focus(); }
+      else { const depth = (view !== 'all' ? 2 : 1) + 1; close(true); window.museProfile?.close(true); try { history.go(-depth); } catch { /* rien */ } newChat(); modeSel.value = 'phone'; input.value = TRY[id] || `Ouvre ${a[1]} sur mon téléphone et montre-moi ce qu’il y a de nouveau.`; input.dispatchEvent(new Event('input')); input.focus(); }
     };
     setTimeout(() => document.addEventListener('click', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', off, true); } }, true), 0);
   }
@@ -181,14 +213,15 @@
   function close(fromPop) {
     if (!isOpen) return; isOpen = false; P.classList.remove('on');
     setTimeout(() => { if (!isOpen) P.hidden = true; }, 240);
-    if (!fromPop) { const back = view === 'added' ? 2 : 1; try { history.go(-back); } catch { /* rien */ } }
+    if (!fromPop) { const back = view !== 'all' ? 2 : 1; try { history.go(-back); } catch { /* rien */ } }
   }
-  $('#apBack').onclick = () => { if (view === 'added') { history.back(); } else close(); };
+  $('#apBack').onclick = () => { if (view !== 'all') { history.back(); } else close(); };
   addEventListener('popstate', () => {
     if (!isOpen) return;
     const s = history.state?.museApps;
-    if (s === 'all' && view === 'added') { view = 'all'; draw(); }
+    if (s === 'all' && view !== 'all') { view = 'all'; draw(); }
     else if (!s) close(true);
   });
-  window.museApps = { open, close, count };
+  async function openGoogle() { await open(); await window.museGoogle?.check(true); view = 'google:gmail'; push(); draw(); }
+  window.museApps = { open, close, count, openGoogle };
 })();
