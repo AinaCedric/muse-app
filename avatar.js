@@ -17,7 +17,7 @@
   if (ok) { try { renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true }); } catch (e) { ok = false; } }
   if (!ok) {
     wrap.classList.add('fallback');
-    window.MuseAvatar = { setState(s) { state = s; publish(s); if (s === 'happy' || s === 'sad') setTimeout(() => { state = 'idle'; publish('idle'); }, 2200); } };
+    window.MuseAvatar = { setState(s) { state = s; publish(s); if (s === 'happy' || s === 'sad') setTimeout(() => { state = 'idle'; publish('idle'); }, 2200); }, resize() {} };
     return;
   }
 
@@ -282,7 +282,9 @@
     if (s === 'happy') { hopV = 4.2; hopAgain = true; }
     until = s === 'happy' ? performance.now() + (ms || 2000) : s === 'sad' ? performance.now() + (ms || 3500) : 0;
   }
-  window.MuseAvatar = { setState };
+  // Taille d'affichage (ex. 150 px dans le profil de Muse) : on redessine à la bonne résolution pour rester net
+  const resize = (px) => { renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5)); renderer.setSize(px, px, false); };
+  window.MuseAvatar = { setState, resize, get state() { return state; } };
 
   // Un clic sur la mascotte la fait réagir
   canvas.addEventListener('click', () => { if (state === 'idle') setState('happy', 1400); });

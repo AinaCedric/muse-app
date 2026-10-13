@@ -496,6 +496,62 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 .apTap{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid #E8743B;pointer-events:none;animation:aptap .9s ease-out forwards}
 @keyframes aptap{from{transform:scale(.4);opacity:1}to{transform:scale(1.6);opacity:0}}
 #agentPane.help .apDot{background:#E8743B}
+
+/* ---- Profil de Muse (clic sur l'avatar en haut) */
+#who{cursor:pointer}
+#profile{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;transform:translateY(16px);opacity:0;transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .2s}
+#profile.on{transform:none;opacity:1}
+#profile[hidden]{display:none}
+.pfTop{display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 16px 4px;position:relative;z-index:2}
+.pfIb{width:48px;height:48px;border-radius:50%;border:1px solid var(--bd);background:var(--panel);color:var(--txt);display:grid;place-items:center;cursor:pointer;box-shadow:var(--shadow)}
+.pfIb svg{width:22px;height:22px}
+.pfScroll{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 0 calc(30px + env(safe-area-inset-bottom))}
+.pfIn{max-width:620px;margin:0 auto}
+.pfHero{display:flex;flex-direction:column;align-items:center;margin-top:-34px;position:relative}
+.pfHero::before{content:'';position:absolute;top:10px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--acc) 30%,transparent) 0%,transparent 65%);filter:blur(6px);animation:pulse 4s ease-in-out infinite;pointer-events:none}
+#pfAva{width:168px;height:168px;position:relative;display:grid;place-items:center}
+#pfAva canvas{width:168px!important;height:168px!important}
+#pfAva .pfImg{width:150px;height:150px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffd6f0,#9b7bff 60%,#6d4fe0);box-shadow:0 14px 34px #5b3fd64d}
+.pfHero h2{font:500 34px/1.1 var(--serif);margin:2px 0 4px;letter-spacing:-.01em}
+.pfHero small{color:var(--mut);font-size:13.5px;display:flex;align-items:center;gap:7px}
+.pfHero small::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 20%,transparent)}
+.pfTiles{display:flex;gap:12px;overflow-x:auto;padding:22px 16px 6px;scroll-snap-type:x mandatory;scroll-padding-inline:16px;scrollbar-width:none}
+.pfTiles::-webkit-scrollbar{display:none}
+.pfTile{flex:0 0 auto;width:128px;height:118px;border-radius:26px;background:var(--panel);border:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;scroll-snap-align:start;position:relative;color:var(--txt);font:500 14.5px var(--sans);transition:transform .15s}
+.pfTile:active{transform:scale(.96)}
+.pfTile.off{background:transparent;border:1.6px dashed var(--bd2)}
+.pfTile.sel{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft)}
+.pfTile .tic{width:46px;height:46px;position:relative}
+.pfTile .tic svg{width:46px;height:46px;display:block}
+.pfTile .tdot{position:absolute;right:-4px;bottom:-3px;width:16px;height:16px;border-radius:50%;border:3px solid var(--panel);background:var(--faint)}
+.pfTile.ok .tdot{background:var(--ok)}
+.pfTile.wait .tdot{background:#f0b429;animation:blink 1s ease-in-out infinite}
+.pfTile.off .tdot{width:20px;height:20px;right:-6px;bottom:-5px;background:#2f80ed;border-color:var(--bg);display:grid;place-items:center;color:#fff;font:700 14px/1 var(--sans)}
+.pfTile.off .tdot::after{content:'+'}
+.pfTile.down .tdot{background:var(--err)}
+.pfTile.na .tdot{display:none}
+.pfTile small{font-size:11px;color:var(--faint);margin-top:-8px;font-weight:400}
+.pfDet{margin:10px 16px 0;padding:14px 16px;border-radius:22px;background:var(--panel);border:1px solid var(--bd);font-size:14px;color:var(--mut);animation:pfIn .22s ease}
+.pfDet b{color:var(--txt)}
+.pfDet .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:8px 0 2px;font-size:13.5px}
+.pfDet .kv span:nth-child(odd){color:var(--faint)}
+.pfDet .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pfDet .acts button{border:1px solid var(--bd);background:var(--soft);color:var(--txt);border-radius:999px;padding:8px 14px;font:500 13px var(--sans);cursor:pointer}
+.pfDet .acts button.pri{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
+@keyframes pfIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.pfSec{padding:26px 22px 6px;font-size:15px;color:var(--faint);font-weight:500}
+.pfList{margin:0 8px}
+.pfRow{display:flex;align-items:center;gap:16px;width:100%;padding:15px 14px;border:0;background:none;color:var(--txt);font:400 17px var(--sans);cursor:pointer;border-radius:16px;text-align:left;position:relative}
+.pfRow:hover{background:var(--soft)}
+.pfRow+.pfRow::before{content:'';position:absolute;top:0;left:56px;right:12px;border-top:1px solid var(--bd)}
+.pfRow>svg{width:24px;height:24px;flex:0 0 auto;color:var(--mut)}
+.pfRow .lab{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pfRow .lab small{display:block;font-size:12.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pfRow .val{color:var(--faint);font-size:15px;white-space:nowrap}
+.pfRow>svg:last-child{width:20px;height:20px;color:var(--faint)}
+.pfRow .fic{width:28px;height:32px;border-radius:6px;display:grid;place-items:center;color:#fff;font:700 8.5px var(--sans);letter-spacing:.02em;flex:0 0 auto;background:#2f80ed;clip-path:polygon(0 0,70% 0,100% 24%,100% 100%,0 100%)}
+.pfEmpty{padding:10px 22px;color:var(--faint);font-size:14px}
+.pfMenu{position:absolute;right:16px;top:calc(64px + env(safe-area-inset-top));z-index:3}
 </style>
 </head>
 <body>
@@ -585,6 +641,49 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 </aside>
 <button type="button" id="agentMini" hidden title="Voir l'ordinateur de Muse"><img alt=""><span>🖥️ Muse travaille</span></button>
 
+<section id="profile" hidden aria-label="Profil de Muse">
+  <div class="pfTop"><button type="button" class="pfIb" id="pfBack" aria-label="Retour"><span data-icon="left"></span></button><button type="button" class="pfIb" id="pfMore" aria-label="Plus d'options"><span data-icon="dots"></span></button></div>
+  <div class="cmenu pfMenu" id="pfMenu" hidden>
+    <button type="button" data-a="theme"><span data-icon="moon"></span>Thème clair / sombre</button>
+    <button type="button" data-a="refresh"><span data-icon="bolt"></span>Vérifier les appareils</button>
+    <button type="button" data-a="new"><span data-icon="edit"></span>Nouvelle discussion</button>
+    <button type="button" data-a="cfg"><span data-icon="gear"></span>Réglages</button>
+  </div>
+  <div class="pfScroll"><div class="pfIn">
+    <div class="pfHero"><div id="pfAva"></div><h2>Muse</h2><small id="pfSt">en ligne</small></div>
+    <div class="pfTiles" id="pfTiles"></div>
+    <div id="pfDet"></div>
+    <div class="pfSec">Configuration</div>
+    <div class="pfList">
+      <button type="button" class="pfRow" data-go="instr"><span data-icon="file"></span><span class="lab">Instructions<small>Comment Muse doit te répondre</small></span><span data-icon="right" class="chev"></span></button>
+      <button type="button" class="pfRow" data-go="mem"><span data-icon="book"></span><span class="lab">Mémoire<small>Ce que Muse sait de toi</small></span><span data-icon="right" class="chev"></span></button>
+      <button type="button" class="pfRow" data-go="autos"><span data-icon="bolt"></span><span class="lab">Automatisations<small>Réponses automatiques sur ton téléphone</small></span><span class="val" id="pfAutoN"></span><span data-icon="right" class="chev"></span></button>
+      <button type="button" class="pfRow" data-go="cfg"><span data-icon="gear"></span><span class="lab">Réglages<small>Connexion, voix, code du téléphone</small></span><span data-icon="right" class="chev"></span></button>
+    </div>
+    <div class="pfSec">Intégration</div>
+    <div class="pfList">
+      <button type="button" class="pfRow" data-go="link"><span data-icon="phone"></span><span class="lab">Appareils<small>Code de liaison téléphone et PC</small></span><span class="val" id="pfLinkV"></span><span data-icon="right" class="chev"></span></button>
+      <button type="button" class="pfRow" data-go="google"><span data-icon="out"></span><span class="lab">Google<small>Gmail, Agenda, Drive</small></span><span class="val">Tester</span><span data-icon="right" class="chev"></span></button>
+    </div>
+    <div class="pfSec">Fichiers</div>
+    <div class="pfList" id="pfFiles"><div class="pfEmpty">Chargement…</div></div>
+  </div></div>
+</section>
+<dialog id="insDlg">
+  <h3>Instructions pour Muse</h3>
+  <p class="hint">Ton style, ce que Muse doit toujours faire ou éviter. Elle les lit avant chaque réponse.</p>
+  <textarea id="insTxt" placeholder="Ex. : Réponds en français, avec des emojis. Tutoie-moi. Va droit au but. Pour Odoo, donne toujours la version 19 en premier."></textarea>
+  <div class="row"><button class="ghost" id="insCancel" type="button">Fermer</button><button class="btn" id="insSave" type="button">Enregistrer</button></div>
+</dialog>
+<dialog id="linkDlg">
+  <h3>Relier tes appareils</h3>
+  <p class="hint">Colle ici le code de liaison <b>MUSE1.…</b> (le même que dans l'appli Muse Tél., créé par <code>node scripts/phone-pair.mjs</code>). Il reste dans ce navigateur et sert seulement à voir si ton téléphone et ton PC sont en ligne.</p>
+  <label for="linkTxt">Code de liaison</label>
+  <input id="linkTxt" type="password" placeholder="MUSE1.…" autocomplete="off">
+  <div id="linkMsg" class="hint"></div>
+  <div class="row"><button class="ghost" id="linkDel" type="button">Oublier</button><button class="ghost" id="linkCancel" type="button">Fermer</button><button class="btn" id="linkSave" type="button">Enregistrer</button></div>
+</dialog>
+
 <dialog id="cfg">
   <h3>Réglages</h3>
   <p class="hint">Ces informations restent dans ce navigateur.</p>
@@ -663,5 +762,6 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 <script src="./avatar.js"></script>
 <script src="./app.js"></script>
 <script src="./automations.js"></script>
+<script src="./profile.js"></script>
 </body>
 </html>
