@@ -212,9 +212,12 @@
     apps: () => window.museApps?.open(),
     cfg: () => openCfg(),
     link: openLink,
-    google: () => ask('Teste mon compte Google : dis-moi mon prochain rendez-vous et mon dernier e-mail reçu (expéditeur et sujet seulement).', 'perso'),
+    google: () => { if (window.museGoogle?.state === 'ok') ask('Teste mon compte Google : dis-moi mon prochain rendez-vous et mon dernier e-mail reçu (expéditeur et sujet seulement).', 'perso'); else window.museGoogle?.connect(); },
   };
   P.querySelectorAll('.pfRow[data-go]').forEach((b) => (b.onclick = () => GO[b.dataset.go]()));
+
+  // État de Google affiché sur la ligne « Google »
+  const gLabel = () => { const g = window.museGoogle; if (!g) return; const set = () => { const v = $('#pfGoogleV'); if (v) v.textContent = { ok: 'Connecté', expired: 'À reconnecter', none: 'Connecter', unknown: '' }[g.state] || ''; }; set(); g.check().then(set); if (!gLabel.b) { gLabel.b = 1; g.onChange?.(set); } };
 
   // ---------- Menu ⋯
   const menu = $('#pfMenu');
@@ -239,7 +242,7 @@
     sync(); mo = new MutationObserver(sync); mo.observe($('#status'), { childList: true, characterData: true, subtree: true });
     try { history.pushState({ museProfile: 1 }, ''); } catch { /* sans historique */ }
     $('#side').classList.remove('open'); $('#scrim').classList.remove('on');
-    linkVal(); drawTiles(); refresh(false); loadFiles(); autosCount(); window.museApps?.count();
+    linkVal(); drawTiles(); refresh(false); loadFiles(); autosCount(); window.museApps?.count(); gLabel();
   }
   function close(fromPop) {
     if (!isOpen) return;

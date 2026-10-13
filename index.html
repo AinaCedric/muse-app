@@ -594,9 +594,15 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 .apAdd{width:40px;height:40px;border-radius:50%;border:0;background:none;color:var(--mut);display:grid;place-items:center;cursor:pointer;flex:0 0 auto}
 .apAdd svg{width:24px;height:24px}
 .apAdd.on{background:var(--acc);color:var(--on-acc)}
+.apAdd.warn{background:#f0b429;color:#2a1d00;font:700 20px var(--sans)}
 .apAdd.on svg{width:19px;height:19px;stroke-width:2.4}
 .apNote{margin:14px 22px 0;color:var(--faint);font-size:13px;line-height:1.5}
 .apSecT{padding:18px 22px 8px;color:var(--faint);font-size:14px;font-weight:500}
+.ggSteps{margin:10px 0 12px;padding-left:20px;font-size:14px;color:var(--mut);line-height:1.5}
+.ggSteps li{margin:0 0 8px}
+.ggSteps a{color:var(--acc)}
+.ggCopy{display:block;margin-top:6px;border:1px dashed var(--bd2);background:var(--soft);color:var(--txt);border-radius:10px;padding:7px 10px;font:12.5px var(--mono);word-break:break-all;text-align:left;cursor:pointer;width:100%}
+#ggDlg{max-height:92vh;overflow:auto}
 </style>
 </head>
 <body>
@@ -709,7 +715,7 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
     <div class="pfSec">Intégration</div>
     <div class="pfList">
       <button type="button" class="pfRow" data-go="link"><span data-icon="phone"></span><span class="lab">Appareils<small>Code de liaison téléphone et PC</small></span><span class="val" id="pfLinkV"></span><span data-icon="right" class="chev"></span></button>
-      <button type="button" class="pfRow" data-go="google"><span data-icon="out"></span><span class="lab">Google<small>Gmail, Agenda, Drive</small></span><span class="val">Tester</span><span data-icon="right" class="chev"></span></button>
+      <button type="button" class="pfRow" data-go="google"><span data-icon="out"></span><span class="lab">Google<small>Gmail, Agenda, Drive</small></span><span class="val" id="pfGoogleV"></span><span data-icon="right" class="chev"></span></button>
     </div>
     <div class="pfSec">Fichiers</div>
     <div class="pfList" id="pfFiles"><div class="pfEmpty">Chargement…</div></div>
@@ -814,6 +820,7 @@ input[type=range]{padding:0;border:0;background:none;width:100%;margin:6px 0 10p
 <script src="./app.js"></script>
 <script src="./automations.js"></script>
 <script src="./profile.js"></script>
+<script src="./google.js"></script>
 <script src="./apps.js"></script>
 </body>
 </html>
