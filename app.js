@@ -739,7 +739,7 @@ function show(c) {
 async function openConv(n) {
   if (!need()) return;
   if (window.autosClose) autosClose();
-  stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = n; msgs.innerHTML = ''; $('#side').classList.remove('open');
+  stopTts(); pollId++; busy = false; setSend('idle'); avatar('idle'); issueNo = n; msgs.innerHTML = ''; $('#side').classList.remove('open');
   try {
     const cs = await fetchComments(n);
     cs.forEach(show);
@@ -751,7 +751,7 @@ async function openConv(n) {
   } catch (e) { add('bot', '' + e.message, 'err'); }
   loadList();
 }
-function newChat() { if (window.autosClose) autosClose(); try { $('#agentPane').hidden = true; $('#agentMini').hidden = true; } catch {} stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
+function newChat() { if (window.autosClose) autosClose(); try { $('#agentPane').hidden = true; $('#agentMini').hidden = true; } catch {} stopTts(); pollId++; busy = false; setSend('idle'); avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
 
 // 🖥️ Carte « Muse travaille » : dernière capture du navigateur, étape en cours, étapes déjà faites
 // ---- 🖥️ Panneau « Ordinateur de Muse » (mode agent) : bureau virtuel, fenêtre de navigateur, dock, étapes
@@ -852,8 +852,26 @@ function liveUpdate(d, o) {
 }
 const liveOf = (cs) => { const c = [...cs].reverse().find((x) => x.body.includes(LIVE)); if (!c || Date.now() - new Date(c.updated_at || c.created_at) > 2 * 60 * 1000) return null; try { return JSON.parse(c.body.slice(c.body.indexOf(LIVE) + LIVE.length).trim()); } catch { return null; } };
 
+// Bouton d'envoi : devient « Stop » pendant que Muse travaille (idle = envoyer · wait = stop · lock = envoi en cours)
+let sendMode = 'idle';
+function setSend(m) {
+  sendMode = m; const b = $('#send'); if (!b) return;
+  b.disabled = m === 'lock'; b.classList.toggle('stop', m === 'wait');
+  const stop = m === 'wait'; b.title = b.ariaLabel = stop ? 'Arrêter Muse' : 'Envoyer';
+  const want = stop ? 'stop' : 'up'; if (b.dataset.ic !== want) { b.dataset.ic = want; b.innerHTML = ic(want); }
+}
+async function stopRun() {
+  if (sendMode !== 'wait') return;
+  const n = issueNo; pollId++; busy = false; setSend('idle'); stopTts();
+  msgs.querySelectorAll('.m.wait, .m.live').forEach((e) => e.remove());
+  try { AP.done(false); } catch { /* panneau absent */ }
+  avatar('idle'); add('bot', '⏹️ Arrêté. Tu peux me redemander ou changer la consigne.', 'stopped');
+  if (n) gh(`/repos/${cfg.repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body: '<!--muse-ctl-->' + JSON.stringify({ a: 'stop' }) }) }).catch((e) => toast('Arrêt non transmis : ' + e.message));
+  loadList();
+}
+
 async function wait(n, since) {
-  const my = ++pollId; busy = true; $('#send').disabled = true;
+  const my = ++pollId; busy = true; setSend('wait');
   let workMode; const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
   workMode = ordi || perso || phone; avatar(workMode ? 'working' : 'thinking'); let shown = label;
   const bubble = add('bot', label, 'wait'); const t0 = Date.now(); let card = null;
@@ -865,7 +883,7 @@ async function wait(n, since) {
     bubble.textContent = `${shown} · ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
       const all = await fetchComments(n, since);
-      const cs = all.filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && new Date(c.created_at) >= new Date(since));
+      const cs = all.filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && !c.body.includes('<!--routed:stopped-->') && new Date(c.created_at) >= new Date(since));
       const lv = cs.length ? null : liveOf(all);
       if (lv) { if (!card) { card = liveCard(); bubble.style.display = 'none'; avatar('working'); } liveUpdate(card, lv); }
       else if (card && !cs.length) { card.remove(); card = null; AP.done(); bubble.style.display = ''; avatar(workMode ? 'working' : 'thinking'); }
@@ -875,7 +893,7 @@ async function wait(n, since) {
   if (my === pollId) {
     if (card) { card.remove(); AP.done(false); }
     if (Date.now() - t0 >= MAXW) { bubble.className = 'm bot err'; bubble.textContent = 'Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
-    busy = false; $('#send').disabled = false; loadList();
+    busy = false; setSend('idle'); loadList();
   }
 }
 
@@ -883,7 +901,7 @@ async function send() {
   const message = input.value.trim();
   if ((!message && !pending.length) || busy || !need()) return;
   stopTts(); const files = pending.splice(0); renderPending();
-  input.value = ''; input.style.height = 'auto'; busy = true; $('#send').disabled = true;
+  input.value = ''; input.style.height = 'auto'; busy = true; setSend('lock');
   let up = null, sent = false;
   try {
     if (!issueNo) {
@@ -903,7 +921,7 @@ async function send() {
   } catch (e) {
     if (up) up.remove();
     if (!sent) { input.value = message; input.dispatchEvent(new Event('input')); pending.push(...files); renderPending(); } // rien n'est perdu : il suffit de renvoyer
-    add('bot', '' + e.message, 'err'); busy = false; $('#send').disabled = false; avatar('sad'); }
+    add('bot', '' + e.message, 'err'); busy = false; setSend('idle'); avatar('sad'); }
 }
 
 // ---- Pièces jointes
@@ -1099,7 +1117,7 @@ $('#dirIn').onchange = (e) => { addFolder(e.target.files); e.target.value = ''; 
 document.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
 document.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length || e.dataTransfer?.items?.length) { e.preventDefault(); handleDrop(e.dataTransfer); } });
 input.addEventListener('paste', (e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } });
-$('#f').onsubmit = (e) => { e.preventDefault(); send(); };
+$('#f').onsubmit = (e) => { e.preventDefault(); if (sendMode === 'wait') stopRun(); else send(); };
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !/Android|iPhone|iPad/i.test(navigator.userAgent)) { e.preventDefault(); send(); } });
 input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; });
 $('#new').onclick = newChat; const sideSet = on => { $('#side').classList.toggle('open', on); $('#scrim').classList.toggle('on', on); };

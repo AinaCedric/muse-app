@@ -269,6 +269,9 @@ textarea{flex:1;resize:none;max-height:180px;background:transparent;color:var(--
 textarea::placeholder{color:var(--faint)}
 #send{display:grid;place-items:center;width:42px;height:42px;padding:0;border-radius:50%;flex:none}
 #send svg{width:18px;height:18px;stroke-width:2}
+#send.stop{background:var(--txt);color:var(--bg);box-shadow:none}
+#send.stop svg rect{fill:currentColor}
+.m.stopped{color:var(--faint);font-style:italic}
 #micBtn.on{color:#fff;background:var(--err)}
 #micBtn{color:var(--acc)}
 #pending{display:flex;gap:8px;padding:8px 14px 0;overflow-x:auto;width:100%;max-width:724px;margin:0 auto}
