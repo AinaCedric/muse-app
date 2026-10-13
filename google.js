@@ -110,8 +110,8 @@
     lsSet(K_CFG, JSON.stringify({ id, secret })); dlg.close(); go();
   };
 
-  async function go(hint) {
-    let c = null; try { c = JSON.parse(ls(K_CFG) || 'null'); } catch { /* rien */ }
+  async function go(hint, c) {
+    if (!c) { try { c = JSON.parse(ls(K_CFG) || 'null'); } catch { /* rien */ } }
     if (!c?.id || !c?.secret) return;
     const state = rnd(16), verifier = rnd(32);
     const challenge = b64u(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
@@ -121,12 +121,43 @@
       include_granted_scopes: 'true', state, code_challenge: challenge, code_challenge_method: 'S256', ...(hint ? { login_hint: hint } : {}),
     });
   }
-  // « + » / « Connecter un autre compte » / « Reconnecter » : direct vers Google (écran d'aide seulement la toute première fois)
-  function connect(hint) {
+  // ID client Google : mémorisé ici, ou dans le dépôt privé (data/google.json · data/google-client.json)
+  async function getClient() {
+    try { const c = JSON.parse(ls(K_CFG) || 'null'); if (c?.id && c?.secret) return c; } catch { /* rien */ }
+    for (const f of ['data/google.json', 'data/google-client.json']) {
+      try { const j = JSON.parse(b64d((await gh(`/repos/${cfg.repo}/contents/${f}`)).content)); if (j.client_id && j.client_secret) { const c = { id: j.client_id, secret: j.client_secret }; lsSet(K_CFG, JSON.stringify(c)); return c; } } catch { /* absent */ }
+    }
+    return null;
+  }
+  // Première fois sur cet appareil : on demande au cerveau l'ID client déjà enregistré (secret MUSE_GOOGLE), sans rien afficher d'autre qu'une attente
+  const wait = document.createElement('div'); wait.className = 'ggWait'; wait.hidden = true;
+  wait.innerHTML = '<div><span class="mspin"></span><b>Connexion à Google…</b><small>Préparation (une seule fois, ~30 s)</small></div>';
+  document.body.appendChild(wait);
+  async function prepare() {
+    wait.hidden = false;
+    try {
+      const iss = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: '⚙️ Muse — préparation Google', body: '<!--muse-setup-->' }) });
+      gh(`/repos/${cfg.repo}/issues/${iss.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {});
+      await gh(`/repos/${cfg.repo}/issues/${iss.number}/comments`, { method: 'POST', body: JSON.stringify({ body: '<!--muse-setup:google-->' }) });
+      const t0 = Date.now();
+      while (Date.now() - t0 < 150000) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try { const j = JSON.parse(b64d((await gh(`/repos/${cfg.repo}/contents/data/google-client.json`)).content)); if (j.client_id && j.client_secret) { const c = { id: j.client_id, secret: j.client_secret }; lsSet(K_CFG, JSON.stringify(c)); return c; } } catch { /* pas encore */ }
+        try { const cs = await gh(`/repos/${cfg.repo}/issues/${iss.number}/comments?per_page=10`); if (cs.some((x) => /<!--muse-setup:(none|error)-->/.test(x.body))) return null; } catch { /* réseau */ }
+      }
+      return null;
+    } catch { return null; } finally { wait.hidden = true; }
+  }
+  // « + » / « Connecter un autre compte » / « Reconnecter » : DIRECT vers l'écran de Google
+  let connecting = false;
+  async function connect(hint) {
     if (!cfg.repo || !cfg.token) { openCfg(); return; }
-    let c = null; try { c = JSON.parse(ls(K_CFG) || 'null'); } catch { /* rien */ }
-    if (c?.id && c?.secret) { toast('Ouverture de la connexion Google…'); go(hint); return; }
-    $d('#ggMsg').textContent = ''; dlg.showModal();
+    if (connecting) return; connecting = true;
+    try {
+      const c = (await getClient()) || (await prepare());
+      if (c) { go(hint, c); return; }
+      $d('#ggMsg').textContent = ''; dlg.showModal();   // seulement si aucun ID client Google n'a jamais été enregistré
+    } finally { setTimeout(() => { connecting = false; }, 1500); }
   }
   function reset() { lsSet(K_CFG, null); connect(); }
 
