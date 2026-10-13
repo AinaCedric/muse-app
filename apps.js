@@ -112,7 +112,8 @@
         const on = st.added.includes(a[0]); return `<div class="apItem">${icon(a)}<span class="apTx"><b>${h(a[1])}</b><small>${h(a[5])}</small></span><button type="button" class="apAdd ${on ? 'on' : ''}" data-id="${a[0]}" aria-label="${on ? 'Retirer' : 'Ajouter'} ${h(a[1])}">${ic(on ? 'check' : 'plus')}</button></div>`; }).join('')}</div>` : ''}
       ${built.length ? `<div class="apSecT">Intégrées à Muse</div><div class="apCard">${built.map((a) => `<div class="apItem">${icon(a)}<span class="apTx"><b>${h(a[1])}<em>intégrée</em></b><small>${h(a[5])}</small></span></div>`).join('')}</div>` : ''}
       ${!list.length && !built.length ? '<div class="pfEmpty">Aucune application ne correspond.</div>' : ''}
-      <p class="apNote">🔒 Banques, paiements, mobile money et gestionnaires de mots de passe ne sont jamais proposés : Muse n’y touche pas.</p>`;
+      <p class="apNote">🔒 Banques, paiements, mobile money et gestionnaires de mots de passe ne sont jamais proposés : Muse n’y touche pas.</p>
+      <p class="apNote">Google affiche « redirect_uri_mismatch » ? <button type="button" class="apLink" id="gReset">Changer l’ID client Google</button></p>`;
     const qi = $('#apQ');
     qi.oninput = () => { q = qi.value; const pos = qi.selectionStart; draw(); const n = $('#apQ'); n.focus(); try { n.setSelectionRange(pos, pos); } catch { /* rien */ } };
     $('#apAddedBtn').onclick = () => { view = 'added'; push(); draw(); };
@@ -120,6 +121,7 @@
     const chip = body.querySelector('.apChips button.on'); if (chip) chip.scrollIntoView({ inline: 'center', block: 'nearest' });
     body.querySelectorAll('.apAdd[data-id]').forEach((b) => (b.onclick = () => toggle(b.dataset.id)));
     body.querySelectorAll('.apItem[data-gid]').forEach((r) => (r.onclick = () => gOpen(r.dataset.gid)));
+    $('#gReset').onclick = () => window.museGoogle?.reset();
   }
   async function gOpen(id) {
     const g = window.museGoogle; if (!g) return;

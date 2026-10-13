@@ -103,11 +103,14 @@
       $d('#ggMsg').textContent = uris.includes(redirect()) ? 'Fichier lu ✓ : touche « Continuer vers Google ».' : `Fichier lu, mais l'adresse ${redirect()} n'est pas dans ses redirections : ajoute-la dans la console Google (étape 2), puis continue.`;
     } catch { $d('#ggMsg').textContent = 'Ce fichier n\'est pas le JSON d\'un ID client Google.'; }
   };
-  $d('#ggGo').onclick = () => {
+  $d('#ggGo').onclick = async () => {
     const id = $d('#ggId').value.trim(), secret = $d('#ggSecret').value.trim();
     if (!/\.apps\.googleusercontent\.com$/.test(id)) { $d('#ggMsg').textContent = 'Importe le fichier JSON, ou colle l\'ID client (il se termine par .apps.googleusercontent.com).'; return; }
     if (secret.length < 10) { $d('#ggMsg').textContent = 'Colle aussi le code secret client.'; return; }
-    lsSet(K_CFG, JSON.stringify({ id, secret })); dlg.close(); go();
+    lsSet(K_CFG, JSON.stringify({ id, secret })); dlg.close();
+    await (async () => { try { let sha; try { sha = (await gh(`/repos/${cfg.repo}/contents/data/google-client.json`)).sha; } catch { /* nouveau */ }
+      await gh(`/repos/${cfg.repo}/contents/data/google-client.json`, { method: 'PUT', body: JSON.stringify({ message: '🔑 Nouvel ID client Google', content: b64e(JSON.stringify({ client_id: id, client_secret: secret, from: 'appli' }, null, 2)), ...(sha ? { sha } : {}) }) }); } catch { /* facultatif */ } })();
+    go(null, { id, secret });
   };
 
   async function go(hint, c) {
@@ -159,7 +162,7 @@
       $d('#ggMsg').textContent = ''; dlg.showModal();   // seulement si aucun ID client Google n'a jamais été enregistré
     } finally { setTimeout(() => { connecting = false; }, 1500); }
   }
-  function reset() { lsSet(K_CFG, null); connect(); }
+  function reset() { lsSet(K_CFG, null); $d('#ggMsg').textContent = ''; dlg.showModal(); }
 
   async function disconnect(email) {
     try {
