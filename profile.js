@@ -209,6 +209,7 @@
     instr: openInstr,
     mem: () => $('#memBtn').click(),
     autos: () => { close(); $('#autoBtn').click(); },
+    apps: () => window.museApps?.open(),
     cfg: () => openCfg(),
     link: openLink,
     google: () => ask('Teste mon compte Google : dis-moi mon prochain rendez-vous et mon dernier e-mail reçu (expéditeur et sujet seulement).', 'perso'),
@@ -238,7 +239,7 @@
     sync(); mo = new MutationObserver(sync); mo.observe($('#status'), { childList: true, characterData: true, subtree: true });
     try { history.pushState({ museProfile: 1 }, ''); } catch { /* sans historique */ }
     $('#side').classList.remove('open'); $('#scrim').classList.remove('on');
-    linkVal(); drawTiles(); refresh(false); loadFiles(); autosCount();
+    linkVal(); drawTiles(); refresh(false); loadFiles(); autosCount(); window.museApps?.count();
   }
   function close(fromPop) {
     if (!isOpen) return;
@@ -251,6 +252,6 @@
   window.museProfile = { open, close };
   who.addEventListener('click', open);
   $('#pfBack').onclick = () => close();
-  addEventListener('popstate', () => { if (isOpen) close(true); });
+  addEventListener('popstate', () => { if (isOpen && !history.state?.museProfile && !history.state?.museApps) close(true); });
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen && !document.querySelector('dialog[open]')) close(); });
 })();
