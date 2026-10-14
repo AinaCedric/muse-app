@@ -309,3 +309,7 @@ input:focus,select:focus,dialog textarea:focus{box-shadow:0 0 0 4px color-mix(in
   #empty h1 .w{opacity:1;transform:none;filter:none}
   #aura i{animation:none!important}
 }
+
+/* ⚡ aperçu en direct */
+.m.streaming .cursor{display:inline-block;width:8px;height:1.05em;margin-left:3px;vertical-align:-.15em;border-radius:2px;background:linear-gradient(180deg,#7C6BFF,#F06AB0);animation:curBlink .9s steps(2) infinite}
+@keyframes curBlink{50%{opacity:0}}

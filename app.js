@@ -879,23 +879,30 @@ async function wait(n, since) {
   const my = ++pollId; busy = true; setSend('wait');
   let workMode; const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
   workMode = ordi || perso || phone; avatar(workMode ? 'working' : 'thinking'); let shown = label;
-  const bubble = add('bot', label, 'wait'); const t0 = Date.now(); let card = null;
+  const bubble = add('bot', label, 'wait'); const t0 = Date.now(); let card = null, sb = null;
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
     if (my !== pollId) return;
     // Après 60 s de réflexion, Muse passe en mode « travaille » (animation 3D + libellé)
     if (!workMode && Date.now() - t0 >= 60000) { workMode = true; if (!card) avatar('working'); if (shown === 'Muse réfléchit') shown = 'Muse travaille'; }
-    bubble.textContent = `${shown} · ${Math.round((Date.now() - t0) / 1000)} s`;
+    if (!sb) bubble.textContent = `${shown} · ${Math.round((Date.now() - t0) / 1000)} s`;
     try {
       const all = await fetchComments(n, since);
       const cs = all.filter((c) => (c.body.includes(REPLY) || c.body.includes(ERROR)) && !c.body.includes('<!--routed:stopped-->') && new Date(c.created_at) >= new Date(since));
+      // ⚡ Aperçu en direct : le texte s'écrit dans la bulle pendant que Muse répond
+      const stc = cs.length ? null : [...all].reverse().find((c) => c.body.startsWith('<!--muse-stream-->') && new Date(c.created_at) >= new Date(since));
+      if (stc) {
+        const tx = stc.body.slice(18).replace(/\[\[[^\]]*\]\]/g, '').replace(/\[\[[^\]]*$/, '').replace(/```[ \t]*muse-[\s\S]*$/, '').trim();
+        if (tx) { if (!sb) { sb = document.createElement('div'); sb.className = 'm bot streaming'; msgs.appendChild(sb); bubble.style.display = 'none'; avatar('thinking'); } if (sb._t !== tx) { sb._t = tx; sb.innerHTML = render(tx) + '<span class="cursor"></span>'; msgs.scrollTop = msgs.scrollHeight; } }
+      }
       const lv = cs.length ? null : liveOf(all);
       if (lv) { if (!card) { card = liveCard(); bubble.style.display = 'none'; avatar('working'); } liveUpdate(card, lv); }
       else if (card && !cs.length) { card.remove(); card = null; AP.done(); bubble.style.display = ''; avatar(workMode ? 'working' : 'thinking'); }
-      if (cs.length) { if (card) { card.remove(); AP.done(!cs.some((c) => c.body.includes(ERROR))); } bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
+      if (cs.length) { if (sb) { sb.remove(); sb = null; } if (card) { card.remove(); AP.done(!cs.some((c) => c.body.includes(ERROR))); } bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }
   if (my === pollId) {
+    if (sb) { sb.remove(); sb = null; }
     if (card) { card.remove(); AP.done(false); }
     if (Date.now() - t0 >= MAXW) { bubble.className = 'm bot err'; bubble.textContent = 'Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
     busy = false; setSend('idle'); loadList();
