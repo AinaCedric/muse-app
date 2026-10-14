@@ -256,7 +256,7 @@ class Bubble {
     private static String q(String s) { s = s == null ? "" : s.trim(); return s.length() > 28 ? s.substring(0, 27) + "…" : s; }
 
     /** Ce que Muse fait, en mots simples (jamais le texte tapé : il peut être privé). */
-    private static String phrase(String op, JSONObject c) {
+    static String phrase(String op, JSONObject c) {
         switch (op) {
             case "open_app": return "J'ouvre " + q(c.optString("app", "une appli")) + "…";
             case "screen": case "state": return "Je lis l'écran…";
@@ -344,4 +344,19 @@ class Bubble {
     }
 
     static boolean shown() { return v != null; }
+
+    /** Une image de la mascotte (pour l'écran bouclier). */
+    static Drawable mascot() {
+        try {
+            Drawable[] set = think != null ? think : idle;
+            if (set == null || set.length == 0 || set[0] == null) return null;
+            Drawable.ConstantState cs = set[0].getConstantState();
+            return cs != null ? cs.newDrawable() : set[0];
+        } catch (Throwable t) { return null; }
+    }
+
+    /** Petit message à côté de la bulle. */
+    static void note(final String s) {
+        H.post(new Runnable() { @Override public void run() { setLabel(s == null ? "" : s); } });
+    }
 }

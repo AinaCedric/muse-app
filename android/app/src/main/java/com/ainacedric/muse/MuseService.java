@@ -151,6 +151,7 @@ public class MuseService extends AccessibilityService {
     @Override
     public boolean onUnbind(Intent intent) {
         inst = null;
+        Shield.destroy();
         Bubble.hide(this);
         Bus.log("Service d'accessibilité arrêté");
         return super.onUnbind(intent);
@@ -229,6 +230,15 @@ public class MuseService extends AccessibilityService {
         if (x1 != x2 || y1 != y2) p.lineTo(x2, y2);
         GestureDescription.Builder b = new GestureDescription.Builder();
         b.addStroke(new GestureDescription.StrokeDescription(p, 0, Math.max(1, ms)));
+        Shield.pass(true);      // le bouclier laisse passer le geste de Muse…
+        try {
+            return gestureNow(b, ms);
+        } finally {
+            Shield.pass(false); // …puis avale de nouveau les touches de Cédric
+        }
+    }
+
+    private boolean gestureNow(GestureDescription.Builder b, long ms) throws Exception {
         final CountDownLatch l = new CountDownLatch(1);
         final boolean[] ok = {false};
         boolean sent = dispatchGesture(b.build(), new GestureResultCallback() {
@@ -496,7 +506,8 @@ public class MuseService extends AccessibilityService {
                 prep();
                 denyCheck();
                 Bubble.ghost(true);   // la mascotte ne doit pas apparaître sur la capture
-                try { return shot(c.optJSONObject("region")); } finally { Bubble.ghost(false); }
+                Shield.ghost(true);   // ni le bouclier
+                try { return shot(c.optJSONObject("region")); } finally { Shield.ghost(false); Bubble.ghost(false); }
             }
             case "tap": {
                 prep();

@@ -72,7 +72,9 @@ function render(text) {
   h = mdTables(h);
   h = h.replace(/\[\[TAG:([^\]]{1,30})\]\]/g, (_, t) => `<span class="tag ${TAG_CLS(t)}">${t}</span>`);
   h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/(^|[\s(])[*_]([^*_\n<>]{2,80})[*_](?=[\s.,;:!?)]|$)/g, '$1<i>$2</i>').replace(/(^|\n)# ([^\n]+)\n?/g, '$1<span class="h1">$2</span>').replace(/(^|\n)## ([^\n]+)\n?/g, '$1<span class="h2">$2</span>').replace(/(^|\n)#{3,4} ([^\n]+)/g, '$1<b>$2</b>');
-  h = h.replace(/(^|\n)[ \t]*[-*•][ \t]+([^\n]*)/g, '$1<span class="li">$2</span>').replace(/(<span class="li">[^\n]*<\/span>)\n/g, '$1');
+  h = h.replace(/(^|\n|(?<=<span class="h[12]">[^<\n]*<\/span>))[ \t]*[-*•][ \t]+([^\n]*)/g, '$1<span class="li">$2</span>').replace(/(<span class="li">[^\n]*<\/span>)\n/g, '$1');
+  // Mise en page : pas de lignes vides autour des blocs de code et avant les titres (leurs marges suffisent)
+  h = h.replace(/\n+(<pre>)/g, '$1').replace(/(<\/pre>)\n+/g, '$1').replace(/\n{2,}(<span class="h[12]">)/g, '\n$1');
   const srcs = [];
   h = h.replace(/\[\[SRC:([^\]]+)\]\]/g, (_, inner) => { srcs.push(inner); return `\u0000${srcs.length - 1}\u0000`; });
   h = h.replace(/\b(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');

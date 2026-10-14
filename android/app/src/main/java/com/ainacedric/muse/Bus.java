@@ -28,6 +28,7 @@ class Bus {
     static final LinkedList<String> LOG = new LinkedList<>();
     static volatile long activeUntil = 0;
     static volatile long lastPoll = 0;
+    static final String HANDED_BACK = "Cédric a repris la main sur son téléphone : ARRÊTE-TOI, ne touche plus à son écran, et dis-lui en une phrase que tu as arrêté (il pourra te le redemander).";
     static volatile int lastCode = 0;
     private static String etag = null;
     private static Thread loopT = null;
@@ -198,11 +199,24 @@ class Bus {
                     out = ping();
                 } else if (opName.equals("notify")) {
                     out = Notif.show(c, cmd);
+                } else if (opName.equals("handoff")) {
+                    Shield.handoff(c, cmd.optInt("seconds", 45));
+                    String msg = cmd.optString("msg", "");
+                    Bubble.note(msg.isEmpty() ? "À toi de jouer 👆" : msg);
+                    out = new JSONObject().put("handoff", true);
+                } else if (opName.equals("release")) {
+                    Shield.clearQuiet();
+                    Shield.end();
+                    out = new JSONObject().put("released", true);
                 } else if (opName.equals("location")) {
                     Bubble.act(opName, cmd); Bubble.done();
                     if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
                     out = Loc.op(c);
                 } else if (opName.equals("notifs") || opName.equals("notif_reply") || opName.equals("notif_open")) {
+                    if (opName.equals("notif_open")) {
+                        if (Shield.handedBack()) throw new Exception(HANDED_BACK);
+                        Shield.begin(c, Bubble.phrase(opName, cmd));
+                    }
                     Bubble.act(opName, cmd); Bubble.done();
                     if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
                     out = NotifWatch.op(c, cmd);
@@ -210,6 +224,10 @@ class Bus {
                     if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
                     MuseService s = MuseService.inst;
                     if (s == null) throw new Exception("Le service d'accessibilité de Muse est désactivé sur le téléphone : va dans Réglages → Accessibilité → Muse et réactive-le (Xiaomi le coupe parfois : active aussi « Démarrage automatique » et verrouille l'appli dans les récentes).");
+                    if (Shield.isUi(opName)) {
+                        if (Shield.handedBack()) throw new Exception(HANDED_BACK);
+                        Shield.begin(c, Bubble.phrase(opName, cmd));
+                    }
                     Bubble.act(opName, cmd);
                     boolean okOp = false;
                     try { out = s.exec(cmd); okOp = true; } finally { Bubble.done(okOp); }

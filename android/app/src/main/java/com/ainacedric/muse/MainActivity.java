@@ -28,7 +28,7 @@ import android.widget.Toast;
 /** Assistant de configuration : chaque réglage nécessaire, avec un bouton qui ouvre la bonne page Android. */
 public class MainActivity extends Activity {
     private LinearLayout root;
-    private Button wakeBtn, notifBtn;
+    private Button wakeBtn, notifBtn, shieldBtn;
     private TextView sLoc, sAuto, sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
@@ -167,6 +167,14 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(notifBtn);
+        shieldBtn = button("", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Store.setShield(MainActivity.this, !Store.shield(MainActivity.this));
+                refresh();
+            }
+        });
+        root.addView(shieldBtn);
 
         // 9. Automatisations
         sAuto = step(9, "Automatisations : surveiller les notifications", "Pour l'onglet ⚡ Automatisations de l'appli Muse : Muse repère les notifications que tu as choisies (ex. un message d'un contact) et agit toute seule. Touche le bouton, active « Muse » dans la liste et accepte. Si c'est grisé : bouton « infos de l'appli » de l'étape 2, ⋮ → « Autoriser les paramètres restreints ». Il faut aussi avoir collé le code Cerveau (étape 7).");
@@ -336,6 +344,7 @@ public class MainActivity extends Activity {
         mark(sAuto, NotifWatch.enabled(this) && Store.brainLinked(this));
         mark(sLoc, Loc.granted(this) && Loc.background(this));
         wakeBtn.setText(Store.wake(this) ? "🔕  Arrêter l'écoute de « Muse »" : "🗣️  Activer « Muse » à la voix");
+        shieldBtn.setText(Store.shield(this) ? "🛡️  Écran bouclier pendant que Muse agit : activé" : "🛡️  Écran bouclier : coupé (tu vois ce que fait Muse)");
         notifBtn.setText(Store.notify(this) ? "🔔  Notifications des réponses : activées" : "🔕  Notifications des réponses : coupées");
         mark(sAcc, accessibilityOn());
         mark(sOver, Settings.canDrawOverlays(this));
