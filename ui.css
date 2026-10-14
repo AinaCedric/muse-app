@@ -87,8 +87,8 @@ main{position:relative;z-index:1}
 #new:hover::before{opacity:1}
 #new:hover{border-color:transparent;transform:translateY(-1px);box-shadow:0 14px 36px rgba(124,107,255,.45)}
 #new kbd{margin-left:auto}
-#autoBtn{margin:0 12px 4px;border-radius:var(--r-md);color:var(--mut)}
-#autoBtn:hover,#autoBtn.on{background:color-mix(in srgb,var(--panel) 70%,transparent);border-color:var(--bd);color:var(--txt)}
+#autoBtn,#missBtn{margin:0 12px 4px;border-radius:var(--r-md);color:var(--mut)}
+#autoBtn:hover,#autoBtn.on,#missBtn:hover,#missBtn.on{background:color-mix(in srgb,var(--panel) 70%,transparent);border-color:var(--bd);color:var(--txt)}
 .sideSearch{display:flex;align-items:center;gap:8px;margin:8px 12px 2px;padding:0 10px;height:38px;border-radius:12px;background:color-mix(in srgb,var(--panel) 55%,transparent);border:1px solid var(--bd);color:var(--faint);transition:border-color .2s,background .2s}
 .sideSearch:focus-within{border-color:var(--acc);background:var(--panel);color:var(--acc)}
 .sideSearch svg{width:16px;height:16px}

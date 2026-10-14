@@ -358,9 +358,9 @@ textarea::placeholder{color:var(--faint)}
 @media(max-width:600px){.lb-p,.lb-n{top:auto;bottom:18px;margin:0}.lb-p{left:16px}.lb-n{right:16px}}
 
 /* Automatisations */
-#autoBtn{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:9px 14px;border-radius:18px;background:transparent;border:1px solid transparent;font-weight:500;text-align:left;color:var(--txt)}
-#autoBtn:hover,#autoBtn.on{background:var(--soft);border-color:var(--bd)}
-#autoBtn svg{width:17px;height:17px;color:var(--acc)}
+#autoBtn,#missBtn{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:9px 14px;border-radius:18px;background:transparent;border:1px solid transparent;font-weight:500;text-align:left;color:var(--txt)}
+#autoBtn:hover,#autoBtn.on,#missBtn:hover,#missBtn.on{background:var(--soft);border-color:var(--bd)}
+#autoBtn svg,#missBtn svg{width:17px;height:17px;color:var(--acc)}
 #autos{flex:1;overflow:auto;padding:26px 18px 40px}
 #autos[hidden]{display:none}
 main.autoview #msgs,main.autoview #pending,main.autoview #listen,main.autoview form{display:none}
@@ -642,6 +642,7 @@ a.apItem{text-decoration:none}
   <header>Muse</header>
   <button id="new"><span data-icon="edit"></span>Nouvelle discussion</button>
   <button id="autoBtn" type="button"></button>
+  <button id="missBtn" type="button"></button>
   <div class="sect">Discussions</div>
   <div id="list"></div>
   <footer>
@@ -741,6 +742,7 @@ a.apItem{text-decoration:none}
       <button type="button" class="pfRow" data-go="instr"><span data-icon="file"></span><span class="lab">Instructions<small>Comment Muse doit te répondre</small></span><span data-icon="right" class="chev"></span></button>
       <button type="button" class="pfRow" data-go="mem"><span data-icon="book"></span><span class="lab">Mémoire<small>Ce que Muse sait de toi</small></span><span data-icon="right" class="chev"></span></button>
       <button type="button" class="pfRow" data-go="autos"><span data-icon="bolt"></span><span class="lab">Automatisations<small>Réponses automatiques sur ton téléphone</small></span><span class="val" id="pfAutoN"></span><span data-icon="right" class="chev"></span></button>
+      <button type="button" class="pfRow" data-go="missions"><span data-icon="repeat"></span><span class="lab">Missions<small>Objectifs récurrents en tâche de fond</small></span><span data-icon="right" class="chev"></span></button>
       <button type="button" class="pfRow" data-go="apps"><span data-icon="cube"></span><span class="lab">Applications<small>Ce que Muse peut utiliser pour toi</small></span><span class="val" id="pfAppsN"></span><span data-icon="right"></span></button>
       <button type="button" class="pfRow" data-go="cfg"><span data-icon="gear"></span><span class="lab">Réglages<small>Connexion, voix, code du téléphone</small></span><span data-icon="right" class="chev"></span></button>
     </div>
@@ -851,6 +853,7 @@ a.apItem{text-decoration:none}
 <script src="./avatar.js"></script>
 <script src="./app.js"></script>
 <script src="./automations.js"></script>
+<script src="./missions.js"></script>
 <script src="./profile.js"></script>
 <script src="./google.js"></script>
 <script src="./apps.js"></script>

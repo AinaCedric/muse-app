@@ -209,6 +209,7 @@
     instr: openInstr,
     mem: () => $('#memBtn').click(),
     autos: () => { close(); $('#autoBtn').click(); },
+    missions: () => { close(); $('#missBtn').click(); },
     apps: () => window.museApps?.open(),
     cfg: () => openCfg(),
     link: openLink,
