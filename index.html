@@ -665,6 +665,7 @@ a.apItem{text-decoration:none}
         <option value="ordi">Agent (ordinateur virtuel)</option>
         <option value="phone">Téléphone</option>
       </select>
+      <button type="button" id="planBtn" class="planBtn"></button>
     </div>
     <div id="who" data-state="idle">
       <div id="avatarWrap"><span class="glow"></span><canvas id="avatar" width="88" height="88" title="Dis bonjour à Muse"></canvas></div>
@@ -677,6 +678,7 @@ a.apItem{text-decoration:none}
   <div id="pending" hidden></div>
   <div id="listen"><div id="wave"></div><b id="listenSt">Je t’écoute</b><small id="listenHint">Parle quand tu veux</small></div>
   <form id="f">
+    <div id="slash" hidden></div>
     <div id="plusWrap">
       <button type="button" class="ib" id="plusBtn" title="Joindre des fichiers, photos ou un dossier" aria-label="Joindre"><span data-icon="plus"></span></button>
       <div id="plusMenu" hidden>

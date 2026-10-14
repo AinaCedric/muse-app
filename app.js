@@ -708,7 +708,7 @@ function show(c) {
   if (c.body.startsWith('<!--muse-ctl-->')) return null;
   if (c.body.includes(LIVE)) return null;
   if (c.body.includes(REPLY)) {
-    let txt = strip(c.body), meta = '';
+    let txt = strip(c.body), meta = '', isPlan = /\[\[PLAN\]\]/.test(txt); txt = txt.replace(/\n?[ \t]*\[\[PLAN\]\][ \t]*/g, '');
     txt = txt.replace(/^[ \t]*🧭[^\n]*?Mode choisi\s*:\s*([^\n]*)$/m, (_, m) => { meta = m.replace(/[_*]/g, '').replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim(); return ''; }).trim();
     const d = add('bot', ''); const raws = [];
     splitUI(txt).forEach((seg) => {
@@ -726,6 +726,7 @@ function show(c) {
     d.dataset.raw = raws.filter(Boolean).join('\n\n').replace(/\[\[SRC:[^\]]*\]\]/g, '');
     if (meta) { const s = document.createElement('span'); s.className = 'meta'; s.textContent = 'Mode : ' + meta; d.appendChild(s); }
     addTts(d);
+    if (isPlan) { d.classList.add('isPlan'); planRow(d); }
     if (c.body.includes('<!--propose-->')) { // proposition d'une automatisation : validation en un clic (ou écris ta version)
       const row = document.createElement('div'); row.className = 'confirm';
       const mk = (label, cls, text) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost ' + cls; b.textContent = label; b.onclick = () => { row.remove(); input.value = text; send(); }; row.appendChild(b); };
@@ -748,6 +749,7 @@ async function openConv(n) {
   try {
     const cs = await fetchComments(n);
     cs.forEach(show);
+    [...msgs.querySelectorAll('.planRow')].forEach((r) => { if (r.parentElement !== msgs.lastElementChild) r.remove(); });
     const mode = [...cs].reverse().map((c) => (c.body.match(/<!--mode:(\w+)-->/) || [])[1]).find(Boolean);
     if (mode) modeSel.value = mode;
     const last = [...cs].reverse().find((c) => !c.body.includes(LIVE));
@@ -909,9 +911,58 @@ async function wait(n, since) {
   }
 }
 
+// ---- Commandes « / » et mode plan
+const SLASH = [['/plan', 'Voir le plan avant d’agir (ce message)'], ['/direct', 'Agir tout de suite, sans plan (ce message)'], ['/auto', 'Mode Auto'], ['/poly', 'Mode Polyvalent'], ['/dev', 'Mode Dev / Odoo'], ['/ordi', 'Mode Agent (ordinateur virtuel)'], ['/tel', 'Mode Téléphone'], ['/perso', 'Mode Agenda et e-mails'], ['/compagnon', 'Mode Compagnon'], ['/creation', 'Mode Création'], ['/nouveau', 'Nouvelle discussion'], ['/aide', 'Liste des commandes']];
+const SLASH_MODE = { auto: 'auto', poly: 'polyvalent', dev: 'dev', ordi: 'ordi', tel: 'phone', perso: 'perso', compagnon: 'compagnon', creation: 'creatif' };
+let planOnce = null, planState = 'auto';
+try { planState = ['off', 'auto', 'on'].includes(localStorage.getItem('muse_plan')) ? localStorage.getItem('muse_plan') : 'auto'; } catch {}
+function planBtnSet() {
+  const b = $('#planBtn'); if (!b) return;
+  b.dataset.s = planState;
+  b.textContent = planState === 'on' ? '📋 Plan : toujours' : planState === 'auto' ? '📋 Plan : auto' : '📋 Plan : non';
+  b.title = planState === 'on' ? 'Muse te montre son plan avant CHAQUE demande. Clique pour changer.' : planState === 'auto' ? 'Muse te montre son plan avant les actions longues ou risquées (envoyer, supprimer, payer…). Clique pour changer.' : 'Muse agit directement, sans plan. Clique pour changer.';
+}
+if ($('#planBtn')) { $('#planBtn').onclick = () => { planState = planState === 'auto' ? 'on' : planState === 'on' ? 'off' : 'auto'; try { localStorage.setItem('muse_plan', planState); } catch {} planBtnSet(); toast($('#planBtn').textContent); }; planBtnSet(); }
+const slashBox = $('#slash'); let slashI = 0, slashList = [];
+function slashHide() { if (slashBox) { slashBox.hidden = true; slashList = []; } }
+function slashShow() {
+  if (!slashBox) return;
+  const v = input.value.toLowerCase();
+  slashList = /^\/\w*$/.test(v) ? SLASH.filter(([c]) => c.startsWith(v)) : [];
+  if (!slashList.length) { slashHide(); return; }
+  slashI = Math.min(slashI, slashList.length - 1);
+  slashBox.innerHTML = ''; slashBox.hidden = false;
+  slashList.forEach(([c, d], i) => { const b = document.createElement('button'); b.type = 'button'; b.className = i === slashI ? 'on' : ''; b.innerHTML = `<b>${c}</b><span>${d}</span>`; b.onmousedown = (e) => { e.preventDefault(); slashPick(i); }; slashBox.appendChild(b); });
+}
+function slashPick(i) { const c = slashList[i]; if (!c) return; input.value = c[0] + ' '; slashHide(); input.focus(); input.dispatchEvent(new Event('input')); }
+input.addEventListener('input', () => { slashI = 0; slashShow(); });
+input.addEventListener('blur', () => setTimeout(slashHide, 120));
+input.addEventListener('keydown', (e) => {
+  if (!slashList.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); slashI = (slashI + (e.key === 'ArrowDown' ? 1 : -1) + slashList.length) % slashList.length; slashShow(); }
+  else if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && input.value.trim().toLowerCase() !== slashList[slashI][0])) { e.preventDefault(); e.stopImmediatePropagation(); slashPick(slashI); }
+  else if (e.key === 'Escape') slashHide();
+});
+function planRow(d) {   // boutons sous un plan de Muse
+  const row = document.createElement('div'); row.className = 'confirm planRow';
+  const mk = (label, cls, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost ' + cls; b.textContent = label; b.onclick = fn; row.appendChild(b); };
+  mk('✅ Lancer le plan', 'yes', () => { row.remove(); planOnce = 'go'; input.value = 'Oui, lance le plan.'; send(); });
+  mk('✏️ Modifier', '', () => { row.remove(); input.value = 'Modifie le plan : '; input.focus(); input.dispatchEvent(new Event('input')); });
+  mk('❌ Annuler', 'no', () => { row.remove(); toast('Plan annulé : rien n’a été fait'); });
+  d.appendChild(row);
+}
 async function send() {
-  const message = input.value.trim();
-  if ((!message && !pending.length) || busy || !need()) return;
+  let message = input.value.trim(), once = planOnce; planOnce = null;
+  const sm = message.match(/^\/(\w+)\s*([\s\S]*)$/);
+  if (sm) {
+    const cmd = sm[1].toLowerCase(), rest = sm[2].trim();
+    if (cmd === 'nouveau') { input.value = ''; slashHide(); newChat(); return; }
+    if (cmd === 'aide') { input.value = ''; slashHide(); add('bot', '**Commandes**\n' + SLASH.map(([c, d]) => `${c} — ${d}`).join('\n')); return; }
+    if (cmd === 'plan' || cmd === 'direct') { if (!rest) { toast(`/${cmd} + ta demande`); return; } once = cmd; message = rest; }
+    else if (SLASH_MODE[cmd]) { modeSel.value = SLASH_MODE[cmd]; modeSel.dispatchEvent(new Event('change')); toast('Mode : ' + modeSel.options[modeSel.selectedIndex].text); if (!rest) { input.value = ''; slashHide(); return; } message = rest; }
+  }
+  if ((!message && !pending.length) || busy || !need()) { if (once === 'go') planOnce = 'go'; return; }
+  slashHide(); msgs.querySelectorAll('.planRow').forEach((r) => r.remove());
   stopTts(); const files = pending.splice(0); renderPending();
   input.value = ''; input.style.height = 'auto'; busy = true; setSend('lock');
   let up = null, sent = false;
@@ -927,7 +978,7 @@ async function send() {
       markers = await upload(issueNo, files, (k) => { up.textContent = `Envoi des pièces jointes · ${k}/${files.length}`; });
       up.remove();
     }
-    const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->` }) });
+    const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->${once === 'go' ? '<!--plan-go-->' : once === 'direct' ? '' : once === 'plan' || planState === 'on' ? '<!--plan-->' : planState === 'auto' ? '<!--plan:auto-->' : ''}` }) });
     sent = true;
     wait(issueNo, c.created_at);
   } catch (e) {
