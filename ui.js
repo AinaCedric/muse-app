@@ -56,10 +56,21 @@
   if (side && list) {
     const box = document.createElement('label');
     box.className = 'sideSearch';
-    box.innerHTML = `${svg(IC.search, 1.8)}<input type="search" placeholder="Rechercher" aria-label="Rechercher une discussion" autocomplete="off"><kbd>${mod} K</kbd>`;
+    box.innerHTML = `${svg(IC.search, 1.8)}<input type="search" name="muse-conv-q" placeholder="Rechercher" aria-label="Rechercher une discussion" autocomplete="off" autocorrect="off" spellcheck="false" readonly data-lpignore="true" data-1p-ignore data-form-type="other"><kbd>${mod} K</kbd>`;
     const sect = $('.sect', side);
     side.insertBefore(box, sect || list);
     const si = $('input', box);
+    // Chrome prend ce champ pour un « nom d'utilisateur » (il y a un champ mot de passe dans les Réglages) et y colle le nom du dépôt.
+    // Parade : le champ reste en lecture seule (donc jamais pré-rempli) tant que Cédric ne clique pas dedans, et toute valeur collée par le navigateur est effacée.
+    const unlock = () => { si.readOnly = false; };
+    si.addEventListener('focus', unlock); si.addEventListener('pointerdown', unlock);
+    si.addEventListener('blur', () => { if (!si.value) si.readOnly = true; });
+    let typed = false;
+    si.addEventListener('keydown', () => { typed = true; });
+    si.addEventListener('paste', () => { typed = true; });
+    const wipe = () => { if (!typed && si.value) { si.value = ''; q = ''; apply(); } };
+    [100, 600, 1500, 3000].forEach((t) => setTimeout(wipe, t));
+    si.addEventListener('change', wipe);
     const apply = () => {
       const items = [...list.querySelectorAll('.item')];
       let n = 0;
