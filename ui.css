@@ -329,3 +329,19 @@ input:focus,select:focus,dialog textarea:focus{box-shadow:0 0 0 4px color-mix(in
 #slash button span{color:var(--mut);font-weight:400;font-size:13px}
 #slash button.on,#slash button:hover{background:color-mix(in srgb,var(--acc) 14%,transparent)}
 .m.isPlan{border-left:3px solid var(--acc)}
+
+/* 🧠 mémoire par thèmes */
+#dlg{width:min(620px,94vw)}
+#memUi h3{font:500 22px/1.2 var(--serif);margin:0 0 4px}
+#mmQ{width:100%;margin:6px 0 10px}
+.mmBody{max-height:min(46vh,420px);overflow:auto;margin:0 -6px;padding:0 6px}
+.mmSec h4{margin:14px 0 6px}
+.mmSec h4 span{font-weight:500;color:var(--faint);margin-left:4px}
+.mmItem{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:8px 12px;margin:4px 0;border-radius:12px;background:color-mix(in srgb,var(--panel) 70%,transparent);border:1px solid var(--bd);font-size:14.5px;line-height:1.45}
+.mmItem small{color:var(--faint)}
+.mmDel{flex:none;border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:14px;border-radius:8px;padding:2px 7px}
+.mmDel:hover{color:#e5484d;background:color-mix(in srgb,#e5484d 12%,transparent)}
+.mmAdd{display:flex;gap:8px;margin-top:14px}
+.mmAdd input{flex:1;min-width:0}
+.mmAdd select{flex:none;max-width:132px}
+@media(max-width:560px){.mmAdd{flex-wrap:wrap}.mmAdd select{max-width:none}}
