@@ -47,7 +47,18 @@ class Guard {
     static final String ADB = "adb shell pm grant com.ainacedric.muse android.permission.WRITE_SECURE_SETTINGS";
 
     /** Réactive l'accessibilité et l'accès aux notifications s'ils ont été coupés (nécessite WRITE_SECURE_SETTINGS). */
-    static void heal(Context c) {
+    static void heal(Context c) { heal(c, false); }
+
+    /** Muse a besoin de l'accessibilité TOUT DE SUITE : on la relance sans attendre les délais (force). Renvoie le service dès qu'il est branché (10 s max), sinon null. */
+    static MuseService revive(Context c) {
+        try { heal(c.getApplicationContext(), true); } catch (Throwable t) { Bus.log("Garde-fou : " + t.getMessage()); }
+        for (int i = 0; i < 20 && MuseService.inst == null; i++) {
+            try { Thread.sleep(500); } catch (InterruptedException e) { break; }
+        }
+        return MuseService.inst;
+    }
+
+    static void heal(Context c, boolean force) {
         if (!secure(c)) return;
         android.content.ContentResolver cr = c.getContentResolver();
         long now = System.currentTimeMillis();
@@ -60,7 +71,7 @@ class Guard {
             Bus.log("Garde-fou : accessibilité réactivée");
         } else if (MuseService.inst == null) {
             if (accOffSince == 0) accOffSince = now;
-            if (now - accOffSince > 45000 && now - lastAccToggle > 180000) {   // listée mais pas branchée : on la coupe et on la remet
+            if (force || (now - accOffSince > 45000 && now - lastAccToggle > 180000)) {   // listée mais pas branchée : on la coupe et on la remet
                 lastAccToggle = now;
                 String without = cur.replace(acc, "").replace("::", ":");
                 if (without.startsWith(":")) without = without.substring(1);

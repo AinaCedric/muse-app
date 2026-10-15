@@ -223,6 +223,7 @@ class Bus {
                 } else {
                     if (Store.paused(c)) throw new Exception("Muse est en pause sur le téléphone : désactive « Pause » dans l'appli Muse.");
                     MuseService s = MuseService.inst;
+                    if (s == null) s = Guard.revive(c);   // coupé par Android : on le réactive tout de suite (si la permission du garde-fou est donnée)
                     if (s == null) throw new Exception("Le service d'accessibilité de Muse est désactivé sur le téléphone : va dans Réglages → Accessibilité → Muse et réactive-le (Xiaomi le coupe parfois : active aussi « Démarrage automatique » et verrouille l'appli dans les récentes).");
                     if (Shield.isUi(opName)) {
                         if (Shield.handedBack()) throw new Exception(HANDED_BACK);
