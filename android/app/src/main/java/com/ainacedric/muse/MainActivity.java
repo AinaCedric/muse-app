@@ -28,7 +28,7 @@ import android.widget.Toast;
 /** Assistant de configuration : chaque réglage nécessaire, avec un bouton qui ouvre la bonne page Android. */
 public class MainActivity extends Activity {
     private LinearLayout root;
-    private Button wakeBtn, notifBtn, shieldBtn;
+    private Button wakeBtn, notifBtn, shieldBtn, fixBtn;
     private TextView sLoc, sAuto, sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         sv.addView(root);
         setContentView(sv);
 
-        root.addView(text("Muse · Téléphone  v2.7", 26, true, Color.parseColor("#5B3FD6")));
+        root.addView(text("Muse · Téléphone  v2.8", 26, true, Color.parseColor("#5B3FD6")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
@@ -167,6 +167,16 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(notifBtn);
+        fixBtn = button("🔧  Réparer l'écoute des notifications", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!NotifWatch.enabled(MainActivity.this)) { open(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")); return; }
+                NotifWatch.keep(MainActivity.this, true);
+                Toast.makeText(MainActivity.this, "Reconnexion demandée : patiente quelques secondes", Toast.LENGTH_SHORT).show();
+                refresh();
+            }
+        });
+        root.addView(fixBtn);
         shieldBtn = button("", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -367,6 +377,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        try { NotifWatch.keep(this); } catch (Throwable ignore) { }
         h.post(tick);
     }
 

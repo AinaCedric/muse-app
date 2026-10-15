@@ -63,6 +63,7 @@ public class NotifWatch extends NotificationListenerService {
     @Override
     public void onListenerConnected() {
         inst = this;
+        offSince = 0;
         state = "écoute active";
         Bus.log("Notifications : écoute active");
     }
@@ -74,10 +75,31 @@ public class NotifWatch extends NotificationListenerService {
         try { requestRebind(new ComponentName(this, NotifWatch.class)); } catch (Throwable ignore) { }
     }
 
-    /** Appelée régulièrement par la relève : redemande la connexion si Android (ou MIUI) l'a coupée. */
-    static void keep(Context c) {
-        if (inst != null || !enabled(c)) return;
-        try { NotificationListenerService.requestRebind(new ComponentName(c, NotifWatch.class)); } catch (Throwable ignore) { }
+    private static volatile long offSince = 0, lastToggle = 0;
+
+    /** Appelée régulièrement : si l'accès est accordé mais l'écoute coupée (Android / MIUI la lâche sans prévenir), on la relance. */
+    static void keep(Context c) { keep(c, false); }
+
+    static void keep(Context c, boolean force) {
+        if (!enabled(c)) return;
+        if (inst != null) { offSince = 0; return; }
+        long now = System.currentTimeMillis();
+        if (offSince == 0) offSince = now;
+        ComponentName cn = new ComponentName(c, NotifWatch.class);
+        try { NotificationListenerService.requestRebind(cn); } catch (Throwable ignore) { }
+        // requestRebind seul ne suffit pas toujours (surtout sur MIUI) : couper puis réactiver le composant force Android à se reconnecter.
+        if (force || (now - offSince > 40000 && now - lastToggle > 180000)) {
+            lastToggle = now;
+            try {
+                android.content.pm.PackageManager pm = c.getPackageManager();
+                pm.setComponentEnabledSetting(cn, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+                pm.setComponentEnabledSetting(cn, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+                state = "reconnexion demandée…";
+                Bus.log("Notifications : écoute relancée");
+            } catch (Throwable t) {
+                Bus.log("Notifications : relance impossible (" + t.getMessage() + ")");
+            }
+        }
     }
 
     static boolean enabled(Context c) {

@@ -132,7 +132,7 @@ class Bus {
             }
             boolean active = System.currentTimeMillis() < activeUntil;
             try { KeepAlive.refresh(app, active); } catch (Throwable ignore) { }
-            if (++rebind % 20 == 0) { try { NotifWatch.keep(app); } catch (Throwable ignore) { } }
+            if (++rebind % 5 == 0) { try { NotifWatch.keep(app); } catch (Throwable ignore) { } }
             try {
                 Thread.sleep(active ? 1000 : 6000);
             } catch (InterruptedException e) {
