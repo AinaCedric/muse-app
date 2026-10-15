@@ -18,6 +18,7 @@ import android.os.IBinder;
  */
 public class KeepAlive extends Service {
     private static volatile boolean running = false;
+    static boolean isRunning() { return running; }
     private static volatile boolean shownActive = false;
 
     @Override
@@ -29,6 +30,7 @@ public class KeepAlive extends Service {
         boolean wantMic = Store.wake(this) && checkSelfPermission("android.permission.RECORD_AUDIO") == PackageManager.PERMISSION_GRANTED;
         boolean mic = startFg(wantMic);
         Bus.ensureLoop(getApplicationContext());
+        try { Guard.check(getApplicationContext()); } catch (Throwable ignore) { }
         if (mic) Wake.start(this);
         else {
             Wake.stop();
@@ -67,8 +69,15 @@ public class KeepAlive extends Service {
     }
 
     @Override
+    public void onTaskRemoved(Intent rootIntent) {   // appli retirée des récents : on se fait relancer tout de suite
+        Guard.schedule(getApplicationContext(), 3000);
+        super.onTaskRemoved(rootIntent);
+    }
+
+    @Override
     public void onDestroy() {
         running = false;
+        Guard.schedule(getApplicationContext(), 3000);
         Wake.stop();
         super.onDestroy();
     }

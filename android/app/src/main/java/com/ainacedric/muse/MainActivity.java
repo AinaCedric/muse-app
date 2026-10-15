@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         sv.addView(root);
         setContentView(sv);
 
-        root.addView(text("Muse · Téléphone  v2.8", 26, true, Color.parseColor("#5B3FD6")));
+        root.addView(text("Muse · Téléphone  v2.9", 26, true, Color.parseColor("#5B3FD6")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
@@ -177,6 +177,16 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(fixBtn);
+        root.addView(text("Toujours branchée (une seule fois)", 17, true, Color.parseColor("#1a1a2e")));
+        root.addView(text("Pour que Muse reste connectée en permanence (Android coupe parfois l'accessibilité et les notifications), donne-lui une autorisation spéciale, une seule fois, depuis ton PC branché en USB avec le débogage USB activé : copie la commande ci-dessous, colle-la dans un terminal du PC, puis redémarre l'appli. Muse se réactivera alors toute seule, au démarrage du téléphone et dès que l'Internet revient.", 13, false, Color.parseColor("#555555")));
+        root.addView(button("📋  Copier la commande du PC (adb)", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("adb", Guard.ADB));
+                Toast.makeText(MainActivity.this, "Commande copiée", Toast.LENGTH_SHORT).show();
+            }
+        }));
         shieldBtn = button("", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -370,6 +380,7 @@ public class MainActivity extends Activity {
                 + "\nDernier toucher de la bulle : " + (MuseService.lastClick == 0 ? "aucun" : "il y a " + (System.currentTimeMillis() - MuseService.lastClick) / 1000 + " s")
                 + "\nMot d'activation : " + Wake.state
                 + "\nNotifications (automatisations) : " + (NotifWatch.enabled(this) ? NotifWatch.state : "❌ accès non accordé (étape 9)")
+                + "\nGarde-fou (réactivation automatique) : " + (Guard.secure(this) ? "✅ actif" : "⚠️ à autoriser une fois (voir plus bas)")
                 + "\nRelève des ordres : " + (ago < 0 ? "pas encore" : "il y a " + ago + " s (HTTP " + Bus.lastCode + ")"));
         logv.setText(Bus.logText());
     }
@@ -377,7 +388,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        try { NotifWatch.keep(this); } catch (Throwable ignore) { }
+        try { Guard.check(this); } catch (Throwable ignore) { }
         h.post(tick);
     }
 

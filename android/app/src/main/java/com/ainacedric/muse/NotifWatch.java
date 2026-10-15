@@ -73,6 +73,7 @@ public class NotifWatch extends NotificationListenerService {
         inst = null;
         state = "déconnecté (reconnexion…)";
         try { requestRebind(new ComponentName(this, NotifWatch.class)); } catch (Throwable ignore) { }
+        Guard.schedule(getApplicationContext(), 5000);
     }
 
     private static volatile long offSince = 0, lastToggle = 0;

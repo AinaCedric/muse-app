@@ -154,6 +154,7 @@ public class MuseService extends AccessibilityService {
         Shield.destroy();
         Bubble.hide(this);
         Bus.log("Service d'accessibilité arrêté");
+        Guard.schedule(getApplicationContext(), 5000);   // le garde-fou le réactive (si la permission a été donnée)
         return super.onUnbind(intent);
     }
 
