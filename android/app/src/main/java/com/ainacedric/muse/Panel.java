@@ -28,6 +28,9 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.Locale;
 
@@ -58,7 +61,11 @@ class Panel {
     private Wave wave;
     private TextView status, hint, answer;
     private Ico micBtn, spk;
-    private ScrollView answerScroll;
+    private ScrollView answerScroll, cardsScroll;
+    private LinearLayout cardsBox;
+    private View moodDot;
+    private int nCards = 0;
+    private static final String BRIEF = "__BRIEF__";
     private LinearLayout chipsRow;
     private Ask ask;
     private TextToSpeech tts;
@@ -186,6 +193,7 @@ class Panel {
         dg.setShape(GradientDrawable.OVAL);
         dg.setColor(ACC);
         dot.setBackground(dg);
+        moodDot = dot;
         LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(dp(8), dp(8));
         dl.leftMargin = dp(4);
         dot.setLayoutParams(dl);
@@ -275,6 +283,17 @@ class Panel {
         answerScroll.setVisibility(View.GONE);
         card.addView(answerScroll);
 
+        // 🪟 Cartes visuelles de Muse Live (météo, agenda, mails…) : le détail que la voix ne lit pas
+        cardsScroll = new ScrollView(svc);
+        cardsBox = new LinearLayout(svc);
+        cardsBox.setOrientation(LinearLayout.VERTICAL);
+        cardsScroll.addView(cardsBox);
+        LinearLayout.LayoutParams csl = new LinearLayout.LayoutParams(-1, -2);
+        csl.topMargin = dp(8);
+        cardsScroll.setLayoutParams(csl);
+        cardsScroll.setVisibility(View.GONE);
+        card.addView(cardsScroll);
+
         // 3 actions rapides
         LinearLayout chips = new LinearLayout(svc);
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
@@ -291,10 +310,11 @@ class Panel {
             @Override
             public void onClick(View v) { writeMessage(); }
         }), lpw(0, -2, 1f));
-        chips.addView(chip("Programme", "du jour", new View.OnClickListener() {
+        chips.addView(chip("Briefing", "du jour", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                ask("Qu'ai-je à mon agenda aujourd'hui ? Ajoute les e-mails importants non lus, en bref.", "auto");
+                if (Store.liveLinked(svc) && Store.speak(svc) && !liveFailed) { convo = true; askLive(BRIEF); }
+                else ask("Qu'ai-je à mon agenda aujourd'hui ? Ajoute la météo à Antananarivo et les e-mails importants non lus, en bref.", "auto");
             }
         }), lpw(0, -2, 1f));
         card.addView(chips);
@@ -482,15 +502,21 @@ class Panel {
         chipsRow.setVisibility(View.GONE);
         answerScroll.setVisibility(View.GONE);
         hint.setVisibility(View.VISIBLE);
-        hint.setText("« " + (q.length() > 90 ? q.substring(0, 90) + "…" : q) + " »");
+        hint.setText(BRIEF.equals(q) ? "☀️ Briefing du jour" : "« " + (q.length() > 90 ? q.substring(0, 90) + "…" : q) + " »");
         status.setText("Muse réfléchit…");
         liveText.setLength(0);
+        clearCards();
+        setMood("");
+        Wake.prepare(svc);
         liveBusy = true;
         if (live == null) {
             live = new Live(svc, new Live.Cb() {
                 @Override public void ready() { }
                 @Override public void thinking() { if (!closed) status.setText("Muse réfléchit…"); }
-                @Override public void speaking() { if (closed) return; speaking = true; status.setText("Muse parle"); }
+                @Override public void speaking() { if (closed) return; speaking = true; status.setText("Muse parle"); Wake.guard(true, halt); }
+                @Override public void card(JSONObject c) { if (!closed) addCard(c); }
+                @Override public void mood(String m) { if (!closed) setMood(m); }
+                @Override public void tool(String label) { if (!closed && !label.isEmpty()) { status.setText(label + "…"); hint.setVisibility(View.GONE); } }
                 @Override public void delta(String t) {
                     if (closed) return;
                     liveText.append(t);
@@ -503,6 +529,7 @@ class Panel {
                 @Override public void finished() {
                     if (closed) return;
                     speaking = false; liveBusy = false;
+                    Wake.guard(false, null);
                     lastSpeech = liveText.toString().trim();
                     status.setText("À toi");
                     if (convo) h.postDelayed(relisten, 350);
@@ -511,13 +538,15 @@ class Panel {
                 @Override public void error(String msg) {
                     if (closed) return;
                     liveBusy = false; speaking = false;
+                    Wake.guard(false, null);
                     Bus.log("Live : " + msg);
                     if (live != null) { live.close(); live = null; }
                     liveFailed = true;   // on retombe sur le chemin habituel (GitHub) pour cette fois
                     status.setText("Live indisponible");
                     hint.setVisibility(View.VISIBLE);
                     hint.setText(msg);
-                    ask(q, "auto");
+                    if (BRIEF.equals(q)) ask("Qu'ai-je à mon agenda aujourd'hui ? Ajoute la météo à Antananarivo et les e-mails importants non lus, en bref.", "auto");
+                    else ask(q, "auto");
                 }
             });
             live.connect();
@@ -527,9 +556,166 @@ class Panel {
 
     private void sendWhenOpen(final String q, final int tries) {
         if (closed || live == null) return;
-        if (live.isOpen()) { live.say(q); return; }
+        if (live.isOpen()) { if (BRIEF.equals(q)) live.brief(); else live.say(q); return; }
         if (tries > 40) return;   // ~8 s : l'erreur de connexion prend le relais
         h.postDelayed(new Runnable() { @Override public void run() { sendWhenOpen(q, tries + 1); } }, 200);
+    }
+
+    // ✋ « Attends » / « Stop » pendant que Muse parle : elle se tait et le micro se rouvre
+    private final Runnable halt = new Runnable() {
+        @Override public void run() {
+            Wake.guard(false, null);
+            if (closed || live == null || !(speaking || liveBusy)) return;
+            live.stop(); speaking = false; liveBusy = false;
+            status.setText("Je t'écoute");
+            convo = true;
+            h.postDelayed(relisten, 300);
+        }
+    };
+
+    private void setMood(String m) {
+        int c;
+        switch (m == null ? "" : m) {
+            case "joie": c = Color.rgb(255, 184, 48); break;
+            case "alerte": c = Color.rgb(240, 110, 50); break;
+            case "triste": c = Color.rgb(90, 140, 240); break;
+            case "surprise": c = Color.rgb(236, 90, 170); break;
+            case "calme": c = Color.rgb(60, 190, 150); break;
+            default: c = ACC;
+        }
+        try {
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setColor(c);
+            moodDot.setBackground(g);
+            int sz = m == null || m.isEmpty() ? dp(8) : dp(12);
+            moodDot.getLayoutParams().width = sz; moodDot.getLayoutParams().height = sz; moodDot.requestLayout();
+        } catch (Throwable ignore) { }
+    }
+
+    private void clearCards() {
+        nCards = 0;
+        if (cardsBox == null) return;
+        cardsBox.removeAllViews();
+        cardsScroll.setVisibility(View.GONE);
+    }
+
+    private void addCard(JSONObject c) {
+        try {
+            if (nCards >= 3) return;
+            nCards++;
+            LinearLayout box = new LinearLayout(svc);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setBackground(shape(CARD, 22, LINE));
+            box.setPadding(dp(14), dp(12), dp(14), dp(12));
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
+            if (nCards > 1) bl.topMargin = dp(8);
+            box.setLayoutParams(bl);
+            String icon = c.optString("icon"), title = c.optString("title", "Muse"), sub = c.optString("sub"), big = c.optString("big");
+            TextView head = label((icon.isEmpty() ? "" : icon + "  ") + title, 16, INK, true);
+            box.addView(head);
+            if (!sub.isEmpty()) box.addView(label(sub, 13, GREY, false));
+            if (!big.isEmpty()) {
+                TextView b = label(big, 34, ACC, true);
+                b.setPadding(0, dp(2), 0, dp(2));
+                box.addView(b);
+            }
+            JSONArray st = c.optJSONArray("stats");
+            if (st != null && st.length() > 0) {
+                LinearLayout row = null;
+                for (int i = 0; i < Math.min(6, st.length()); i++) {
+                    if (i % 3 == 0) {
+                        row = new LinearLayout(svc);
+                        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+                        rl.topMargin = dp(6);
+                        row.setLayoutParams(rl);
+                        box.addView(row);
+                    }
+                    JSONObject x = st.optJSONObject(i);
+                    if (x == null) continue;
+                    TextView t = label(x.optString("v") + "\n" + x.optString("k"), 14, INK, true);
+                    t.setPadding(dp(10), dp(6), dp(10), dp(6));
+                    t.setBackground(shape(SOFT, 12, 0));
+                    LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, -2, 1f);
+                    tl.rightMargin = dp(6);
+                    t.setLayoutParams(tl);
+                    row.addView(t);
+                }
+            }
+            JSONArray it = c.optJSONArray("items");
+            if (it != null) for (int i = 0; i < Math.min(6, it.length()); i++) {
+                JSONObject x = it.optJSONObject(i);
+                if (x == null || x.optString("t").isEmpty()) continue;
+                LinearLayout row = new LinearLayout(svc);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, dp(7), 0, dp(1));
+                if (!x.optString("icon").isEmpty()) {
+                    TextView ic = label(x.optString("icon"), 17, INK, false);
+                    ic.setPadding(0, 0, dp(10), 0);
+                    row.addView(ic);
+                }
+                TextView mid = label(x.optString("t"), 14, INK, false);
+                if (!x.optString("s").isEmpty()) mid.append("\n" + x.optString("s"));
+                row.addView(mid, lpw(0, -2, 1f));
+                if (!x.optString("v").isEmpty()) {
+                    TextView v = label(x.optString("v"), 13, ACC, true);
+                    v.setPadding(dp(8), 0, 0, 0);
+                    row.addView(v);
+                }
+                final String url = x.optString("url");
+                if (url.startsWith("http")) {
+                    mid.setTextColor(ACC);
+                    row.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            try {
+                                Intent i = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url));
+                                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                svc.startActivity(i);
+                                close();
+                            } catch (Throwable ignore) { }
+                        }
+                    });
+                }
+                box.addView(row);
+            }
+            JSONArray ac = c.optJSONArray("actions");
+            if (ac != null && ac.length() > 0) {
+                LinearLayout row = new LinearLayout(svc);
+                LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+                rl.topMargin = dp(10);
+                row.setLayoutParams(rl);
+                for (int i = 0; i < Math.min(3, ac.length()); i++) {
+                    JSONObject x = ac.optJSONObject(i);
+                    if (x == null) continue;
+                    final String say = x.optString("say"), lab = x.optString("label");
+                    if (say.isEmpty() || lab.isEmpty()) continue;
+                    String l = lab.toLowerCase(Locale.FRANCE);
+                    boolean ghost = i > 0 && (l.contains("annul") || l.contains("non") || l.contains("plus tard"));
+                    TextView b = label(lab, 14, ghost ? INK : Color.WHITE, true);
+                    b.setGravity(Gravity.CENTER);
+                    b.setPadding(dp(14), dp(8), dp(14), dp(8));
+                    b.setBackground(shape(ghost ? SOFT : ACC, 18, 0));
+                    LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-2, -2);
+                    pl.rightMargin = dp(8);
+                    b.setLayoutParams(pl);
+                    b.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) { convo = true; askLive(say); }
+                    });
+                    row.addView(b);
+                }
+                box.addView(row);
+            }
+            cardsBox.addView(box);
+            cardsScroll.setVisibility(View.VISIBLE);
+            // panneau compact : la réponse parlée se réduit quand une carte arrive
+            answerScroll.getLayoutParams().height = -2;
+            answerScroll.requestLayout();
+            int sh = svc.getResources().getDisplayMetrics().heightPixels;
+            cardsScroll.getLayoutParams().height = nCards > 1 || (it != null && it.length() > 3) ? Math.min(dp(320), sh / 2) : -2;
+            cardsScroll.requestLayout();
+        } catch (Throwable t) {
+            Bus.log("Carte : " + t.getMessage());
+        }
     }
 
     private void showReply(String raw) {
@@ -555,6 +741,7 @@ class Panel {
         if (ask != null) ask.cancel();
         stopSpeaking();
         Ask.forgetConversation(svc);
+        clearCards();
         answerScroll.setVisibility(View.GONE);
         hint.setVisibility(View.VISIBLE);
         chipsRow.setVisibility(View.VISIBLE);
@@ -646,6 +833,7 @@ class Panel {
     }
 
     private void stopSpeaking() {
+        Wake.guard(false, null);
         try { if (live != null) live.stop(); } catch (Throwable ignore) { }
         pendingSpeech = null;
         speaking = false;
@@ -664,6 +852,7 @@ class Panel {
         closed = true;
         if (ask != null) ask.cancel();
         try { if (live != null) { live.close(); live = null; } } catch (Throwable ignore) { }
+        Wake.guard(false, null);
         stopListening();
         speaking = false;
         try { if (tts != null) { tts.stop(); tts.shutdown(); } } catch (Throwable ignore) { }

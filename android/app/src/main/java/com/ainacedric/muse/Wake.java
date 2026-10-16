@@ -108,6 +108,66 @@ class Wake {
         });
     }
 
+    // ---------- ✋ Garde pendant que Muse parle : on n'écoute que « attends / stop / arrête / chut / pause » pour la couper
+    private static SpeechService gss;
+    private static Runnable onHalt;
+    private static final Pattern HALT = Pattern.compile("^(attends|attend|stop|arrête|arrete|chut|pause)$");
+
+    /** Prépare le modèle vocal (sans écouter) : utile pour la garde même si le mot d'activation est coupé. */
+    static synchronized void prepare(Context c) {
+        if (app == null) app = c.getApplicationContext();
+        if (model != null || loading) return;
+        if (app.checkSelfPermission("android.permission.RECORD_AUDIO") != PackageManager.PERMISSION_GRANTED) return;
+        loading = true;
+        StorageService.unpack(app, "model-fr", "model",
+                new StorageService.Callback<Model>() {
+                    @Override public void onComplete(Model m) { synchronized (Wake.class) { model = m; loading = false; } }
+                },
+                new StorageService.Callback<IOException>() {
+                    @Override public void onComplete(IOException e) { synchronized (Wake.class) { loading = false; } Bus.log("Garde vocale : modèle introuvable (" + e.getMessage() + ")"); }
+                });
+    }
+
+    static synchronized void guard(boolean on, Runnable halt) {
+        if (!on) {
+            onHalt = null;
+            if (gss != null) {
+                try { gss.stop(); } catch (Throwable ignore) { }
+                try { gss.shutdown(); } catch (Throwable ignore) { }
+                gss = null;
+            }
+            return;
+        }
+        onHalt = halt;
+        if (gss != null) return;
+        if (model == null) { if (app != null) prepare(app); return; }
+        try {
+            Recognizer r = new Recognizer(model, 16000.0f, "[\"attends\", \"stop\", \"arrête\", \"chut\", \"pause\", \"[unk]\"]");
+            gss = new SpeechService(r, 16000.0f);
+            gss.startListening(new RecognitionListener() {
+                @Override public void onPartialResult(String h) { }
+                @Override public void onResult(String h) { halted(h); }
+                @Override public void onFinalResult(String h) { }
+                @Override public void onError(Exception e) { Bus.log("Garde vocale : " + e.getMessage()); guard(false, null); }
+                @Override public void onTimeout() { }
+            });
+        } catch (Throwable t) {
+            Bus.log("Garde vocale : " + t.getMessage());
+            gss = null;
+        }
+    }
+
+    private static void halted(String json) {
+        if (json == null) return;
+        Matcher m = TXT.matcher(json);
+        if (!m.find()) return;
+        String t = m.group(1).trim();
+        if (!HALT.matcher(t).matches()) return;
+        final Runnable r = onHalt;
+        Bus.log("« " + t + " » : Muse se tait");
+        if (r != null) ui.post(r);
+    }
+
     /** Le panneau prend le micro (pause) ou le rend (reprise). */
     static synchronized void pause(boolean p) {
         paused = p;

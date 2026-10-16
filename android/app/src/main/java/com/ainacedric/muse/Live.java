@@ -31,6 +31,9 @@ class Live {
         void finished();           // plus rien à dire : on peut réécouter
         void fallback(String t);   // le PC n'a pas de voix neuronale : lire avec la voix du téléphone
         void error(String msg);
+        void card(JSONObject c);   // carte visuelle (météo, agenda, mails…) à afficher à côté de la réponse
+        void mood(String m);       // humeur de la réponse : joie, pense, alerte, triste, surprise, calme
+        void tool(String label);   // Muse utilise un outil (« 📧 Je lis tes mails »)
     }
 
     private final Context ctx;
@@ -67,6 +70,12 @@ class Live {
     void say(String text) {
         gen++; flush(); doneSeen = false; pending = 0;
         if (ws != null) ws.send("{\"type\":\"say\",\"text\":" + JSONObject.quote(text) + "}");
+    }
+
+    /** Briefing du jour (météo, agenda, mails), préparé par le PC. */
+    void brief() {
+        gen++; flush(); doneSeen = false; pending = 0;
+        if (ws != null) ws.send("{\"type\":\"brief\"}");
     }
 
     /** Coupe Muse (elle se tait tout de suite). */
@@ -108,6 +117,13 @@ class Live {
             }
             case "speak": { final String s = m.optString("text"); main.post(new Runnable() { @Override public void run() { cb.fallback(s); } }); break; }
             case "done": doneSeen = true; maybeFinished(); break;
+            case "card": {
+                final JSONObject c = m.optJSONObject("card");
+                if (c != null) main.post(new Runnable() { @Override public void run() { cb.card(c); } });
+                break;
+            }
+            case "mood": { final String md = m.optString("m"); main.post(new Runnable() { @Override public void run() { cb.mood(md); } }); break; }
+            case "tool": { final String lb = m.optString("label"); main.post(new Runnable() { @Override public void run() { cb.tool(lb); } }); break; }
             case "error": { final String e = m.optString("msg", "Erreur"); main.post(new Runnable() { @Override public void run() { cb.error(e); } }); break; }
             default: break;
         }
