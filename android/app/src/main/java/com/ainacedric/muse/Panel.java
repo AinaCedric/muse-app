@@ -68,6 +68,8 @@ class Panel {
     private String pendingSpeech = null, lastSpeech = "";
     private EditText field;
     private SpeechRecognizer sr;
+    private Live live;
+    private boolean liveBusy = false;
     private boolean listening = false, closed = false, focusable = false;
     private boolean convo = false;   // conversation à la voix : après chaque réponse lue, le micro se rouvre
     private final Runnable relisten = new Runnable() {
@@ -90,9 +92,15 @@ class Panel {
         if (cur != null) { cur.close(); return; }
         try {
             s.snapshot();                       // mémorise l'écran AVANT que le panneau n'apparaisse (pour « Résumer cet écran »)
-            Panel p = new Panel(s);
+            final Panel p = new Panel(s);
             p.show();
             cur = p;
+            if (Store.liveLinked(s)) {
+                p.convo = true;
+                p.h.postDelayed(new Runnable() {
+                    @Override public void run() { if (!p.closed && !p.listening) p.startListening(); }
+                }, 450);
+            }
         } catch (Throwable t) {
             cur = null;
             s.failOpen(t);
@@ -433,6 +441,7 @@ class Panel {
     private void ask(String q, String mode) {
         stopListening();
         stopSpeaking();
+        if (Store.liveLinked(svc) && "auto".equals(mode) && Store.speak(svc) && !liveFailed) { askLive(q); return; }
         if (!Store.brainLinked(svc)) {
             status.setText("Ouvert dans le chat");
             hint.setText("Pour voir et entendre la réponse ici : colle le code « Cerveau » dans l'appli Muse Tél. (étape 7).");
@@ -459,6 +468,68 @@ class Panel {
             }
         });
         ask.start(q, mode);
+    }
+
+
+    // ---------- Muse Live : réponse à voix haute depuis le PC (voix neuronale, phrase par phrase)
+    private boolean liveFailed = false;
+    private final StringBuilder liveText = new StringBuilder();
+
+    private void askLive(final String q) {
+        stopListening();
+        stopSpeaking();
+        field.setText("");
+        chipsRow.setVisibility(View.GONE);
+        answerScroll.setVisibility(View.GONE);
+        hint.setVisibility(View.VISIBLE);
+        hint.setText("« " + (q.length() > 90 ? q.substring(0, 90) + "…" : q) + " »");
+        status.setText("Muse réfléchit…");
+        liveText.setLength(0);
+        liveBusy = true;
+        if (live == null) {
+            live = new Live(svc, new Live.Cb() {
+                @Override public void ready() { }
+                @Override public void thinking() { if (!closed) status.setText("Muse réfléchit…"); }
+                @Override public void speaking() { if (closed) return; speaking = true; status.setText("Muse parle"); }
+                @Override public void delta(String t) {
+                    if (closed) return;
+                    liveText.append(t);
+                    hint.setVisibility(View.GONE);
+                    answer.setText(liveText.toString().trim());
+                    answerScroll.setVisibility(View.VISIBLE);
+                    answerScroll.getLayoutParams().height = liveText.length() < 140 ? -2 : dp(190);
+                    answerScroll.requestLayout();
+                }
+                @Override public void finished() {
+                    if (closed) return;
+                    speaking = false; liveBusy = false;
+                    lastSpeech = liveText.toString().trim();
+                    status.setText("À toi");
+                    if (convo) h.postDelayed(relisten, 350);
+                }
+                @Override public void fallback(String t) { if (!closed) speak(t); }
+                @Override public void error(String msg) {
+                    if (closed) return;
+                    liveBusy = false; speaking = false;
+                    Bus.log("Live : " + msg);
+                    if (live != null) { live.close(); live = null; }
+                    liveFailed = true;   // on retombe sur le chemin habituel (GitHub) pour cette fois
+                    status.setText("Live indisponible");
+                    hint.setVisibility(View.VISIBLE);
+                    hint.setText(msg);
+                    ask(q, "auto");
+                }
+            });
+            live.connect();
+        }
+        sendWhenOpen(q, 0);
+    }
+
+    private void sendWhenOpen(final String q, final int tries) {
+        if (closed || live == null) return;
+        if (live.isOpen()) { live.say(q); return; }
+        if (tries > 40) return;   // ~8 s : l'erreur de connexion prend le relais
+        h.postDelayed(new Runnable() { @Override public void run() { sendWhenOpen(q, tries + 1); } }, 200);
     }
 
     private void showReply(String raw) {
@@ -575,6 +646,7 @@ class Panel {
     }
 
     private void stopSpeaking() {
+        try { if (live != null) live.stop(); } catch (Throwable ignore) { }
         pendingSpeech = null;
         speaking = false;
         try { if (tts != null && ttsReady) tts.stop(); } catch (Throwable ignore) { }
@@ -591,6 +663,7 @@ class Panel {
         if (closed) return;
         closed = true;
         if (ask != null) ask.cancel();
+        try { if (live != null) { live.close(); live = null; } } catch (Throwable ignore) { }
         stopListening();
         speaking = false;
         try { if (tts != null) { tts.stop(); tts.shutdown(); } } catch (Throwable ignore) { }
@@ -603,6 +676,7 @@ class Panel {
 
     // ---------- Voix
     private void toggleMic() {
+        if (live != null && (speaking || liveBusy)) { live.stop(); speaking = false; liveBusy = false; status.setText("À toi"); convo = true; startListening(); return; }
         if (listening) { convo = false; stopListening(); status.setText("Touche le micro pour parler"); return; }
         convo = true;      // parler au micro = conversation à la voix (réponse lue, puis le micro se rouvre)
         startListening();

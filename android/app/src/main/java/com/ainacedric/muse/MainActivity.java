@@ -28,7 +28,7 @@ import android.widget.Toast;
 /** Assistant de configuration : chaque réglage nécessaire, avec un bouton qui ouvre la bonne page Android. */
 public class MainActivity extends Activity {
     private LinearLayout root;
-    private Button wakeBtn, notifBtn, shieldBtn, fixBtn, pinBtn;
+    private Button wakeBtn, notifBtn, shieldBtn, fixBtn, pinBtn, liveBtn;
     private TextView sLoc, sAuto, sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         sv.addView(root);
         setContentView(sv);
 
-        root.addView(text("Muse · Téléphone  v2.10", 26, true, Color.parseColor("#5B3FD6")));
+        root.addView(text("Muse · Téléphone  v2.11", 26, true, Color.parseColor("#5B3FD6")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
@@ -177,6 +177,30 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(fixBtn);
+        root.addView(text("Muse Live (voix du PC)", 17, true, Color.parseColor("#1a1a2e")));
+        root.addView(text("Touche la bulle Muse : elle t'écoute et te répond à voix haute, avec la voix neuronale de ton PC. Colle ici le code « MUSEV… » affiché par pc/voice-setup.sh, et garde l'appli Tailscale connectée sur ce téléphone.", 13, false, Color.parseColor("#555555")));
+        liveBtn = button("🎙️  Code Live", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final android.widget.EditText in = new android.widget.EditText(MainActivity.this);
+                in.setHint("MUSEV.…");
+                in.setSingleLine(true);
+                android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Code Live").setView(in)
+                        .setPositiveButton("Enregistrer", new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(android.content.DialogInterface d, int w) {
+                                try { Store.linkLive(MainActivity.this, in.getText().toString()); Toast.makeText(MainActivity.this, "Muse Live enregistré", Toast.LENGTH_SHORT).show(); }
+                                catch (Exception e) { Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_LONG).show(); }
+                                refresh();
+                            }
+                        }).setNegativeButton("Annuler", null);
+                if (Store.liveLinked(MainActivity.this)) b.setNeutralButton("Effacer", new android.content.DialogInterface.OnClickListener() {
+                    @Override public void onClick(android.content.DialogInterface d, int w) { Store.clearLive(MainActivity.this); refresh(); }
+                });
+                b.show();
+            }
+        });
+        root.addView(liveBtn);
         root.addView(text("Écran verrouillé", 17, true, Color.parseColor("#1a1a2e")));
         root.addView(text("Pour travailler même quand l'écran est verrouillé (lire un reel, ouvrir une conversation), Muse peut saisir ton code à ta place. Le code est chiffré dans la puce de sécurité du téléphone et ne sort JAMAIS d'ici. Muse reverrouille l'écran 1 minute après avoir fini. Code à chiffres uniquement (pas de schéma).", 13, false, Color.parseColor("#555555")));
         pinBtn = button("🔐  Code de déverrouillage", new View.OnClickListener() {
@@ -387,6 +411,7 @@ public class MainActivity extends Activity {
         mark(sWake, Store.wake(this));
         mark(sAuto, NotifWatch.enabled(this) && Store.brainLinked(this));
         mark(sLoc, Loc.granted(this) && Loc.background(this));
+        liveBtn.setText(Store.liveLinked(this) ? "🎙️  Live enregistré ✅ (modifier / effacer)" : "🎙️  Code Live");
         pinBtn.setText(Vault.has(this) ? "🔐  Code enregistré ✅ (modifier / effacer)" : "🔐  Code de déverrouillage");
         wakeBtn.setText(Store.wake(this) ? "🔕  Arrêter l'écoute de « Muse »" : "🗣️  Activer « Muse » à la voix");
         shieldBtn.setText(Store.shield(this) ? "🛡️  Écran bouclier pendant que Muse agit : activé" : "🛡️  Écran bouclier : coupé (tu vois ce que fait Muse)");

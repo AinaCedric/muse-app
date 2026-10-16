@@ -33,6 +33,20 @@ class Store {
     static void setWake(Context c, boolean v) { p(c).edit().putBoolean("wake", v).apply(); }
     static boolean shield(Context c) { return p(c).getBoolean("shield", true); }
     static void setShield(Context c, boolean v) { p(c).edit().putBoolean("shield", v).apply(); }
+    static String liveUrl(Context c) { return p(c).getString("liveUrl", ""); }
+    static String liveTok(Context c) { return p(c).getString("liveTok", ""); }
+    static boolean liveLinked(Context c) { return !liveUrl(c).isEmpty() && !liveTok(c).isEmpty(); }
+    static void clearLive(Context c) { p(c).edit().remove("liveUrl").remove("liveTok").apply(); }
+    /** Code « Live » (donné par pc/voice-setup.sh) : "MUSEV." + base64url({"u":"wss://pc.ts.net/live","t":"jeton"}) */
+    static void linkLive(Context c, String code) throws Exception {
+        code = code == null ? "" : code.trim();
+        if (!code.startsWith("MUSEV.")) throw new Exception("Code invalide : il doit commencer par MUSEV.");
+        byte[] raw = Base64.decode(code.substring(6).replaceAll("\\s", ""), Base64.URL_SAFE | Base64.NO_WRAP);
+        JSONObject j = new JSONObject(new String(raw, "UTF-8"));
+        String u = j.getString("u"), t = j.getString("t");
+        if (!u.matches("wss?://[\\w.:-]+(/[\\w./-]*)?") || t.length() < 20) throw new Exception("Code incomplet ou abîmé.");
+        p(c).edit().putString("liveUrl", u).putString("liveTok", t).apply();
+    }
     static boolean linked(Context c) { return !repo(c).isEmpty() && !token(c).isEmpty(); }
 
     /** Code de liaison : "MUSE1." + base64url({"r":"user/depot","t":"jeton","i":1}) */
