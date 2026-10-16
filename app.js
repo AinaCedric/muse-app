@@ -753,7 +753,7 @@ async function openConv(n) {
     [...msgs.querySelectorAll('.planRow')].forEach((r) => { if (r.parentElement !== msgs.lastElementChild) r.remove(); });
     const mode = [...cs].reverse().map((c) => (c.body.match(/<!--mode:(\w+)-->/) || [])[1]).find(Boolean);
     if (mode) modeSel.value = mode;
-    const last = [...cs].reverse().find((c) => !c.body.includes(LIVE));
+    const last = [...cs].reverse().find((c) => !c.body.includes(LIVE) && !c.body.includes('<!--muse-voice-->'));
     // Une réponse est peut-être encore en préparation : on reprend l'attente.
     if (last && !last.body.includes(REPLY) && !last.body.includes(ERROR) && Date.now() - new Date(last.created_at) < 20 * 60 * 1000) wait(n, last.created_at);
   } catch (e) { add('bot', '' + e.message, 'err'); }
