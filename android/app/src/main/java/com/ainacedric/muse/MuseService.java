@@ -203,7 +203,7 @@ public class MuseService extends AccessibilityService {
         wl.acquire(3000);
     }
 
-    void prepare() throws Exception { prep(); }
+    void prepare() throws Exception { prep(); armRelock(); }
 
     /** Allume l'écran et dépasse un écran de verrouillage SANS code. Si un code est demandé : on s'arrête. */
     private void prep() throws Exception {
@@ -220,9 +220,90 @@ public class MuseService extends AccessibilityService {
                 Thread.sleep(900);
             }
             if (km.isKeyguardLocked()) {
-                throw new Exception("ÉCRAN VERROUILLÉ : Muse ne connaît pas ton code. Dis à Cédric de déverrouiller son téléphone, puis de réessayer.");
+                if (!Vault.has(this)) throw new Exception("ÉCRAN VERROUILLÉ : Muse n'a pas de code enregistré. Cédric peut l'ajouter dans l'appli Muse Tél. (🔐 Code de déverrouillage) ; en attendant, dis-lui de déverrouiller son téléphone puis de réessayer.");
+                unlockWithPin(km);
+                unlockedByMuse = true;
             }
         }
+    }
+
+    // ---------- Déverrouillage par code (stocké chiffré, jamais envoyé ailleurs)
+    private volatile boolean unlockedByMuse = false;
+    private final Handler relockH = new Handler(Looper.getMainLooper());
+    private final Runnable relock = new Runnable() {
+        @Override public void run() {
+            if (!unlockedByMuse) return;
+            if (Shield.handedBack()) { relockH.postDelayed(this, 30000); return; }   // Cédric a repris la main : on ne le coupe pas
+            unlockedByMuse = false;
+            try { if (Build.VERSION.SDK_INT >= 28) performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); } catch (Throwable ignore) { }
+        }
+    };
+    void armRelock() { if (unlockedByMuse) { relockH.removeCallbacks(relock); relockH.postDelayed(relock, 60000); } }
+
+    private List<AccessibilityNodeInfo> keyguardRoots() {
+        List<AccessibilityNodeInfo> out = new ArrayList<>();
+        try {
+            List<android.view.accessibility.AccessibilityWindowInfo> ws = getWindows();
+            if (ws != null) for (android.view.accessibility.AccessibilityWindowInfo w : ws) { AccessibilityNodeInfo r = w.getRoot(); if (r != null) out.add(r); }
+        } catch (Throwable ignore) { }
+        AccessibilityNodeInfo a = getRootInActiveWindow();
+        if (a != null) out.add(a);
+        return out;
+    }
+
+    private AccessibilityNodeInfo findKey(AccessibilityNodeInfo n, String digit, int depth) {
+        if (n == null || depth > 30) return null;
+        CharSequence t = n.getText(), d = n.getContentDescription();
+        boolean hit = (t != null && t.toString().trim().equals(digit)) || (d != null && d.toString().trim().equals(digit));
+        if (hit && n.isVisibleToUser()) return n;
+        for (int i = 0; i < n.getChildCount(); i++) { AccessibilityNodeInfo r = findKey(n.getChild(i), digit, depth + 1); if (r != null) return r; }
+        return null;
+    }
+
+    private boolean pressNode(AccessibilityNodeInfo n) throws Exception {
+        AccessibilityNodeInfo c = n;
+        for (int i = 0; i < 4 && c != null; i++) { if (c.isClickable() && c.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true; c = c.getParent(); }
+        Rect b = new Rect(); n.getBoundsInScreen(b);
+        return b.width() > 0 && gesture(b.centerX(), b.centerY(), b.centerX(), b.centerY(), 50);
+    }
+
+    private AccessibilityNodeInfo findLabel(AccessibilityNodeInfo n, int depth) {
+        if (n == null || depth > 30) return null;
+        String l = norm(str(n.getContentDescription()) + " " + str(n.getText()));
+        if (n.isVisibleToUser() && (l.contains("entree") || l.contains("enter") || l.equals("ok") || l.contains("valider") || l.contains("confirm"))) return n;
+        for (int i = 0; i < n.getChildCount(); i++) { AccessibilityNodeInfo r = findLabel(n.getChild(i), depth + 1); if (r != null) return r; }
+        return null;
+    }
+
+    private void unlockWithPin(KeyguardManager km) throws Exception {
+        String pin;
+        try { pin = Vault.get(this); } catch (Throwable t) { throw new Exception("Le code enregistré est illisible : Cédric doit le ressaisir dans l'appli Muse Tél."); }
+        if (pin == null) throw new Exception("ÉCRAN VERROUILLÉ : aucun code enregistré.");
+        int[] s = size();
+        Shield.pass(true);
+        try {
+            for (int attempt = 0; attempt < 2 && km.isKeyguardLocked(); attempt++) {
+                gesture(s[0] / 2f, s[1] * 0.88f, s[0] / 2f, s[1] * 0.25f, 260);   // fait apparaître le pavé de code
+                Thread.sleep(1000);
+                AccessibilityNodeInfo probe = null;
+                for (AccessibilityNodeInfo r : keyguardRoots()) { probe = findKey(r, pin.substring(0, 1), 0); if (probe != null) break; }
+                if (probe == null) { Thread.sleep(800); continue; }
+                for (int i = 0; i < pin.length(); i++) {
+                    AccessibilityNodeInfo k = null;
+                    for (AccessibilityNodeInfo r : keyguardRoots()) { k = findKey(r, pin.substring(i, i + 1), 0); if (k != null) break; }
+                    if (k == null) throw new Exception("Pavé du code introuvable à l'écran (verrouillage par schéma ou mot de passe ? Muse ne gère que le code chiffré).");
+                    pressNode(k);
+                    Thread.sleep(160);
+                }
+                Thread.sleep(500);
+                if (km.isKeyguardLocked()) {
+                    for (AccessibilityNodeInfo r : keyguardRoots()) { AccessibilityNodeInfo e = findLabel(r, 0); if (e != null) { pressNode(e); break; } }
+                    Thread.sleep(1200);
+                }
+            }
+        } finally { Shield.pass(false); pin = null; }
+        if (km.isKeyguardLocked()) throw new Exception("Déverrouillage échoué : le code enregistré est peut-être faux, ou ce verrouillage n'est pas un code à chiffres. Cédric doit déverrouiller lui-même.");
+        Thread.sleep(500);
     }
 
     private boolean gesture(float x1, float y1, float x2, float y2, long ms) throws Exception {
@@ -469,6 +550,10 @@ public class MuseService extends AccessibilityService {
     }
 
     JSONObject exec(JSONObject c) throws Exception {
+        try { return exec0(c); } finally { armRelock(); }
+    }
+
+    private JSONObject exec0(JSONObject c) throws Exception {
         String op = c.getString("op");
         JSONObject out = new JSONObject();
         switch (op) {
@@ -486,6 +571,7 @@ public class MuseService extends AccessibilityService {
                 out.put("awake", pm.isInteractive());
                 out.put("locked", km.isKeyguardLocked());
                 out.put("secure", km.isKeyguardSecure());
+                out.put("pin", Vault.has(this));
                 out.put("pkg", pkg());
                 out.put("w", s[0]);
                 out.put("h", s[1]);

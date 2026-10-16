@@ -28,7 +28,7 @@ import android.widget.Toast;
 /** Assistant de configuration : chaque réglage nécessaire, avec un bouton qui ouvre la bonne page Android. */
 public class MainActivity extends Activity {
     private LinearLayout root;
-    private Button wakeBtn, notifBtn, shieldBtn, fixBtn;
+    private Button wakeBtn, notifBtn, shieldBtn, fixBtn, pinBtn;
     private TextView sLoc, sAuto, sWake, sBrain, sLink, sAcc, sOver, sBat, sNot, sMic, sTest, logv;
     private String testMsg = "";
     private TextView sStat;
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         sv.addView(root);
         setContentView(sv);
 
-        root.addView(text("Muse · Téléphone  v2.9", 26, true, Color.parseColor("#5B3FD6")));
+        root.addView(text("Muse · Téléphone  v2.10", 26, true, Color.parseColor("#5B3FD6")));
         root.addView(text("Cette appli permet à Muse de manipuler ce téléphone quand tu le lui demandes dans l'appli Muse (mode 📱 Téléphone). Fais les étapes 1 à 5 (la 6, le micro, est facultative) ci-dessous, une seule fois. Rien ne bouge tant que tu n'écris pas à Muse.", 14, false, Color.parseColor("#444444")));
 
         // Voyant d'état en direct
@@ -177,6 +177,30 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(fixBtn);
+        root.addView(text("Écran verrouillé", 17, true, Color.parseColor("#1a1a2e")));
+        root.addView(text("Pour travailler même quand l'écran est verrouillé (lire un reel, ouvrir une conversation), Muse peut saisir ton code à ta place. Le code est chiffré dans la puce de sécurité du téléphone et ne sort JAMAIS d'ici. Muse reverrouille l'écran 1 minute après avoir fini. Code à chiffres uniquement (pas de schéma).", 13, false, Color.parseColor("#555555")));
+        pinBtn = button("🔐  Code de déverrouillage", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final android.widget.EditText in = new android.widget.EditText(MainActivity.this);
+                in.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+                in.setHint("Ton code (4 à 10 chiffres)");
+                android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Code de déverrouillage").setView(in)
+                        .setPositiveButton("Enregistrer", new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(android.content.DialogInterface d, int w) {
+                                try { Vault.set(MainActivity.this, in.getText().toString().trim()); Toast.makeText(MainActivity.this, "Code enregistré (chiffré)", Toast.LENGTH_SHORT).show(); }
+                                catch (Exception e) { Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_LONG).show(); }
+                                refresh();
+                            }
+                        }).setNegativeButton("Annuler", null);
+                if (Vault.has(MainActivity.this)) b.setNeutralButton("Effacer", new android.content.DialogInterface.OnClickListener() {
+                    @Override public void onClick(android.content.DialogInterface d, int w) { Vault.clear(MainActivity.this); refresh(); }
+                });
+                b.show();
+            }
+        });
+        root.addView(pinBtn);
         root.addView(text("Toujours branchée (une seule fois)", 17, true, Color.parseColor("#1a1a2e")));
         root.addView(text("Pour que Muse reste connectée en permanence (Android coupe parfois l'accessibilité et les notifications), donne-lui une autorisation spéciale, une seule fois, depuis ton PC branché en USB avec le débogage USB activé : copie la commande ci-dessous, colle-la dans un terminal du PC, puis redémarre l'appli. Muse se réactivera alors toute seule, au démarrage du téléphone et dès que l'Internet revient.", 13, false, Color.parseColor("#555555")));
         root.addView(button("📋  Copier la commande du PC (adb)", new View.OnClickListener() {
@@ -363,6 +387,7 @@ public class MainActivity extends Activity {
         mark(sWake, Store.wake(this));
         mark(sAuto, NotifWatch.enabled(this) && Store.brainLinked(this));
         mark(sLoc, Loc.granted(this) && Loc.background(this));
+        pinBtn.setText(Vault.has(this) ? "🔐  Code enregistré ✅ (modifier / effacer)" : "🔐  Code de déverrouillage");
         wakeBtn.setText(Store.wake(this) ? "🔕  Arrêter l'écoute de « Muse »" : "🗣️  Activer « Muse » à la voix");
         shieldBtn.setText(Store.shield(this) ? "🛡️  Écran bouclier pendant que Muse agit : activé" : "🛡️  Écran bouclier : coupé (tu vois ce que fait Muse)");
         notifBtn.setText(Store.notify(this) ? "🔔  Notifications des réponses : activées" : "🔕  Notifications des réponses : coupées");
