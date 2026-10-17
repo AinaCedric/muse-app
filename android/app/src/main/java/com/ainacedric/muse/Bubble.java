@@ -33,6 +33,8 @@ class Bubble {
     private static TextView say;
     private static Drawable[] idle, think, work, happy, sad;
     private static volatile String react = null;
+    /** État de la conversation (posé par Panel) : think, work, speak, listen, idle — null hors conversation. */
+    static volatile String talk = null;
     private static volatile long reactUntil = 0, nextWiggle = System.currentTimeMillis() + 30000;
     private static int frame = 0, dir = 1;
     private static final Handler H = new Handler(Looper.getMainLooper());
@@ -91,7 +93,9 @@ class Bubble {
                             if (react != null && now > reactUntil) react = null;
                             // au repos, de temps en temps, un petit sourire tout seul
                             if (!busy && react == null && now > nextWiggle) { reaction("happy", 1800); nextWiggle = now + 30000 + (long) (Math.random() * 40000); }
+                            String tk = talk;
                             Drawable[] set = "happy".equals(react) ? happy : "sad".equals(react) ? sad
+                                    : tk != null ? ("think".equals(tk) ? think : "work".equals(tk) ? work : "speak".equals(tk) ? happy : idle)
                                     : busy ? ((inOp || now - lastOp < 1500) ? work : think) : idle;
                             if (set == null) set = idle;
                             frame += dir;
@@ -145,7 +149,7 @@ class Bubble {
                                 MuseService.lastClick = System.currentTimeMillis();
                                 reaction("happy", 1500);
                                 Bus.log("Bulle touchée");
-                                try { Panel.toggle(s); } catch (Throwable x) { s.failOpen(x); }
+                                try { if (Panel.cur != null) Panel.cur.micTap(); else Panel.toggle(s); } catch (Throwable x) { s.failOpen(x); }
                             }
                             return true;
                         default:
@@ -239,6 +243,7 @@ class Bubble {
 
     private static void setLabel(String s) {
         if (say == null || s.equals(label)) return;
+        if (Panel.cur != null && !s.isEmpty()) return;   // pendant la conversation, la carte parle à la place de la petite bulle
         label = s;
         if (s.isEmpty()) { say.setVisibility(View.GONE); return; }
         say.setText("💭 " + s);
@@ -344,6 +349,9 @@ class Bubble {
     }
 
     static boolean shown() { return v != null; }
+    static int px() { return lp == null ? 0 : lp.x; }
+    static int py() { return lp == null ? 0 : lp.y; }
+    static int sizePx() { return size; }
 
     /** Une image de la mascotte (pour l'écran bouclier). */
     static Drawable mascot() {

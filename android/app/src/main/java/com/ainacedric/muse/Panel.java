@@ -53,17 +53,30 @@ class Panel {
     private static final int SOFT = Color.rgb(239, 236, 252);
     private static final int LINE = Color.rgb(232, 228, 247);
 
+    // Palette « bulle du PC » : carte sombre translucide, accent lavande
+    private static final int DKC = Color.argb(244, 27, 21, 47);
+    private static final int DKLINE = Color.argb(40, 255, 255, 255);
+    private static final int TXT = Color.rgb(239, 235, 250);
+    private static final int TXT2 = Color.rgb(169, 164, 196);
+    private static final int ACCL = Color.rgb(160, 140, 255);
+    private static final int TILE = Color.argb(20, 255, 255, 255);
+    private static final int BTN_BG = Color.argb(235, 28, 24, 46);
+
     private final MuseService svc;
     private final WindowManager wm;
     private final Handler h = new Handler(Looper.getMainLooper());
-    private LinearLayout card;
-    private WindowManager.LayoutParams lp;
+    private LinearLayout card, speech, bar, inputRow;
+    private WindowManager.LayoutParams lp, barLp;
+    private boolean placed = false;
+    private int lastCx = -99999, lastCy = -99999, lastBx = -99999, lastBy = -99999;
+    private String toolNote = "";
+    private int moodColor = 0;
+    private int waveShown = -1;
     private Wave wave;
     private TextView status, hint, answer;
-    private Ico micBtn, spk;
+    private Ico micBtn, spk, briefBtn, kbBtn, closeBtn;
     private ScrollView answerScroll, cardsScroll;
     private LinearLayout cardsBox;
-    private View moodDot;
     private int nCards = 0;
     private static final String BRIEF = "__BRIEF__";
     private LinearLayout chipsRow;
@@ -90,6 +103,12 @@ class Panel {
             if (closed) return;
             if (speaking) wave.feed((float) (0.25 + 0.55 * Math.random()));
             wave.step(listening || speaking);
+            int ws = (listening || speaking) ? 1 : 0;
+            if (ws != waveShown) { waveShown = ws; wave.setVisibility(ws == 1 ? View.VISIBLE : View.GONE); }
+            placePanel();
+            String st = listening ? "listen" : speaking ? "speak" : !toolNote.isEmpty() && liveBusy ? "work"
+                    : (liveBusy || status.getText().toString().contains("réfléchit")) ? "think" : "idle";
+            Bubble.talk = st;
             h.postDelayed(this, 55);
         }
     };
@@ -168,227 +187,242 @@ class Panel {
         return t;
     }
 
+    private GradientDrawable darkCard(int stroke) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(DKC);
+        g.setCornerRadius(dp(20));
+        g.setStroke(dp(stroke == 0 ? 1 : 2), stroke == 0 ? DKLINE : stroke);
+        return g;
+    }
+
+    private GradientDrawable circleBg(int color) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(color);
+        g.setStroke(dp(1), DKLINE);
+        return g;
+    }
+
+    private Ico barBtn(int kind, int bg, View.OnClickListener l) {
+        Ico b = new Ico(svc, kind, Color.WHITE);
+        b.setBackground(circleBg(bg));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(48), dp(48));
+        p.leftMargin = dp(5);
+        p.rightMargin = dp(5);
+        b.setLayoutParams(p);
+        b.setOnClickListener(l);
+        return b;
+    }
+
+    private void micIdle() { if (micBtn == null) return; micBtn.set(Ico.MIC); micBtn.color(Color.WHITE); micBtn.setBackground(circleBg(BTN_BG)); }
+    private void micOn() { if (micBtn == null) return; micBtn.set(Ico.MIC); micBtn.color(Color.WHITE); micBtn.setBackground(circleBg(Color.rgb(92, 64, 214))); }
+    private void micStop() { if (micBtn == null) return; micBtn.set(Ico.STOP); micBtn.color(Color.WHITE); micBtn.setBackground(circleBg(BTN_BG)); }
+
+    /** Tape sur la mascotte pendant la conversation : couper Muse / reprendre le micro (comme sur le PC). */
+    void micTap() { if (!closed) toggleMic(); }
+
+    private void startBrief() {
+        if (Store.liveLinked(svc) && Store.speak(svc) && !liveFailed) { convo = true; askLive(BRIEF); }
+        else ask("Qu'ai-je à mon agenda aujourd'hui ? Ajoute la météo à Antananarivo et les e-mails importants non lus, en bref.", "auto");
+    }
+
+    private void addWin(View v, WindowManager.LayoutParams p) {
+        try {
+            wm.addView(v, p);
+        } catch (Throwable first) {
+            // 2e essai : fenêtre « par-dessus les autres applis » (autorisation de l'étape 3)
+            Bus.log("Fenêtre d'accessibilité refusée (" + MuseService.why(first) + ") : 2e essai");
+            p.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+            wm.addView(v, p);
+        }
+    }
+
     private void show() {
+        int scw = svc.getResources().getDisplayMetrics().widthPixels;
+        int cardW = Math.min(scw - dp(16), dp(320));
+
+        // ---- Fenêtre « parole » : cartes de détail au-dessus, carte sombre de la réponse en dessous (flotte au-dessus de la mascotte)
         card = new LinearLayout(svc);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(8), dp(16), dp(14));
-        card.setBackground(shape(PAPER, 30, LINE));
+        card.setAlpha(0f);
 
-        // Poignée + en-tête (zone qu'on tire vers le haut pour agrandir vers le chat)
-        LinearLayout top = new LinearLayout(svc);
-        top.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout gripRow = new LinearLayout(svc);
-        gripRow.setGravity(Gravity.CENTER);
-        View grip = new View(svc);
-        grip.setBackground(shape(Color.rgb(218, 213, 241), 3, 0));
-        grip.setLayoutParams(new LinearLayout.LayoutParams(dp(44), dp(5)));
-        gripRow.addView(grip);
-        gripRow.setPadding(0, dp(4), 0, dp(8));
-        top.addView(gripRow);
-
-        LinearLayout head = new LinearLayout(svc);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        View dot = new View(svc);
-        GradientDrawable dg = new GradientDrawable();
-        dg.setShape(GradientDrawable.OVAL);
-        dg.setColor(ACC);
-        dot.setBackground(dg);
-        moodDot = dot;
-        LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(dp(8), dp(8));
-        dl.leftMargin = dp(4);
-        dot.setLayoutParams(dl);
-        head.addView(dot);
-        TextView title = label("Muse", 22, INK, false);
-        title.setTypeface(android.graphics.Typeface.SERIF);
-        title.setPadding(dp(10), 0, 0, 0);
-        head.addView(title, lpw(0, -2, 1f));
-        spk = new Ico(svc, Store.speak(svc) ? Ico.SPEAKER : Ico.MUTE, Store.speak(svc) ? ACC : GREY);
-        spk.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
-        spk.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { toggleSpeak(); }
-        });
-        head.addView(spk);
-        TextView fresh = label("↺", 22, GREY, false);
-        fresh.setPadding(dp(8), dp(4), dp(8), dp(4));
-        fresh.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { newConversation(); }
-        });
-        head.addView(fresh);
-        TextView expand = label("⤢", 22, GREY, false);
-        expand.setPadding(dp(8), dp(4), dp(8), dp(4));
-        expand.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { openChat(typed()); }
-        });
-        head.addView(expand);
-        TextView min = label("—", 22, GREY, false);
-        min.setPadding(dp(8), dp(4), dp(6), dp(4));
-        min.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { close(); }
-        });
-        head.addView(min);
-        top.addView(head);
-        top.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent e) {
-                int a = e.getActionMasked();
-                if (a == MotionEvent.ACTION_DOWN) { downY = e.getRawY(); dragged = false; return true; }
-                if (a == MotionEvent.ACTION_MOVE && !dragged && downY - e.getRawY() > dp(70)) {
-                    dragged = true;
-                    openChat(typed());
-                    return true;
-                }
-                return true;
-            }
-        });
-        card.addView(top);
-
-        // Waveform
-        LinearLayout waveBox = new LinearLayout(svc);
-        waveBox.setBackground(shape(SOFT, 22, 0));
-        waveBox.setPadding(dp(10), dp(6), dp(10), dp(6));
-        wave = new Wave(svc);
-        waveBox.addView(wave, new LinearLayout.LayoutParams(-1, dp(56)));
-        LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-1, -2);
-        wl.topMargin = dp(10);
-        waveBox.setLayoutParams(wl);
-        card.addView(waveBox);
-
-        status = label("Touche le micro pour parler", 19, ACC, false);
-        status.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SERIF, android.graphics.Typeface.ITALIC));
-        status.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, -2);
-        sl.topMargin = dp(10);
-        status.setLayoutParams(sl);
-        card.addView(status);
-        hint = label("Comment puis-je t'aider ?", 14, GREY, false);
-        hint.setGravity(Gravity.CENTER);
-        card.addView(hint);
-        answerScroll = new ScrollView(svc);
-        answer = label("", 15, INK, false);
-        answer.setPadding(dp(14), dp(10), dp(14), dp(10));
-        answer.setLineSpacing(0f, 1.1f);
-        answer.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { if (!lastSpeech.isEmpty()) speak(lastSpeech); }
-        });
-        answerScroll.addView(answer);
-        answerScroll.setBackground(shape(CARD, 22, LINE));
-        LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, dp(190));
-        al.topMargin = dp(8);
-        answerScroll.setLayoutParams(al);
-        answerScroll.setVisibility(View.GONE);
-        card.addView(answerScroll);
-
-        // 🪟 Cartes visuelles de Muse Live (météo, agenda, mails…) : le détail que la voix ne lit pas
         cardsScroll = new ScrollView(svc);
         cardsBox = new LinearLayout(svc);
         cardsBox.setOrientation(LinearLayout.VERTICAL);
         cardsScroll.addView(cardsBox);
         LinearLayout.LayoutParams csl = new LinearLayout.LayoutParams(-1, -2);
-        csl.topMargin = dp(8);
+        csl.bottomMargin = dp(8);
         cardsScroll.setLayoutParams(csl);
         cardsScroll.setVisibility(View.GONE);
         card.addView(cardsScroll);
 
-        // 3 actions rapides
-        LinearLayout chips = new LinearLayout(svc);
-        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
-        cl.topMargin = dp(12);
-        chips.setLayoutParams(cl);
-        chipsRow = chips;
-        chips.addView(chip("Résumer", "cet écran", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                ask("Résume en quelques lignes ce qui était affiché sur l'écran de mon téléphone quand j'ai ouvert l'assistant (lis-le avec l'outil phone_screen_before, sans rien toucher).", "phone");
-            }
-        }), lpw(0, -2, 1f));
-        chips.addView(chip("Écrire", "un message", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { writeMessage(); }
-        }), lpw(0, -2, 1f));
-        chips.addView(chip("Briefing", "du jour", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (Store.liveLinked(svc) && Store.speak(svc) && !liveFailed) { convo = true; askLive(BRIEF); }
-                else ask("Qu'ai-je à mon agenda aujourd'hui ? Ajoute la météo à Antananarivo et les e-mails importants non lus, en bref.", "auto");
-            }
-        }), lpw(0, -2, 1f));
-        card.addView(chips);
+        speech = new LinearLayout(svc);
+        speech.setOrientation(LinearLayout.VERTICAL);
+        speech.setPadding(dp(14), dp(10), dp(14), dp(12));
+        speech.setBackground(darkCard(0));
 
-        // Saisie : micro · champ · envoyer
-        LinearLayout row = new LinearLayout(svc);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackground(shape(CARD, 28, LINE));
-        row.setPadding(dp(6), dp(4), dp(6), dp(4));
-        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
-        rl.topMargin = dp(12);
-        row.setLayoutParams(rl);
-        micBtn = new Ico(svc, Ico.MIC, ACC);
-        micBtn.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
-        micBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { toggleMic(); }
+        LinearLayout head = new LinearLayout(svc);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        status = label("Touche le micro pour parler", 12, ACCL, true);
+        status.setSingleLine(true);
+        status.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        head.addView(status, lpw(0, -2, 1f));
+        spk = new Ico(svc, Store.speak(svc) ? Ico.SPEAKER : Ico.MUTE, Store.speak(svc) ? ACCL : TXT2);
+        spk.setLayoutParams(new LinearLayout.LayoutParams(dp(36), dp(32)));
+        spk.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { toggleSpeak(); }
         });
-        row.addView(micBtn);
+        head.addView(spk);
+        TextView fresh = label("↺", 18, TXT2, false);
+        fresh.setPadding(dp(8), dp(2), dp(8), dp(2));
+        fresh.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { newConversation(); }
+        });
+        head.addView(fresh);
+        TextView expand = label("⤢", 18, TXT2, false);
+        expand.setPadding(dp(8), dp(2), dp(2), dp(2));
+        expand.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { openChat(typed()); }
+        });
+        head.addView(expand);
+        speech.addView(head);
+
+        wave = new Wave(svc);
+        LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-1, dp(24));
+        wl.topMargin = dp(4);
+        wave.setLayoutParams(wl);
+        wave.setVisibility(View.GONE);
+        speech.addView(wave);
+
+        answerScroll = new ScrollView(svc);
+        answer = label("", 15, TXT, false);
+        answer.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.ITALIC));
+        answer.setPadding(0, dp(6), 0, dp(2));
+        answer.setLineSpacing(0f, 1.1f);
+        answer.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { if (!lastSpeech.isEmpty()) speak(lastSpeech); }
+        });
+        answerScroll.addView(answer);
+        LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(-1, dp(150));
+        answerScroll.setLayoutParams(al);
+        answerScroll.setVisibility(View.GONE);
+        speech.addView(answerScroll);
+
+        hint = label("Comment puis-je t'aider ?", 12, TXT2, false);
+        hint.setPadding(0, dp(4), 0, 0);
+        speech.addView(hint);
+
+        // Saisie au clavier (cachée : s'ouvre avec le bouton clavier)
+        inputRow = new LinearLayout(svc);
+        inputRow.setGravity(Gravity.CENTER_VERTICAL);
+        inputRow.setBackground(shape(TILE, 22, DKLINE));
+        inputRow.setPadding(dp(10), dp(2), dp(4), dp(2));
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+        rl.topMargin = dp(8);
+        inputRow.setLayoutParams(rl);
         field = new EditText(svc);
-        field.setHint("Demande-moi n'importe quoi…");
+        field.setHint("Écris ta demande…");
+        field.setHintTextColor(TXT2);
         field.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
-        field.setTextColor(INK);
+        field.setTextColor(TXT);
         field.setSingleLine(true);
         field.setBackground(null);
         field.setImeOptions(EditorInfo.IME_ACTION_SEND);
-        field.setPadding(dp(10), dp(8), dp(10), dp(8));
+        field.setPadding(dp(4), dp(8), dp(4), dp(8));
         field.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent e) {
+            @Override public boolean onTouch(View v, MotionEvent e) {
                 if (e.getActionMasked() == MotionEvent.ACTION_DOWN) makeTypable();
                 return false;
             }
         });
         field.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override
-            public boolean onEditorAction(TextView v, int actionId, android.view.KeyEvent ev) {
-                sendTyped();
-                return true;
-            }
+            @Override public boolean onEditorAction(TextView v, int actionId, android.view.KeyEvent ev) { sendTyped(); return true; }
         });
-        row.addView(field, lpw(0, -2, 1f));
+        inputRow.addView(field, lpw(0, -2, 1f));
         Ico send = new Ico(svc, Ico.UP, Color.WHITE);
-        GradientDrawable sg = new GradientDrawable();
-        sg.setShape(GradientDrawable.OVAL);
-        sg.setColor(ACC);
-        send.setBackground(sg);
-        send.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
+        send.setBackground(circleBg(Color.rgb(92, 64, 214)));
+        send.setLayoutParams(new LinearLayout.LayoutParams(dp(38), dp(38)));
         send.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { sendTyped(); }
+            @Override public void onClick(View v) { sendTyped(); }
         });
-        row.addView(send);
-        card.addView(row);
+        inputRow.addView(send);
+        inputRow.setVisibility(View.GONE);
+        speech.addView(inputRow);
+        card.addView(speech, new LinearLayout.LayoutParams(-1, -2));
 
-        int sw = svc.getResources().getDisplayMetrics().widthPixels;
-        lp = new WindowManager.LayoutParams(sw - dp(20), WindowManager.LayoutParams.WRAP_CONTENT,
+        chipsRow = new LinearLayout(svc);   // (plus d'actions rapides : le briefing est sur la barre d'icônes)
+
+        lp = new WindowManager.LayoutParams(cardW, WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        lp.y = dp(26);
-        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
-        try {
-            wm.addView(card, lp);
-        } catch (Throwable first) {
-            // 2e essai : fenêtre « par-dessus les autres applis » (autorisation de l'étape 3)
-            Bus.log("Fenêtre d'accessibilité refusée (" + MuseService.why(first) + ") : 2e essai");
-            lp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-            wm.addView(card, lp);
-        }
+        lp.gravity = Gravity.TOP | Gravity.LEFT;
+        lp.x = dp(8);
+        lp.y = svc.getResources().getDisplayMetrics().heightPixels / 3;
+        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
+        addWin(card, lp);
+
+        // ---- Icônes flottantes sous la mascotte : briefing · clavier · micro · fermer
+        bar = new LinearLayout(svc);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER);
+        bar.setAlpha(0f);
+        briefBtn = barBtn(Ico.SUN, BTN_BG, new View.OnClickListener() {
+            @Override public void onClick(View v) { startBrief(); }
+        });
+        kbBtn = barBtn(Ico.KB, BTN_BG, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                boolean on = inputRow.getVisibility() != View.VISIBLE;
+                inputRow.setVisibility(on ? View.VISIBLE : View.GONE);
+                kbBtn.setBackground(circleBg(on ? Color.rgb(92, 64, 214) : BTN_BG));
+                if (on) { convo = false; stopListening(); makeTypable(); }
+            }
+        });
+        micBtn = barBtn(Ico.MIC, BTN_BG, new View.OnClickListener() {
+            @Override public void onClick(View v) { toggleMic(); }
+        });
+        closeBtn = barBtn(Ico.CLOSE, Color.argb(235, 214, 69, 61), new View.OnClickListener() {
+            @Override public void onClick(View v) { close(); }
+        });
+        bar.addView(briefBtn);
+        bar.addView(kbBtn);
+        bar.addView(micBtn);
+        bar.addView(closeBtn);
+        barLp = new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT);
+        barLp.gravity = Gravity.TOP | Gravity.LEFT;
+        barLp.x = dp(8);
+        barLp.y = lp.y + dp(200);
+        addWin(bar, barLp);
+
         h.post(tick);
         Wake.pause(true);   // le panneau prend le micro
         Bus.log("Panneau assistant ouvert");
+    }
+
+    /** Place la carte au-dessus de la mascotte et les icônes en dessous ; suit la mascotte quand elle bouge. */
+    private void placePanel() {
+        if (closed || card == null || bar == null) return;
+        int cw = card.getWidth(), ch = card.getHeight(), bw = bar.getWidth(), bh = bar.getHeight();
+        if (cw <= 0 || ch <= 0 || bw <= 0 || bh <= 0) return;
+        android.util.DisplayMetrics dm = svc.getResources().getDisplayMetrics();
+        int mx = Bubble.px(), my = Bubble.py(), ms = Bubble.sizePx();
+        if (ms <= 0) { ms = dp(72); }
+        int mid = mx + ms / 2;
+        int by = Math.min(my + ms - dp(4), dm.heightPixels - bh - dp(24));
+        int cy = my - ch + dp(8);
+        if (cy < dp(28)) cy = by + bh + dp(6);          // pas de place au-dessus : la carte passe sous les icônes
+        int cx = Math.max(dp(8), Math.min(mid - cw / 2, dm.widthPixels - cw - dp(8)));
+        int bx = Math.max(dp(4), Math.min(mid - bw / 2, dm.widthPixels - bw - dp(4)));
+        if (inputRow != null && inputRow.getVisibility() == View.VISIBLE) cy = dp(48);   // clavier ouvert : la carte monte en haut pour rester visible
+        cy = Math.max(dp(24), Math.min(cy, dm.heightPixels - ch - dp(8)));
+        try {
+            if (cx != lastCx || cy != lastCy) { lp.x = cx; lp.y = cy; wm.updateViewLayout(card, lp); lastCx = cx; lastCy = cy; }
+            if (bx != lastBx || by != lastBy) { barLp.x = bx; barLp.y = by; wm.updateViewLayout(bar, barLp); lastBx = bx; lastBy = by; }
+            if (!placed) { placed = true; card.setAlpha(1f); bar.setAlpha(1f); }
+        } catch (Throwable ignore) { }
     }
 
     private View chip(String first, String second, View.OnClickListener l) {
@@ -513,10 +547,10 @@ class Panel {
             live = new Live(svc, new Live.Cb() {
                 @Override public void ready() { }
                 @Override public void thinking() { if (!closed) status.setText("Muse réfléchit…"); }
-                @Override public void speaking() { if (closed) return; speaking = true; status.setText("Muse parle"); Wake.guard(true, halt); }
+                @Override public void speaking() { if (closed) return; speaking = true; toolNote = ""; micStop(); status.setText("Muse parle"); Wake.guard(true, halt); }
                 @Override public void card(JSONObject c) { if (!closed) addCard(c); }
                 @Override public void mood(String m) { if (!closed) setMood(m); }
-                @Override public void tool(String label) { if (!closed && !label.isEmpty()) { status.setText(label + "…"); hint.setVisibility(View.GONE); } }
+                @Override public void tool(String label) { if (!closed && !label.isEmpty()) { toolNote = label; status.setText(label + "…"); hint.setVisibility(View.GONE); } }
                 @Override public void delta(String t) {
                     if (closed) return;
                     liveText.append(t);
@@ -528,7 +562,8 @@ class Panel {
                 }
                 @Override public void finished() {
                     if (closed) return;
-                    speaking = false; liveBusy = false;
+                    speaking = false; liveBusy = false; toolNote = "";
+                    micIdle();
                     Wake.guard(false, null);
                     lastSpeech = liveText.toString().trim();
                     status.setText("À toi");
@@ -574,23 +609,29 @@ class Panel {
     };
 
     private void setMood(String m) {
-        int c;
+        int c = 0;
         switch (m == null ? "" : m) {
-            case "joie": c = Color.rgb(255, 184, 48); break;
-            case "alerte": c = Color.rgb(240, 110, 50); break;
-            case "triste": c = Color.rgb(90, 140, 240); break;
-            case "surprise": c = Color.rgb(236, 90, 170); break;
-            case "calme": c = Color.rgb(60, 190, 150); break;
-            default: c = ACC;
+            case "joie": c = Color.rgb(255, 200, 97); Bubble.reaction("happy", 3200); break;
+            case "surprise": c = Color.rgb(236, 90, 170); Bubble.reaction("happy", 3200); break;
+            case "alerte": c = Color.rgb(255, 122, 64); Bubble.reaction("sad", 3200); break;
+            case "triste": c = Color.rgb(100, 150, 245); Bubble.reaction("sad", 3200); break;
+            case "calme": c = Color.rgb(100, 217, 178); break;
+            case "pense": c = ACCL; break;
+            default: c = 0;
         }
-        try {
-            GradientDrawable g = new GradientDrawable();
-            g.setShape(GradientDrawable.OVAL);
-            g.setColor(c);
-            moodDot.setBackground(g);
-            int sz = m == null || m.isEmpty() ? dp(8) : dp(12);
-            moodDot.getLayoutParams().width = sz; moodDot.getLayoutParams().height = sz; moodDot.requestLayout();
-        } catch (Throwable ignore) { }
+        moodColor = c;
+        try { if (speech != null) speech.setBackground(darkCard(c == 0 ? 0 : (c & 0x00FFFFFF) | 0x99000000)); } catch (Throwable ignore) { }
+    }
+
+    private int typeColor(String t) {
+        switch (t == null ? "" : t) {
+            case "meteo": return Color.rgb(255, 200, 97);
+            case "agenda": return Color.rgb(127, 178, 255);
+            case "mails": return Color.rgb(255, 143, 143);
+            case "chiffres": case "lieu": return Color.rgb(124, 224, 181);
+            case "action": return Color.rgb(255, 176, 103);
+            default: return ACCL;
+        }
     }
 
     private void clearCards() {
@@ -606,17 +647,18 @@ class Panel {
             nCards++;
             LinearLayout box = new LinearLayout(svc);
             box.setOrientation(LinearLayout.VERTICAL);
-            box.setBackground(shape(CARD, 22, LINE));
+            box.setBackground(darkCard(0));
             box.setPadding(dp(14), dp(12), dp(14), dp(12));
             LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
             if (nCards > 1) bl.topMargin = dp(8);
             box.setLayoutParams(bl);
             String icon = c.optString("icon"), title = c.optString("title", "Muse"), sub = c.optString("sub"), big = c.optString("big");
-            TextView head = label((icon.isEmpty() ? "" : icon + "  ") + title, 16, INK, true);
+            int tc = typeColor(c.optString("type"));
+            TextView head = label((icon.isEmpty() ? "" : icon + "  ") + title, 16, TXT, true);
             box.addView(head);
-            if (!sub.isEmpty()) box.addView(label(sub, 13, GREY, false));
+            if (!sub.isEmpty()) box.addView(label(sub, 13, TXT2, false));
             if (!big.isEmpty()) {
-                TextView b = label(big, 34, ACC, true);
+                TextView b = label(big, 34, tc, true);
                 b.setPadding(0, dp(2), 0, dp(2));
                 box.addView(b);
             }
@@ -633,9 +675,9 @@ class Panel {
                     }
                     JSONObject x = st.optJSONObject(i);
                     if (x == null) continue;
-                    TextView t = label(x.optString("v") + "\n" + x.optString("k"), 14, INK, true);
+                    TextView t = label(x.optString("v") + "\n" + x.optString("k"), 14, TXT, true);
                     t.setPadding(dp(10), dp(6), dp(10), dp(6));
-                    t.setBackground(shape(SOFT, 12, 0));
+                    t.setBackground(shape(TILE, 12, 0));
                     LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, -2, 1f);
                     tl.rightMargin = dp(6);
                     t.setLayoutParams(tl);
@@ -650,21 +692,21 @@ class Panel {
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(0, dp(7), 0, dp(1));
                 if (!x.optString("icon").isEmpty()) {
-                    TextView ic = label(x.optString("icon"), 17, INK, false);
+                    TextView ic = label(x.optString("icon"), 17, TXT, false);
                     ic.setPadding(0, 0, dp(10), 0);
                     row.addView(ic);
                 }
-                TextView mid = label(x.optString("t"), 14, INK, false);
+                TextView mid = label(x.optString("t"), 14, TXT, false);
                 if (!x.optString("s").isEmpty()) mid.append("\n" + x.optString("s"));
                 row.addView(mid, lpw(0, -2, 1f));
                 if (!x.optString("v").isEmpty()) {
-                    TextView v = label(x.optString("v"), 13, ACC, true);
+                    TextView v = label(x.optString("v"), 13, tc, true);
                     v.setPadding(dp(8), 0, 0, 0);
                     row.addView(v);
                 }
                 final String url = x.optString("url");
                 if (url.startsWith("http")) {
-                    mid.setTextColor(ACC);
+                    mid.setTextColor(ACCL);
                     row.setOnClickListener(new View.OnClickListener() {
                         @Override public void onClick(View v) {
                             try {
@@ -691,10 +733,10 @@ class Panel {
                     if (say.isEmpty() || lab.isEmpty()) continue;
                     String l = lab.toLowerCase(Locale.FRANCE);
                     boolean ghost = i > 0 && (l.contains("annul") || l.contains("non") || l.contains("plus tard"));
-                    TextView b = label(lab, 14, ghost ? INK : Color.WHITE, true);
+                    TextView b = label(lab, 14, Color.WHITE, true);
                     b.setGravity(Gravity.CENTER);
                     b.setPadding(dp(14), dp(8), dp(14), dp(8));
-                    b.setBackground(shape(ghost ? SOFT : ACC, 18, 0));
+                    b.setBackground(shape(ghost ? TILE : Color.rgb(92, 64, 214), 18, 0));
                     LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-2, -2);
                     pl.rightMargin = dp(8);
                     b.setLayoutParams(pl);
@@ -708,7 +750,7 @@ class Panel {
             cardsBox.addView(box);
             cardsScroll.setVisibility(View.VISIBLE);
             // panneau compact : la réponse parlée se réduit quand une carte arrive
-            answerScroll.getLayoutParams().height = -2;
+            answerScroll.getLayoutParams().height = dp(90);
             answerScroll.requestLayout();
             int sh = svc.getResources().getDisplayMetrics().heightPixels;
             cardsScroll.getLayoutParams().height = nCards > 1 || (it != null && it.length() > 3) ? Math.min(dp(320), sh / 2) : -2;
@@ -755,7 +797,7 @@ class Panel {
         boolean on = !Store.speak(svc);
         Store.setSpeak(svc, on);
         spk.set(on ? Ico.SPEAKER : Ico.MUTE);
-        spk.color(on ? ACC : GREY);
+        spk.color(on ? ACCL : TXT2);
         if (!on) stopSpeaking();
         else if (answerScroll.getVisibility() == View.VISIBLE && !lastSpeech.isEmpty()) speak(lastSpeech);
         Bus.log("Lecture à voix haute : " + (on ? "oui" : "non"));
@@ -859,6 +901,8 @@ class Panel {
         try { if (sr != null) sr.destroy(); } catch (Throwable ignore) { }
         h.removeCallbacksAndMessages(null);
         try { wm.removeView(card); } catch (Throwable ignore) { }
+        try { if (bar != null) wm.removeView(bar); } catch (Throwable ignore) { }
+        Bubble.talk = null;
         if (cur == this) cur = null;
         Wake.pause(false);
     }
@@ -896,10 +940,10 @@ class Panel {
                     @Override public void onBeginningOfSpeech() { }
                     @Override public void onRmsChanged(float rms) { wave.feed(Math.max(0f, Math.min(1f, (rms + 2f) / 12f))); }
                     @Override public void onBufferReceived(byte[] buf) { }
-                    @Override public void onEndOfSpeech() { listening = false; micBtn.set(Ico.MIC); micBtn.color(ACC); micBtn.setBackground(null); status.setText("Je réfléchis…"); }
+                    @Override public void onEndOfSpeech() { listening = false; micIdle(); status.setText("Je réfléchis…"); }
                     @Override public void onError(int code) {
                         listening = false;
-                        micBtn.set(Ico.MIC); micBtn.color(ACC); micBtn.setBackground(null);
+                        micIdle();
                         if (convo && (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
                             convo = false;
                             status.setText("À plus tard");
@@ -910,7 +954,7 @@ class Panel {
                     }
                     @Override public void onResults(Bundle b) {
                         listening = false;
-                        micBtn.set(Ico.MIC); micBtn.color(ACC); micBtn.setBackground(null);
+                        micIdle();
                         ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                         String q = (r == null || r.isEmpty()) ? "" : r.get(0).trim();
                         if (q.isEmpty()) { status.setText("Je n'ai rien compris : retouche le micro"); return; }
@@ -937,7 +981,7 @@ class Panel {
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR");
             i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
             listening = true;
-            micBtn.set(Ico.STOP); micBtn.color(Color.WHITE); micBtn.setBackground(shape(Color.rgb(214, 69, 61), 20, 0));
+            micOn();
             status.setText("J'écoute…");
             hint.setText("Parle, je t'écoute");
             sr.startListening(i);
@@ -951,7 +995,7 @@ class Panel {
     private void stopListening() {
         if (!listening) return;
         listening = false;
-        try { micBtn.set(Ico.MIC); micBtn.color(ACC); micBtn.setBackground(null); sr.stopListening(); } catch (Throwable ignore) { }
+        try { micIdle(); sr.stopListening(); } catch (Throwable ignore) { }
     }
 
     // ---------- Waveform
@@ -988,8 +1032,8 @@ class Panel {
             float slot = w / N, bw = slot * 0.32f, mid = hh / 2f;
             for (int i = 0; i < N; i++) {
                 float t = i / (float) (N - 1);
-                p.setColor(ACC);
-                p.setAlpha(i % 3 == 0 ? 110 : 220);
+                p.setColor(ACCL);
+                p.setAlpha(i % 3 == 0 ? 110 : 230);
                 float half = Math.max(bw / 2f, lv[i] * hh * 0.5f);
                 float x = i * slot + (slot - bw) / 2f;
                 cv.drawRoundRect(x, mid - half, x + bw, mid + half, bw / 2f, bw / 2f, p);

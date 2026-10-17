@@ -8,7 +8,7 @@ import android.view.View;
 
 /** Petites icônes dessinées au trait (micro, stop, envoyer, haut-parleur) : pas d'emojis dans le panneau. */
 class Ico extends View {
-    static final int MIC = 0, STOP = 1, UP = 2, SPEAKER = 3, MUTE = 4;
+    static final int MIC = 0, STOP = 1, UP = 2, SPEAKER = 3, MUTE = 4, SUN = 5, CLOSE = 6, KB = 7;
     private final Paint p = new Paint();
     private int kind;
     private final RectF r = new RectF();
@@ -52,6 +52,25 @@ class Ico extends View {
                 cv.drawLine(ox + 12 * s, oy + 19 * s, ox + 12 * s, oy + 5 * s, p);
                 cv.drawLine(ox + 6 * s, oy + 11 * s, ox + 12 * s, oy + 5 * s, p);
                 cv.drawLine(ox + 18 * s, oy + 11 * s, ox + 12 * s, oy + 5 * s, p);
+                break;
+            case SUN:
+                cv.drawCircle(ox + 12 * s, oy + 12 * s, 4 * s, p);
+                for (int k = 0; k < 8; k++) {
+                    double an = k * Math.PI / 4;
+                    cv.drawLine(ox + (12 + (float) Math.cos(an) * 7.2f) * s, oy + (12 + (float) Math.sin(an) * 7.2f) * s,
+                            ox + (12 + (float) Math.cos(an) * 10f) * s, oy + (12 + (float) Math.sin(an) * 10f) * s, p);
+                }
+                break;
+            case CLOSE:
+                p.setStrokeWidth(2.2f * s);
+                cv.drawLine(ox + 6.5f * s, oy + 6.5f * s, ox + 17.5f * s, oy + 17.5f * s, p);
+                cv.drawLine(ox + 17.5f * s, oy + 6.5f * s, ox + 6.5f * s, oy + 17.5f * s, p);
+                break;
+            case KB:
+                r.set(ox + 2.5f * s, oy + 6 * s, ox + 21.5f * s, oy + 18 * s);
+                cv.drawRoundRect(r, 3 * s, 3 * s, p);
+                for (int k = 0; k < 3; k++) cv.drawLine(ox + (6.5f + k * 4.5f) * s, oy + 10 * s, ox + (7.6f + k * 4.5f) * s, oy + 10 * s, p);
+                cv.drawLine(ox + 8 * s, oy + 14 * s, ox + 16 * s, oy + 14 * s, p);
                 break;
             default:
                 float[] pts = {3, 9, 6, 9, 6, 9, 11, 5, 11, 5, 11, 19, 11, 19, 6, 15, 6, 15, 3, 15, 3, 15, 3, 9};
