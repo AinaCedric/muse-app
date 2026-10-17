@@ -203,20 +203,22 @@ class Panel {
         return g;
     }
 
-    private Ico barBtn(int kind, int bg, View.OnClickListener l) {
-        Ico b = new Ico(svc, kind, Color.WHITE);
-        b.setBackground(circleBg(bg));
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(48), dp(48));
-        p.leftMargin = dp(5);
-        p.rightMargin = dp(5);
+    // Petites icônes dans une seule « pilule » sombre (dock) : discrètes, comme sur le PC
+    private Ico barBtn(int kind, int color, View.OnClickListener l) {
+        Ico b = new Ico(svc, kind, color);
+        b.setBackground(null);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(38), dp(38));
+        p.leftMargin = dp(2);
+        p.rightMargin = dp(2);
         b.setLayoutParams(p);
         b.setOnClickListener(l);
         return b;
     }
 
-    private void micIdle() { if (micBtn == null) return; micBtn.set(Ico.MIC); micBtn.color(Color.WHITE); micBtn.setBackground(circleBg(BTN_BG)); }
-    private void micOn() { if (micBtn == null) return; micBtn.set(Ico.MIC); micBtn.color(Color.WHITE); micBtn.setBackground(circleBg(Color.rgb(92, 64, 214))); }
-    private void micStop() { if (micBtn == null) return; micBtn.set(Ico.STOP); micBtn.color(Color.WHITE); micBtn.setBackground(circleBg(BTN_BG)); }
+    private GradientDrawable dot(int color) { GradientDrawable g = new GradientDrawable(); g.setShape(GradientDrawable.OVAL); g.setColor(color); return g; }
+    private void micIdle() { if (micBtn == null) return; micBtn.set(Ico.MIC); micBtn.color(Color.WHITE); micBtn.setBackground(null); }
+    private void micOn() { if (micBtn == null) return; micBtn.set(Ico.MIC); micBtn.color(Color.WHITE); micBtn.setBackground(dot(Color.rgb(92, 64, 214))); }
+    private void micStop() { if (micBtn == null) return; micBtn.set(Ico.STOP); micBtn.color(Color.WHITE); micBtn.setBackground(dot(Color.argb(60, 255, 255, 255))); }
 
     /** Tape sur la mascotte pendant la conversation : couper Muse / reprendre le micro (comme sur le PC). */
     void micTap() { if (!closed) toggleMic(); }
@@ -367,21 +369,27 @@ class Panel {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER);
         bar.setAlpha(0f);
-        briefBtn = barBtn(Ico.SUN, BTN_BG, new View.OnClickListener() {
+        GradientDrawable pill = new GradientDrawable();
+        pill.setColor(DKC);
+        pill.setCornerRadius(dp(23));
+        pill.setStroke(dp(1), DKLINE);
+        bar.setBackground(pill);
+        bar.setPadding(dp(4), dp(4), dp(4), dp(4));
+        briefBtn = barBtn(Ico.SUN, Color.rgb(255, 200, 97), new View.OnClickListener() {
             @Override public void onClick(View v) { startBrief(); }
         });
-        kbBtn = barBtn(Ico.KB, BTN_BG, new View.OnClickListener() {
+        kbBtn = barBtn(Ico.KB, TXT, new View.OnClickListener() {
             @Override public void onClick(View v) {
                 boolean on = inputRow.getVisibility() != View.VISIBLE;
                 inputRow.setVisibility(on ? View.VISIBLE : View.GONE);
-                kbBtn.setBackground(circleBg(on ? Color.rgb(92, 64, 214) : BTN_BG));
+                kbBtn.setBackground(on ? dot(Color.rgb(92, 64, 214)) : null);
                 if (on) { convo = false; stopListening(); makeTypable(); }
             }
         });
-        micBtn = barBtn(Ico.MIC, BTN_BG, new View.OnClickListener() {
+        micBtn = barBtn(Ico.MIC, Color.WHITE, new View.OnClickListener() {
             @Override public void onClick(View v) { toggleMic(); }
         });
-        closeBtn = barBtn(Ico.CLOSE, Color.argb(235, 214, 69, 61), new View.OnClickListener() {
+        closeBtn = barBtn(Ico.CLOSE, Color.rgb(255, 122, 122), new View.OnClickListener() {
             @Override public void onClick(View v) { close(); }
         });
         bar.addView(briefBtn);
@@ -411,7 +419,7 @@ class Panel {
         int mx = Bubble.px(), my = Bubble.py(), ms = Bubble.sizePx();
         if (ms <= 0) { ms = dp(72); }
         int mid = mx + ms / 2;
-        int by = Math.min(my + ms - dp(4), dm.heightPixels - bh - dp(24));
+        int by = Math.min(my + ms + dp(4), dm.heightPixels - bh - dp(24));   // juste sous la mascotte, sans la toucher
         int cy = my - ch + dp(8);
         if (cy < dp(28)) cy = by + bh + dp(6);          // pas de place au-dessus : la carte passe sous les icônes
         int cx = Math.max(dp(8), Math.min(mid - cw / 2, dm.widthPixels - cw - dp(8)));
