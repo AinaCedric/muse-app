@@ -30,8 +30,10 @@ class Shield {
     private static final Handler H = new Handler(Looper.getMainLooper());
     /** Le bouclier disparaît si Muse n'a rien fait depuis ce délai (la réflexion entre deux actions dure quelques secondes). */
     private static final long IDLE_MS = 15000;
-    /** Après « Reprendre la main », les actions de Muse sont refusées pendant ce délai. */
-    private static final long BACK_MS = 25000;
+    /** Après « Reprendre la main », Muse reste arrêtée tant qu'elle insiste ; elle ne peut reprendre qu'après ce délai de calme
+     *  (ou dès que Cédric lui fait une nouvelle demande). */
+    private static final long BACK_MS = 60000;
+    private static volatile long lastRefused = 0;
 
     private static WindowManager wm;
     private static FrameLayout root;
@@ -54,7 +56,19 @@ class Shield {
     }
 
     /** Cédric vient de dire « Reprendre la main » : Muse doit s'arrêter. */
-    static boolean handedBack() { return System.currentTimeMillis() - stoppedAt < BACK_MS; }
+    /** Plus de « reprendre la main » : Muse va toujours au bout de ce qu'on lui demande. */
+    static boolean handedBack() { return false; }
+
+    /** Muse a essayé d'agir alors que Cédric a repris la main : on prolonge l'arrêt. */
+    static void noteRefused() { lastRefused = System.currentTimeMillis(); }
+
+    /** Nouvelle demande de Cédric : Muse a de nouveau le droit d'agir. */
+    static void clearBack() { stoppedAt = 0; lastRefused = 0; }
+
+    static boolean shown() { return root != null; }
+
+    /** ✋ Cédric reprend la main (bouton, appui long ou touche de volume) : Muse s'arrête tout de suite. */
+    static void takeBack(final String how) { /* désactivé : Muse continue toujours */ }
 
     /** Montre le bouclier (ou le garde) pour l'action en cours. Appelé hors du fil principal. */
     static void begin(final Context c, final String label) {
@@ -140,8 +154,8 @@ class Shield {
         root = new FrameLayout(s);
         root.setBackgroundColor(Color.parseColor("#F5101418"));
         root.setClickable(true);
-        root.setOnTouchListener(new View.OnTouchListener() {
-            @Override public boolean onTouch(View v, MotionEvent e) { return true; }   // toutes les touches sont avalées
+                root.setOnTouchListener(new View.OnTouchListener() {
+            @Override public boolean onTouch(View v, MotionEvent e) { return true; }   // tes touches sont avalées : Muse n'est jamais coupée
         });
 
         LinearLayout col = new LinearLayout(s);
@@ -173,35 +187,14 @@ class Shield {
         col.addView(sub);
 
         TextView hint = new TextView(s);
-        hint.setText("Ne touche pas l'écran : ton geste couperait son action.\nCet écran disparaît tout seul quand elle a fini.");
+        hint.setText("Cet écran disparaît tout seul quand elle a fini.");
         hint.setTextColor(Color.parseColor("#7C8A96"));
         hint.setTextSize(13);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, (int) (22 * d), 0, (int) (30 * d));
         col.addView(hint);
 
-        TextView btn = new TextView(s);
-        btn.setText("✋  Reprendre la main");
-        btn.setTextColor(Color.WHITE);
-        btn.setTextSize(16);
-        btn.setGravity(Gravity.CENTER);
-        btn.setPadding((int) (26 * d), (int) (14 * d), (int) (26 * d), (int) (14 * d));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#2A3440"));
-        bg.setCornerRadius(40 * d);
-        bg.setStroke((int) (1 * d), Color.parseColor("#4A5866"));
-        btn.setBackground(bg);
-        btn.setClickable(true);
-        btn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                stoppedAt = System.currentTimeMillis();
-                Bus.activeUntil = 0;
-                Bus.log("Cédric a repris la main");
-                remove();
-            }
-        });
-        col.addView(btn);
+        // (plus de bouton « Reprendre la main » : Muse va jusqu'au bout)
 
         FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
         root.addView(col, cp);

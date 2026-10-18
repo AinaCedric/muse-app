@@ -501,6 +501,7 @@ class Panel {
 
     // ---------- Demande + réponse dans le panneau
     private void ask(String q, String mode) {
+        Shield.clearBack();
         stopListening();
         stopSpeaking();
         if (Store.liveLinked(svc) && "auto".equals(mode) && Store.speak(svc) && !liveFailed) { askLive(q); return; }
@@ -538,6 +539,7 @@ class Panel {
     private final StringBuilder liveText = new StringBuilder();
 
     private void askLive(final String q) {
+        Shield.clearBack();
         stopListening();
         stopSpeaking();
         field.setText("");

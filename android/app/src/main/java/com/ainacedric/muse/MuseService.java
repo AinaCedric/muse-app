@@ -148,6 +148,7 @@ public class MuseService extends AccessibilityService {
     @Override
     public void onInterrupt() { }
 
+
     @Override
     public boolean onUnbind(Intent intent) {
         inst = null;

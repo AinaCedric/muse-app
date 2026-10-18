@@ -199,6 +199,9 @@ class Bus {
                     out = ping();
                 } else if (opName.equals("notify")) {
                     out = Notif.show(c, cmd);
+                } else if ((opName.equals("notif_reply") || opName.equals("handoff")) && Shield.handedBack()) {
+                    Shield.noteRefused();
+                    throw new Exception(HANDED_BACK);
                 } else if (opName.equals("handoff")) {
                     Shield.handoff(c, cmd.optInt("seconds", 45));
                     String msg = cmd.optString("msg", "");
@@ -214,7 +217,7 @@ class Bus {
                     out = Loc.op(c);
                 } else if (opName.equals("notifs") || opName.equals("notif_reply") || opName.equals("notif_open")) {
                     if (opName.equals("notif_open")) {
-                        if (Shield.handedBack()) throw new Exception(HANDED_BACK);
+                        if (Shield.handedBack()) { Shield.noteRefused(); throw new Exception(HANDED_BACK); }
                         Shield.begin(c, Bubble.phrase(opName, cmd));
                     }
                     Bubble.act(opName, cmd); Bubble.done();
@@ -226,7 +229,7 @@ class Bus {
                     if (s == null) s = Guard.revive(c);   // coupé par Android : on le réactive tout de suite (si la permission du garde-fou est donnée)
                     if (s == null) throw new Exception("Le service d'accessibilité de Muse est désactivé sur le téléphone : va dans Réglages → Accessibilité → Muse et réactive-le (Xiaomi le coupe parfois : active aussi « Démarrage automatique » et verrouille l'appli dans les récentes).");
                     if (Shield.isUi(opName)) {
-                        if (Shield.handedBack()) throw new Exception(HANDED_BACK);
+                        if (Shield.handedBack()) { Shield.noteRefused(); throw new Exception(HANDED_BACK); }
                         Shield.begin(c, Bubble.phrase(opName, cmd));
                     }
                     Bubble.act(opName, cmd);
