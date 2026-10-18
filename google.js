@@ -216,6 +216,36 @@
     } catch (e) { note('Connexion Google impossible : ' + e.message); }
   }
 
+  // ---------- Auto-réparation : bannière « Google à reconnecter » dès l'ouverture de l'appli
+  // En mode « Test », Google coupe la connexion après 7 jours : on prévient dès qu'elle est expirée, ET dès le 6e jour pour renouveler avant la coupure.
+  // Un seul toucher suffit (Google ouvre directement le compte) : l'autorisation elle-même ne peut pas être donnée à ta place.
+  const K_SNZ = 'muse_gsnooze';
+  const needFix = () => {
+    const l = accounts();
+    const exp = l.find((a) => a.state === 'expired'); if (exp) return { email: exp.email, why: 'expired' };
+    const old = l.find((a) => a.state === 'ok' && a.at && Date.now() - Date.parse(a.at) > 6 * 864e5); if (old) return { email: old.email, why: 'soon' };
+    return null;
+  };
+  const bar = document.createElement('div'); bar.id = 'ggFix'; bar.hidden = true;
+  bar.style.cssText = 'position:fixed;left:12px;right:12px;top:max(12px,env(safe-area-inset-top));z-index:99999;display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;background:#1f2430;color:#fff;box-shadow:0 8px 30px rgba(0,0,0,.45);font:14px system-ui,sans-serif';
+  bar.innerHTML = '<span id="ggFixT" style="flex:1"></span><button type="button" id="ggFixLater" style="background:none;border:0;color:#aab;padding:6px">Plus tard</button><button type="button" id="ggFixGo" style="background:#7c5cff;border:0;color:#fff;border-radius:10px;padding:8px 14px;font-weight:600">Reconnecter</button>';
+  document.body.appendChild(bar);
+  let fixFor = null;
+  const refreshBar = () => {
+    const n = needFix(), snz = Number(ls(K_SNZ) || 0);
+    if (!n || Date.now() < snz) { bar.hidden = true; return; }
+    fixFor = n.email;
+    bar.querySelector('#ggFixT').textContent = n.why === 'expired' ? '🔑 Gmail et Agenda sont coupés : Google demande de te reconnecter.' : '🔑 Ta connexion Google expire bientôt : renouvelle-la en un toucher.';
+    bar.hidden = false;
+  };
+  bar.querySelector('#ggFixGo').onclick = () => { bar.hidden = true; connect(fixFor); };
+  bar.querySelector('#ggFixLater').onclick = () => { lsSet(K_SNZ, String(Date.now() + 6 * 36e5)); bar.hidden = true; };
+  listeners.add(refreshBar);
+  const autoCheck = () => { if (!location.search.includes('state=')) check(false).then(refreshBar); };
+  setTimeout(autoCheck, 2500);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
+  setInterval(autoCheck, 30 * 60 * 1000);
+
   window.museGoogle = {
     get state() { return S.state; }, get email() { return S.file?.default || ''; }, get accounts() { return accounts(); }, get default() { return S.file?.default || ''; },
     check, connect, reset, disconnect, setDefault, onChange: (f) => listeners.add(f), redirect,
