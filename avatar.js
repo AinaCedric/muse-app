@@ -37,50 +37,75 @@
   // Lumières : clé chaude, contre-jour rose, remplissage violet
   scene.add(new THREE.AmbientLight(0xffffff, 0.55));
   const key = new THREE.DirectionalLight(0xffffff, 0.95); key.position.set(-2.5, 3.5, 4); scene.add(key);
-  const rim = new THREE.DirectionalLight(0xff7ac6, 0.9); rim.position.set(3, 1, -3); scene.add(rim);
+  const rim = new THREE.DirectionalLight(0x8fd2ff, 1.0); rim.position.set(3, -1, -3); scene.add(rim);
   const fill = new THREE.DirectionalLight(0x9b7bff, 0.5); fill.position.set(3, -2, 3); scene.add(fill);
 
   const head = new THREE.Group(); scene.add(head);
 
-  // Corps : sphère lisse, dégradé violet → rose via couleurs de sommets
-  const bodyGeo = new THREE.SphereGeometry(1, 56, 56);
-  const cols = [], c1 = new THREE.Color(0x7c5cff), c2 = new THREE.Color(0xff8ad0), tmp = new THREE.Color();
+  // Corps : bulle de verre 3D, dégradé galactique rose → violet → bleu (haut gauche → bas droite)
+  const bodyGeo = new THREE.SphereGeometry(1, 64, 64);
+  const cols = [], cP = new THREE.Color(0xff70d6), cM = new THREE.Color(0xdf62f2), cV = new THREE.Color(0x8a58ff), cB = new THREE.Color(0x2f78ff), tmp = new THREE.Color();
   const pos = bodyGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) { tmp.copy(c1).lerp(c2, Math.min(1, Math.max(0, (pos.getY(i) + 0.6) / 1.9))); cols.push(tmp.r, tmp.g, tmp.b); }
+  for (let i = 0; i < pos.count; i++) {
+    const g = Math.min(1, Math.max(0, (-pos.getY(i) * 0.70 + pos.getX(i) * 0.50 + 1) / 2 * 1.06 - 0.03));
+    if (g < 0.30) tmp.copy(cP).lerp(cM, g / 0.30); else if (g < 0.55) tmp.copy(cM).lerp(cV, (g - 0.30) / 0.25); else tmp.copy(cV).lerp(cB, (g - 0.55) / 0.45);
+    cols.push(tmp.r, tmp.g, tmp.b);
+  }
   bodyGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-  const body = new THREE.Mesh(bodyGeo, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.0, clearcoat: 1, clearcoatRoughness: 0.12 }));
+  const body = new THREE.Mesh(bodyGeo, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.16, metalness: 0.0, clearcoat: 1, clearcoatRoughness: 0.04, emissive: 0x3a1c9a, emissiveIntensity: 0.22 }));
   head.add(body);
+  // Épaisseur du verre : liseré lumineux autour de la bille (effet Fresnel)
+  const glassRim = new THREE.Mesh(new THREE.SphereGeometry(1.07, 48, 48), new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending,
+    vertexShader: 'varying vec3 vN; void main(){ vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'varying vec3 vN; void main(){ float i = pow(clamp(0.78 + dot(vN, vec3(0.0,0.0,1.0)), 0.0, 1.0), 3.0); gl_FragColor = vec4(vec3(0.62, 0.50, 1.0) * i * 0.9, i); }',
+  }));
+  head.add(glassRim);
+  // Reflets du verre : grand croissant en haut à gauche, petit point, liseré bleu en bas à droite
+  const softTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.45, 'rgba(255,255,255,.55)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+  })();
+  const gloss = (x, y, z, w, h, rot, color, op) => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color, transparent: true, opacity: op, depthWrite: false, rotation: rot })); m.scale.set(w, h, 1); m.position.set(x, y, z); head.add(m); return m; };
+  gloss(-0.42, 0.50, 0.78, 0.66, 0.30, 0.62, 0xfff4ff, 0.95);
+  gloss(-0.66, 0.16, 0.74, 0.12, 0.17, 0.30, 0xffffff, 1);
+  gloss(-0.80, -0.04, 0.58, 0.06, 0.08, 0.0, 0xffffff, 0.8);
+  gloss(0.52, -0.62, 0.55, 0.40, 0.10, -0.80, 0x9fe8ff, 0.7);
 
-  // Yeux
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1233, roughness: 0.15, metalness: 0.1 });
+  // Yeux vitreux : iris sombre → violet-bleu en bas, DEUX reflets blancs (grand en haut à gauche, petit en bas à droite)
+  const eyeMat = new THREE.MeshPhysicalMaterial({ color: 0x1a0d4a, roughness: 0.08, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03 });
+  const irisMat = new THREE.MeshBasicMaterial({ color: 0x5a3fd0 });
   const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const eyes = [-1, 1].map((side) => {
     const g = new THREE.Group();
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.14, 28, 28), eyeMat); e.scale.set(0.82, 1.3, 0.55); g.add(e);
-    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 12), glintMat); gl.position.set(0.04, 0.09, 0.07); g.add(gl);
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.14, 28, 28), eyeMat); e.scale.set(0.92, 1.42, 0.55); g.add(e);
+    const ir = new THREE.Mesh(new THREE.SphereGeometry(0.1, 24, 24), irisMat); ir.scale.set(0.8, 0.8, 0.3); ir.position.set(0.0, -0.075, 0.062); g.add(ir);
+    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.052, 14, 14), glintMat); gl.position.set(-0.045, 0.10, 0.085); g.add(gl);
+    const gl2 = new THREE.Mesh(new THREE.SphereGeometry(0.026, 12, 12), glintMat); gl2.position.set(0.05, -0.085, 0.08); g.add(gl2);
     g.userData = { side, glint: gl, baseX: side * 0.34, baseY: 0.12 };
     head.add(g); return g;
   });
   const surfZ = (x, y) => Math.sqrt(Math.max(0.05, 1 - x * x - y * y));
 
-  // Joues
-  const cheekMat = new THREE.MeshBasicMaterial({ color: 0xff5fa8, transparent: true, opacity: 0.5 });
+  // Joues : taches douces et fondues (pas deux ronds)
+  const cheekMat = new THREE.MeshBasicMaterial({ map: softTex, color: 0xff6fae, transparent: true, opacity: 0.5, depthWrite: false });
   const cheeks = [-1, 1].map((side) => {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), cheekMat);
-    m.scale.set(1, 0.6, 0.3); m.position.set(side * 0.57, -0.14, surfZ(0.57, -0.14) - 0.02); m.rotation.y = side * 0.62; head.add(m); return m;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.46), cheekMat);
+    m.scale.set(1, 0.6, 0.3); m.position.set(side * 0.57, -0.14, surfZ(0.57, -0.14) + 0.005); m.rotation.y = side * 0.62; head.add(m); return m;
   });
 
   // Bouche : arc de tore (scale.y > 0 sourire, ≈ 0 ligne, < 0 moue)
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.02, 10, 28, Math.PI), new THREE.MeshStandardMaterial({ color: 0x1a1233, roughness: 0.3, side: THREE.DoubleSide }));
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.03, 14, 32, Math.PI), new THREE.MeshStandardMaterial({ color: 0x2a1160, roughness: 0.3, side: THREE.DoubleSide }));
   mouth.rotation.z = Math.PI; mouth.position.set(0, -0.05, surfZ(0, -0.1) + 0.01); head.add(mouth);
 
-  // Étoile flottante (signature ✨ de Muse)
-  const sh = new THREE.Shape(), R = 1, r = 0.38;
-  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 - Math.PI / 2, rad = i % 2 ? r : R; (i ? sh.lineTo : sh.moveTo).call(sh, Math.cos(a) * rad, Math.sin(a) * rad); }
-  sh.closePath();
-  const starGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.22, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 3 });
+  // Étoile flottante (signature ✨ de Muse) : 4 branches, 3D « gonflée » (bords arrondis, volume doux, reflet nacré)
+  const sh = new THREE.Shape();
+  sh.moveTo(0, 1); sh.quadraticCurveTo(0.17, 0.17, 1, 0); sh.quadraticCurveTo(0.17, -0.17, 0, -1); sh.quadraticCurveTo(-0.17, -0.17, -1, 0); sh.quadraticCurveTo(-0.17, 0.17, 0, 1);
+  const starGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.30, bevelEnabled: true, bevelThickness: 0.17, bevelSize: 0.13, bevelSegments: 8, curveSegments: 14 });
   starGeo.center();
-  const starMat = new THREE.MeshStandardMaterial({ color: 0xffd6f0, emissive: 0xff9bd8, emissiveIntensity: 0.55, roughness: 0.25 });
+  const starMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, emissive: 0xc9b8ff, emissiveIntensity: 0.5, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08 });
   const star = new THREE.Mesh(starGeo, starMat); star.scale.setScalar(0.26); star.position.set(0, 1.62, 0); scene.add(star);
 
   // Bulles de réflexion : 3 billes qui orbitent
@@ -210,7 +235,7 @@
       g.position.set(x, y, surfZ(x, y) - 0.015);
       g.rotation.y = x * 0.9; g.rotation.x = -y * 0.9;
       g.scale.set(1, Math.max(0.06, cur.eyeOpen * blink), 1);
-      d.glint.position.set(0.04 + cur.gx * 0.02, 0.09 + cur.gy * 0.02, 0.07);
+      d.glint.position.set(-0.045 + cur.gx * 0.02, 0.10 + cur.gy * 0.02, 0.085);
     });
     cheeks.forEach((m) => m.scale.set(1, 0.6, 0.3).multiplyScalar(0.7 + cur.cheek * 0.6));
     cheekMat.opacity = 0.18 + cur.cheek * 0.5;
