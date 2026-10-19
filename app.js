@@ -1287,6 +1287,39 @@ const TTS = (() => {
   return T;
 })();
 function stopTts() { if (TTS) TTS.stop(); }
+
+// ---- Un clic sur la mascotte : Muse te salue tout de suite (texte dans une bulle + voix), sans appeler le nuage
+(() => {
+  const av = document.getElementById('avatar'); if (!av) return;
+  let last = -1, tm = 0, box = null;
+  const lines = () => {
+    const h = new Date().getHours(), hi = h < 5 ? 'Encore debout' : h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
+    return [
+      hi + ' Cédric ! Que puis-je faire pour toi aujourd’hui ?',
+      hi + ' Cédric, je suis là. Qu’est-ce qu’on fait ?',
+      'Coucou Cédric ! Dis-moi ce dont tu as besoin.',
+      'Je t’écoute Cédric : mails, agenda, code, ou autre chose ?',
+      hi + ' ! Prêt à t’aider. On commence par quoi ?',
+      'Oui Cédric ? Je suis tout ouïe.'
+    ];
+  };
+  av.style.cursor = 'pointer';
+  av.addEventListener('click', () => {
+    const l = lines(); let i; do { i = Math.floor(Math.random() * l.length); } while (i === last && l.length > 1); last = i;
+    const txt = l[i];
+    try { window.MuseAvatar && window.MuseAvatar.setState('happy', 2600); } catch { /* rien */ }
+    if (!box) {
+      box = document.createElement('div');
+      box.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);z-index:9999;max-width:min(86vw,360px);padding:10px 16px;border-radius:18px;background:linear-gradient(135deg,#7c5cff,#c25bff);color:#fff;font:600 15px/1.35 system-ui,sans-serif;text-align:center;box-shadow:0 10px 30px rgba(124,92,255,.45);transition:opacity .25s;pointer-events:none';
+      document.body.appendChild(box);
+    }
+    const r = av.getBoundingClientRect();
+    box.style.top = Math.min(innerHeight - 90, Math.max(8, r.bottom + 10)) + 'px';
+    box.textContent = txt; box.style.opacity = '1';
+    clearTimeout(tm); tm = setTimeout(() => { box.style.opacity = '0'; }, 5000);
+    if (TTS) TTS.speak(txt);
+  });
+})();
 function addTts(d) {
   if (!TTS) return;
   const row = document.createElement('div'); row.className = 'tools';
