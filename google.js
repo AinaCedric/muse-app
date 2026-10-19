@@ -226,20 +226,20 @@
     const old = l.find((a) => a.state === 'ok' && a.at && Date.now() - Date.parse(a.at) > 6 * 864e5); if (old) return { email: old.email, why: 'soon' };
     return null;
   };
-  const bar = document.createElement('div'); bar.id = 'ggFix'; bar.hidden = true;
-  bar.style.cssText = 'position:fixed;left:12px;right:12px;top:max(12px,env(safe-area-inset-top));z-index:99999;display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;background:#1f2430;color:#fff;box-shadow:0 8px 30px rgba(0,0,0,.45);font:14px system-ui,sans-serif';
+  const bar = document.createElement('div'); bar.id = 'ggFix'; bar.style.display = 'none';
+  bar.style.cssText = 'position:fixed;left:12px;right:12px;top:max(12px,env(safe-area-inset-top));z-index:99999;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;background:#1f2430;color:#fff;box-shadow:0 8px 30px rgba(0,0,0,.45);font:14px system-ui,sans-serif';
   bar.innerHTML = '<span id="ggFixT" style="flex:1"></span><button type="button" id="ggFixLater" style="background:none;border:0;color:#aab;padding:6px">Plus tard</button><button type="button" id="ggFixGo" style="background:#7c5cff;border:0;color:#fff;border-radius:10px;padding:8px 14px;font-weight:600">Reconnecter</button>';
   document.body.appendChild(bar);
   let fixFor = null;
   const refreshBar = () => {
     const n = needFix(), snz = Number(ls(K_SNZ) || 0);
-    if (!n || Date.now() < snz) { bar.hidden = true; return; }
+    if (!n || Date.now() < snz) { bar.style.display = 'none'; return; }
     fixFor = n.email;
     bar.querySelector('#ggFixT').textContent = n.why === 'expired' ? '🔑 Gmail et Agenda sont coupés : Google demande de te reconnecter.' : '🔑 Ta connexion Google expire bientôt : renouvelle-la en un toucher.';
-    bar.hidden = false;
+    bar.style.display = 'flex';
   };
-  bar.querySelector('#ggFixGo').onclick = () => { bar.hidden = true; connect(fixFor); };
-  bar.querySelector('#ggFixLater').onclick = () => { lsSet(K_SNZ, String(Date.now() + 6 * 36e5)); bar.hidden = true; };
+  bar.querySelector('#ggFixGo').onclick = () => { bar.style.display = 'none'; connect(fixFor); };
+  bar.querySelector('#ggFixLater').onclick = () => { lsSet(K_SNZ, String(Date.now() + 6 * 36e5)); bar.style.display = 'none'; };
   listeners.add(refreshBar);
   const autoCheck = () => { if (!location.search.includes('state=')) check(false).then(refreshBar); };
   setTimeout(autoCheck, 2500);
