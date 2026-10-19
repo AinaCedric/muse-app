@@ -542,6 +542,47 @@ public class MuseService extends AccessibilityService {
     }
 
     // ---------- Exécution d'un ordre
+    // ---------- Toucher fiable : certaines applis (Messenger, Facebook…) ignorent un toucher « automatique » ou refusent de le traiter
+    // quand une fenêtre les recouvre. On vérifie que l'écran a réagi ; sinon on réessaie autrement (sans bouclier, plus « humain »,
+    // puis clic d'accessibilité directement sur l'élément).
+    private String sig() {
+        try { JSONObject o = screen(); return o.optString("pkg") + "|" + o.getJSONArray("nodes").toString().hashCode(); } catch (Throwable t) { return "?"; }
+    }
+
+    private AccessibilityNodeInfo nodeAt(AccessibilityNodeInfo n, int x, int y, int depth, AccessibilityNodeInfo[] best, long[] bestArea) {
+        if (n == null || depth > 45) return null;
+        Rect b = new Rect(); n.getBoundsInScreen(b);
+        if (n.isVisibleToUser() && b.contains(x, y) && n.isEnabled()) {
+            AccessibilityNodeInfo c = n;
+            for (int i = 0; i < 5 && c != null; i++) { if (c.isClickable()) { long a = (long) b.width() * b.height(); if (a < bestArea[0]) { bestArea[0] = a; best[0] = c; } break; } c = c.getParent(); }
+        }
+        for (int i = 0; i < n.getChildCount(); i++) nodeAt(n.getChild(i), x, y, depth + 1, best, bestArea);
+        return best[0];
+    }
+
+    private String smartTap(double x, double y, boolean once) throws Exception {
+        String before = sig();
+        if (!gesture((float) x, (float) y, (float) x, (float) y, 60)) throw new Exception("Le toucher a été annulé par Android.");
+        Thread.sleep(500);
+        if (once || !sig().equals(before)) return "geste";
+        // 2e essai : bouclier invisible + appui plus long avec un léger décalage, comme un vrai doigt
+        java.util.Random rnd = new java.util.Random();
+        Shield.ghost(true);
+        try { gesture((float) x + rnd.nextInt(5) - 2, (float) y + rnd.nextInt(5) - 2, (float) x, (float) y, 110); } finally { Shield.ghost(false); }
+        Thread.sleep(500);
+        if (!sig().equals(before)) return "geste sans bouclier";
+        // 3e essai : clic d'accessibilité sur l'élément cliquable le plus précis
+        AccessibilityNodeInfo r = getRootInActiveWindow();
+        if (r != null) {
+            AccessibilityNodeInfo hit = nodeAt(r, (int) x, (int) y, 0, new AccessibilityNodeInfo[1], new long[]{Long.MAX_VALUE});
+            if (hit != null && hit.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                Thread.sleep(500);
+                if (!sig().equals(before)) return "clic d'accessibilité";
+            }
+        }
+        return "sans effet visible";
+    }
+
     private JSONObject finish(JSONObject out, JSONObject c) throws Exception {
         if (c.optBoolean("look", false)) {
             Thread.sleep(Math.max(300, Math.min(4000, c.optInt("settle", 900))));
@@ -607,8 +648,10 @@ public class MuseService extends AccessibilityService {
                         throw new Exception("L'écran a changé (il y a maintenant « " + now + " » à cet endroit au lieu de « " + c.getString("expect") + " ») : relis l'écran avec phone_screen.");
                     }
                 }
-                if (!gesture((float) x, (float) y, (float) x, (float) y, 60)) throw new Exception("Le toucher a été annulé par Android.");
+                String how = smartTap(x, y, c.optBoolean("once", false));
                 out.put("done", true);
+                out.put("method", how);
+                if (how.startsWith("sans effet")) out.put("warn", "Le toucher a été envoyé de 3 façons (geste, geste sans bouclier, clic d'accessibilité) mais l'écran n'a pas changé : l'appli ignore peut-être les touches automatiques. Relis l'écran ; sinon passe par un autre chemin (raccourci, lien direct, ou demande à Cédric de toucher lui-même).");
                 return finish(out, c);
             }
             case "swipe": {
