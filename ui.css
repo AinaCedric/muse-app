@@ -345,3 +345,15 @@ input:focus,select:focus,dialog textarea:focus{box-shadow:0 0 0 4px color-mix(in
 .mmAdd input{flex:1;min-width:0}
 .mmAdd select{flex:none;max-width:132px}
 @media(max-width:560px){.mmAdd{flex-wrap:wrap}.mmAdd select{max-width:none}}
+
+/* En-tête compact : mascotte plus petite, nom à côté (beaucoup moins de place prise en haut) */
+#top{padding:6px 12px;align-items:center}
+#top .tl,#top .tr{align-self:center}
+#who{flex-direction:row;align-items:center;gap:8px}
+#avatarWrap,#avatar{width:46px;height:46px}
+#avatarWrap .glow{inset:-6px}
+#whoName{margin-top:0;padding:3px 12px 4px;min-width:0;align-items:flex-start}
+#whoName b{font-size:15px}
+#whoName small{font-size:10.5px}
+#who.fallback #avatarWrap::after{left:7px;top:7px;width:32px;height:32px}
+@media (max-width:560px){#whoName{display:none}#avatarWrap,#avatar{width:42px;height:42px}}
