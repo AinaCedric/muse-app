@@ -2,6 +2,21 @@
 const $ = (s) => document.querySelector(s);
 // Icônes au trait (pas d'emojis dans l'interface)
 const ICON = {
+  cal: '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7Z"/>',
+  users: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.2a3 3 0 0 1 0 5.6M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  chat: '<path d="M20 12a7.5 7.5 0 0 1-11 6.6L4 20l1.4-4.6A7.5 7.5 0 1 1 20 12Z"/>',
+  star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8-4.3-4.1 5.9-.9Z"/>',
+  doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  code: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10C19.5 15.4 12 20 12 20Z"/>',
+  expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/>',
+  download: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
+  puzzle: '<path d="M10 4.5a2 2 0 1 1 4 0V6h3a1 1 0 0 1 1 1v3h1.5a2 2 0 1 1 0 4H18v3a1 1 0 0 1-1 1h-3v-1.5a2 2 0 1 0-4 0V18H7a1 1 0 0 1-1-1v-3H4.5a2 2 0 1 1 0-4H6V7a1 1 0 0 1 1-1h3Z"/>',
+  checks: '<path d="M2.5 12.5l4 4L14 9M9.5 16.5l1 1L21.5 7"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
   edit: '<path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   book: '<path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2.5Z"/><path d="M8 7h7"/>',
@@ -158,11 +173,12 @@ const uiFrames = new Map();
 function uiBox(code) {
   const id = ++uiSeq, box = document.createElement('div'); box.className = 'uibox';
   const bar = document.createElement('div'); bar.className = 'uibar';
-  bar.innerHTML = '<span class="uitag">🧩 Interface interactive</span>';
+  bar.innerHTML = `<span class="uitag">${ic('puzzle')}Interface interactive</span>`;
   const fr = document.createElement('iframe');
   fr.setAttribute('sandbox', 'allow-scripts allow-forms'); fr.setAttribute('loading', 'lazy'); fr.title = 'Interface interactive de Muse';
   fr.srcdoc = uiDoc(code, id); fr.style.height = '220px';
-  const btn = (label, title, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'uib'; b.textContent = label; b.title = title; b.onclick = fn; bar.appendChild(b); };
+  const UIC = { '⛶': 'expand', '↻': 'refresh', '</>': 'code', '⤓': 'download' };
+  const btn = (label, title, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'uib'; b.innerHTML = UIC[label] ? ic(UIC[label]) : label; b.title = title; b.onclick = fn; bar.appendChild(b); };
   btn('⛶', 'Plein écran', () => { box.classList.toggle('full'); document.body.classList.toggle('uifull', box.classList.contains('full')); });
   btn('↻', 'Réinitialiser', () => { fr.srcdoc = uiDoc(code, id); });
   btn('</>', 'Copier le code', async () => { try { await navigator.clipboard.writeText(code); toast('Code copié'); } catch { toast('Copie impossible'); } });
@@ -600,9 +616,23 @@ function convMenu(anchor, i, archived) {
   m.style.top = (r.bottom + mh + 8 > innerHeight ? Math.max(8, r.top - mh - 4) : r.bottom + 4) + 'px';
   setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { closeMenu(); document.removeEventListener('pointerdown', off, true); } }, true), 0);
 }
+const convIcon = (t) => {
+  t = String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/agenda|calendrier|programme|planning|rendez|reunion|semaine|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|rdv/.test(t)) return 'cal';
+  if (/vocal|voix|live|audio|micro/.test(t)) return 'mic';
+  if (/https?:|www\.|\.org|\.com|lien|site|va sur|wikipedia/.test(t)) return 'link';
+  if (/dossier|fichier|range|telecharg|document|pdf/.test(t)) return 'folder';
+  if (/famille|ami|habite|ensemble|equipe|contact|personne/.test(t)) return 'users';
+  if (/\bia\b|nouveau|idee|creati|image|genere/.test(t)) return 'spark';
+  if (/telephone|phone|appel|sms|whatsapp/.test(t)) return 'phone';
+  if (/odoo|code|module|bug|dev|php|react/.test(t)) return 'code';
+  if (/mail|e-mail|gmail|courrier/.test(t)) return 'doc';
+  if (/^[a-z]+$/.test(t.trim()) && t.trim().length > 2 && !/bonjour|salut|coucou|merci/.test(t)) return 'star';
+  return 'chat';
+};
 function convItem(i, archived) {
   const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '') + (archived ? ' arch' : '');
-  d.innerHTML = `${hasL(i, L_PIN) && !archived ? `<span class="pinI">${ic('pin')}</span>` : ''}<b></b><i class="more" title="Options">${ic('dots')}</i>`;
+  d.innerHTML = `<span class="ci">${ic(convIcon(i.title))}</span>${hasL(i, L_PIN) && !archived ? `<span class="pinI">${ic('pin')}</span>` : ''}<b></b><i class="more" title="Options">${ic('dots')}</i>`;
   d.querySelector('b').textContent = i.title;
   d.onclick = () => { closeMenu(); openConv(i.number); };
   const more = d.querySelector('.more');
@@ -740,7 +770,7 @@ function show(c) {
     } const used = new Set(); for (const m of txt.matchAll(/```[ \t]*muse-map[ \t]*\r?\n([\s\S]*?)```/g)) { const pm = parseMap(m[1]); if (pm) pm.places.forEach((p) => p.photo && used.add(p.photo.toLowerCase())); }
     const a = attsIn(c.body).filter((x) => !used.has(x.name.toLowerCase())); if (a.length) { d.appendChild(attsBox(a)); d.classList.add('hasAtts'); } return d; }
   if (c.body.includes(ERROR)) return add('bot', strip(c.body), 'err');
-  return addUser(strip(c.body), attsIn(c.body));
+  return stamp(addUser(strip(c.body), attsIn(c.body)), c.created_at);
 }
 
 async function openConv(n) {
@@ -920,7 +950,7 @@ try { planState = ['off', 'auto', 'on'].includes(localStorage.getItem('muse_plan
 function planBtnSet() {
   const b = $('#planBtn'); if (!b) return;
   b.dataset.s = planState;
-  b.textContent = planState === 'on' ? '📋 Plan : toujours' : planState === 'auto' ? '📋 Plan : auto' : '📋 Plan : non';
+  b.textContent = planState === 'on' ? 'Plan : toujours' : planState === 'auto' ? 'Plan : auto' : 'Plan : non';
   b.title = planState === 'on' ? 'Muse te montre son plan avant CHAQUE demande. Clique pour changer.' : planState === 'auto' ? 'Muse te montre son plan avant les actions longues ou risquées (envoyer, supprimer, payer…). Clique pour changer.' : 'Muse agit directement, sans plan. Clique pour changer.';
 }
 if ($('#planBtn')) { $('#planBtn').onclick = () => { planState = planState === 'auto' ? 'on' : planState === 'on' ? 'off' : 'auto'; try { localStorage.setItem('muse_plan', planState); } catch {} planBtnSet(); toast($('#planBtn').textContent); }; planBtnSet(); }
@@ -972,7 +1002,7 @@ async function send() {
       const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: (message || files[0].name).slice(0, 60), body: 'Discussion Muse' }) });
       issueNo = i.number; msgs.innerHTML = '';
     }
-    addUser(message, files.map((f) => ({ name: f.name, type: f.type, url: f.url })));
+    stamp(addUser(message, files.map((f) => ({ name: f.name, type: f.type, url: f.url }))));
     let markers = '';
     if (files.length) {
       up = add('bot', 'Envoi des pièces jointes', 'wait');
@@ -1117,6 +1147,12 @@ function attsBox(atts) {
     }
   });
   return box;
+}
+function stamp(d, at) {
+  if (!d) return d;
+  const t = at ? new Date(at) : new Date(); if (isNaN(t)) return d;
+  const s = document.createElement('span'); s.className = 'mt'; s.innerHTML = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}${ic('checks')}`;
+  d.appendChild(s); return d;
 }
 function addUser(text, atts = []) {
   const d = add('user', text);
@@ -1383,3 +1419,6 @@ function autoRead(cs) {
   input.value = q; input.dispatchEvent(new Event('input'));
   setTimeout(send, 500);
 })();
+
+// Icône du mode dans la pastille du haut (suit le mode choisi)
+(() => { const syncMode = () => { if (modeSel.dataset.v !== modeSel.value) modeSel.dataset.v = modeSel.value; }; syncMode(); modeSel.addEventListener('change', syncMode); setInterval(syncMode, 800); })();
