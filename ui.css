@@ -357,3 +357,10 @@ input:focus,select:focus,dialog textarea:focus{box-shadow:0 0 0 4px color-mix(in
 #whoName small{font-size:10.5px}
 #who.fallback #avatarWrap::after{left:7px;top:7px;width:32px;height:32px}
 @media (max-width:560px){#whoName{display:none}#avatarWrap,#avatar{width:42px;height:42px}}
+
+/* En-tête flottant : les messages passent DERRIÈRE la mascotte et restent toujours visibles (aucun fond, aucun flou) */
+#top,main.scrolled #top{position:absolute;top:0;left:0;right:0;z-index:6;background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-bottom-color:transparent!important;pointer-events:none}
+#top>*{pointer-events:auto}
+#top .tl,#top .tr{pointer-events:auto}
+#msgs{padding-top:70px!important}
+#whoName{background:color-mix(in srgb,var(--bg) 55%,transparent)}
