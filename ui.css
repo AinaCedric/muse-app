@@ -393,3 +393,4 @@ input:focus,select:focus,dialog textarea:focus{box-shadow:0 0 0 4px color-mix(in
 .m .uib:hover{background:rgba(124,92,255,.16)!important;color:#fff}
 .m .uibox iframe{background:transparent!important}
 @media(min-width:421px){#mode{max-width:200px}}
+main.autoview #autos{padding-top:72px}

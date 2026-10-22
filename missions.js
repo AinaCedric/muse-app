@@ -36,7 +36,11 @@
     if (!m.enabled) return null;
     const s = m.schedule || {}, now = Date.now(), T = (x) => (x ? Date.parse(x) || 0 : 0), last = T((st.state[m.id] || {}).lastRun) || T(m.created) || now;
     if (s.kind === 'once') return (st.state[m.id] || {}).lastRun ? null : T(s.at) || null;
-    if (s.kind === 'hours') return last + Math.max(1, Number(s.every) || 6) * 3600e3;
+    if (s.kind === 'hours') {
+      let t = Math.max(now, last + Math.max(1, Number(s.every) || 6) * 3600e3);
+      if (m.active) { const from = Number(m.active.from ?? 7), to = Number(m.active.to ?? 21); for (let i = 0; i < 30; i++) { const h = new Date(t + TZ * 3600e3).getUTCHours(); if (from < to ? (h >= from && h < to) : (h >= from || h < to)) break; t += 15 * 60e3; } }
+      return t;
+    }
     const [h, mi] = hhmm(m).split(':').map((x) => parseInt(x, 10) || 0), loc = new Date(now + TZ * 3600e3);
     for (let i = 0; i < 9; i++) {
       const d = new Date(Date.UTC(loc.getUTCFullYear(), loc.getUTCMonth(), loc.getUTCDate() + i, h, mi)), dow = d.getUTCDay(), t = d.getTime() - TZ * 3600e3;
@@ -60,8 +64,58 @@
     return '';
   }
 
+  // ---- 🔭 Veille proactive : une mission spéciale (id « veille »), silencieuse tant que rien d'important ne se passe
+  const WID = 'veille';
+  const watchOf = () => st.items.find((m) => m.id === WID && m.watch) || null;
+  const hrOpts = (list, cur, suf) => list.map((h) => `<option value="${h}"${Number(cur) === h ? ' selected' : ''}>${h}${suf}</option>`).join('');
+  function watchCard() {
+    const w = watchOf(), on = !!(w && w.enabled), s = (w && st.state[w.id]) || {}, nx = w && on ? nextRun(w) : null;
+    const every = (w && w.schedule && w.schedule.every) || 2, from = (w && w.active && w.active.from) ?? 7, to = (w && w.active && w.active.to) ?? 21;
+    const phone = !!(w && w.mode === 'prive');
+    const alerted = s.last && !/^RAS/.test(s.last);
+    const last = s.lastRun ? `${s.status === 'running' ? '⏳ Vérification en cours' : s.status === 'error' ? '⚠️ Échec' : alerted ? '🔔 A signalé' : '✅ Rien d’important'} · ${rel(Date.parse(s.lastRun))}` : 'Pas encore de vérification';
+    return `<article class="acard watch${on ? '' : ' off'}" id="watchCard">
+      <div class="ahead"><div class="atitle"><span class="abolt">${ic('search')}</span><b>Veille proactive</b></div>
+        <label class="sw" title="${on ? 'Active' : 'Désactivée'}"><input type="checkbox" id="wOn" ${on ? 'checked' : ''}><span></span></label></div>
+      <p class="asum">Muse surveille <b>tes mails, ton agenda${phone ? ' et les notifications du téléphone' : ''}</b> et ne te prévient que si quelque chose compte (mail important, conflit d’agenda, rendez-vous qui approche…). Si tout est calme : silence total.</p>
+      <p class="asum" style="margin-top:6px">${esc(last)}${on && nx ? ` · prochaine : <b>${esc(rel(nx))}</b>` : ''}${alerted ? ` — <span style="color:var(--mut)">${esc(s.last.slice(0, 140))}</span>` : ''}</p>
+      <div class="wrow" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <label style="display:flex;gap:6px;align-items:center">Toutes les <select id="wEvery">${hrOpts([1, 2, 3, 4, 6], every, ' h')}</select></label>
+        <label style="display:flex;gap:6px;align-items:center">de <select id="wFrom">${hrOpts([5, 6, 7, 8, 9, 10], from, ' h')}</select> à <select id="wTo">${hrOpts([18, 19, 20, 21, 22, 23], to, ' h')}</select></label>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="wPhone" ${phone ? 'checked' : ''}> Surveiller aussi les notifications du téléphone</label>
+      <input id="wFocus" maxlength="200" placeholder="À surveiller en priorité (optionnel) : clients Odoo, mails de Mr Patrick, factures…" value="${q((w && w.focus) || '')}" autocomplete="off" style="width:100%;margin-top:10px">
+      <div class="aact"><button class="ghost" id="wSave" type="button">Enregistrer</button><button class="ghost" id="wNow" type="button">🔭 Vérifier maintenant</button><button class="ghost" id="wHist" type="button">Alertes</button></div>
+    </article>`;
+  }
+  async function watchSave(on) {
+    const g = (id) => view.querySelector(id), now = new Date().toISOString();
+    const item = { id: WID, name: 'Veille proactive', goal: 'Veille proactive : surveille mes mails, mon agenda et mes notifications, et préviens-moi seulement si c’est important.', watch: true,
+      mode: g('#wPhone').checked ? 'prive' : 'perso', schedule: { kind: 'hours', every: +g('#wEvery').value || 2 }, active: { from: +g('#wFrom').value, to: +g('#wTo').value }, focus: g('#wFocus').value.trim(), enabled: on };
+    const old = watchOf(), before = st.items.slice();
+    if (old) Object.assign(old, item, { created: old.created }); else st.items.push({ ...item, created: now });
+    try { await save(`Veille proactive ${on ? 'activée' : 'désactivée'}`); toast(on ? 'Veille activée' : 'Veille désactivée'); render(); }
+    catch (e) { st.items = before; toast('' + e.message); render(); }
+  }
+  async function watchNow() {
+    const w = watchOf(); if (!w) { toast('Active d’abord la veille.'); return; }
+    try {
+      let n = w.issue || (st.state[w.id] || {}).issue;
+      if (!n) { n = (await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: '🔁 Veille proactive', body: `<!--mission:${w.id}-->\nAlertes de la veille proactive.` }) })).number; w.issue = n; await save('Veille : discussion').catch(() => {}); }
+      await gh(`/repos/${cfg.repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body: `🔭 **Veille proactive** — vérification lancée à la main. Regarde mes mails, mon agenda${w.mode === 'prive' ? ' et mes notifications' : ''} et dis-moi ce qui compte.${w.focus ? `\n\nÀ surveiller en priorité : ${w.focus}` : ''}\n\n<!--mode:${w.mode || 'perso'}--><!--mission:${w.id}--><!--watch-now-->` }) });
+      close(); await openConv(n); toast('Vérification lancée');
+    } catch (e) { toast('' + e.message); }
+  }
+  function bindWatch() {
+    const g = (id) => view.querySelector(id); if (!g('#wOn')) return;
+    g('#wOn').onchange = (e) => { e.target.checked ? watchSave(true) : (watchOf() ? watchSave(false) : null); };
+    g('#wSave').onclick = () => watchSave(!!(watchOf() && watchOf().enabled) || g('#wOn').checked);
+    g('#wNow').onclick = watchNow;
+    g('#wHist').onclick = () => { const w = watchOf(), n = w && (w.issue || (st.state[w.id] || {}).issue); n ? (close(), openConv(n)) : toast('Aucune alerte pour l’instant.'); };
+  }
+
   function render() {
-    const cards = st.items.map((m) => {
+    const cards = st.items.filter((m) => !m.watch).map((m) => {
       const s = st.state[m.id] || {}, nx = nextRun(m);
       const last = s.lastRun ? `${s.status === 'running' ? '⏳ En cours' : s.status === 'error' ? '⚠️ Échec' : '✅ Fait'} · ${rel(Date.parse(s.lastRun))}` : 'Pas encore lancée';
       return `<article class="acard${m.enabled ? '' : ' off'}" data-id="${q(m.id)}">
@@ -78,11 +132,13 @@
       <div class="atop"><div><h2>Missions</h2><p class="hint">Des objectifs que Muse exécute toute seule, à heure fixe, en tâche de fond. Chaque passage laisse un rapport et te prévient sur le téléphone.</p></div>
         <button class="btn" id="missNew" type="button">${ic('plus')}<span>Nouvelle</span></button></div>
       <div class="anote">${ic('repeat')}<span>Les missions tournent sur <b>le démon de ton PC</b> (précis à la minute) ou, s’il est éteint, sur GitHub (toutes les 15 min). Elles ne font jamais d’envoi, de suppression ni de paiement : elles <b>préparent</b>, tu valides.</span></div>
-      ${st.items.length ? cards : `<div class="aempty"><span class="abolt big">${ic('repeat')}</span><h3>Aucune mission</h3><p>Choisis une idée pour démarrer :</p><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px">${ideas}</div></div>`}
+      ${watchCard()}
+      ${st.items.some((m) => !m.watch) ? cards : `<div class="aempty"><span class="abolt big">${ic('repeat')}</span><h3>Aucune mission</h3><p>Choisis une idée pour démarrer :</p><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px">${ideas}</div></div>`}
     </div>`;
+    bindWatch();
     view.querySelector('#missNew').onclick = () => edit(null);
     view.querySelectorAll('.midea').forEach((b) => (b.onclick = () => edit(null, IDEAS[+b.dataset.i])));
-    view.querySelectorAll('.acard').forEach((c) => {
+    view.querySelectorAll('.acard:not(.watch)').forEach((c) => {
       const m = st.items.find((x) => x.id === c.dataset.id);
       c.querySelector('.aon').onchange = (e) => toggle(m, e.target.checked, e.target);
       c.querySelector('.aedit').onclick = () => edit(m);
