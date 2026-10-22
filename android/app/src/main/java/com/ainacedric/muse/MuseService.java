@@ -221,11 +221,39 @@ public class MuseService extends AccessibilityService {
                 Thread.sleep(900);
             }
             if (km.isKeyguardLocked()) {
-                if (!Vault.has(this)) throw new Exception("ÉCRAN VERROUILLÉ : Muse n'a pas de code enregistré. Cédric peut l'ajouter dans l'appli Muse Tél. (🔐 Code de déverrouillage) ; en attendant, dis-lui de déverrouiller son téléphone puis de réessayer.");
-                unlockWithPin(km);
-                unlockedByMuse = true;
+                if (!Vault.has(this)) {
+                    askUnlock(km, "ÉCRAN VERROUILLÉ : Muse n'a pas de code enregistré. Cédric peut l'ajouter dans l'appli Muse Tél. (🔐 Code de déverrouillage) ; en attendant, il doit déverrouiller son téléphone.");
+                } else {
+                    try { unlockWithPin(km); unlockedByMuse = true; }
+                    catch (Exception e) { askUnlock(km, e.getMessage()); }
+                }
             }
         }
+    }
+
+    /** Écran verrouillé et Muse ne peut pas le déverrouiller : elle le DIT à haute voix et attend que Cédric déverrouille. */
+    private void askUnlock(KeyguardManager km, String why) throws Exception {
+        String[] lines = {
+            "Cédric, ton écran est verrouillé. Déverrouille-le s'il te plaît, pour que je puisse répondre au message.",
+            "Cédric, j'attends toujours. Déverrouille ton téléphone pour que je continue.",
+            "Dernier rappel : déverrouille l'écran, sinon je ne peux pas répondre."
+        };
+        try { Bubble.note("🔒 Déverrouille ton téléphone pour que Muse réponde"); } catch (Throwable ignore) { }
+        for (int round = 0; round < lines.length; round++) {
+            PowerManager pm = getSystemService(PowerManager.class);
+            if (!pm.isInteractive()) wake();
+            Voice.say(this, lines[round]);
+            for (int i = 0; i < 12; i++) {
+                if (!km.isKeyguardLocked()) {
+                    Thread.sleep(700);
+                    Voice.say(this, "Merci, je m'en occupe.");
+                    return;
+                }
+                Thread.sleep(1000);
+            }
+        }
+        if (!km.isKeyguardLocked()) return;
+        throw new Exception(why + " (Muse l'a demandé à voix haute, sans réponse.)");
     }
 
     // ---------- Déverrouillage par code (stocké chiffré, jamais envoyé ailleurs)
