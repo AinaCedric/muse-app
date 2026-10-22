@@ -394,3 +394,24 @@ input:focus,select:focus,dialog textarea:focus{box-shadow:0 0 0 4px color-mix(in
 .m .uibox iframe{background:transparent!important}
 @media(min-width:421px){#mode{max-width:200px}}
 main.autoview #autos{padding-top:72px}
+
+/* ===== 🔭 Veille proactive : carte d'alerte organisée ===== */
+.m .wbox{white-space:normal;margin:8px -4px 4px;border:1px solid rgba(139,108,255,.32);border-radius:20px;background:linear-gradient(180deg,rgba(124,92,255,.10),transparent 90px),var(--panel);box-shadow:0 12px 34px rgba(124,92,255,.14);overflow:hidden}
+.wbox .whead{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid rgba(139,108,255,.16)}
+.wbox .whead span{display:grid;color:#b9a7ff}.wbox .whead svg{width:17px;height:17px}
+.wbox .whead b{font-weight:600;color:#b9a7ff}.wbox .whead small{margin-left:auto;color:var(--faint);font-size:12px}
+.wbox .wit{padding:12px 14px;border-bottom:1px solid var(--bd);border-left:3px solid var(--wc,#facc15);transition:opacity .3s}
+.wbox .wit:last-child{border-bottom:0}
+.wbox .wit.red{--wc:#f87171}.wbox .wit.orange{--wc:#fb923c}.wbox .wit.yellow{--wc:#facc15}
+.wbox .wit.done{opacity:.45}
+.wbox .wtop{display:flex;align-items:center;gap:9px}
+.wbox .wic{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:color-mix(in srgb,var(--wc) 16%,transparent);color:var(--wc);flex:none}.wbox .wic svg{width:16px;height:16px}
+.wbox .wtop b{flex:1;font-weight:600;font-size:14.5px;min-width:0}
+.wbox .wchip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;color:var(--wc);background:color-mix(in srgb,var(--wc) 14%,transparent);white-space:nowrap}
+.wbox .wit p{margin:6px 0 0 37px;color:var(--mut);font-size:13.5px;line-height:1.45}
+.wbox .wact{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0 37px}
+.wbox .wb{border:0;border-radius:999px;padding:7px 14px;font:600 13px var(--sans);cursor:pointer;color:#fff;background:linear-gradient(135deg,#7c5cff,#a64ff0);transition:transform .15s}
+.wbox .wb:hover{transform:translateY(-1px)}
+.wbox .wb.ghost{background:transparent;color:var(--mut);border:1px solid var(--bd)}
+@media(max-width:560px){#mode{max-width:78px;padding-right:24px!important}.planBtn{padding:0 10px!important}#top .tl{gap:6px}}
+@media(max-width:560px){.planBtn{font-size:0!important;width:38px;padding:0!important;justify-content:center;gap:0}.planBtn::before{width:18px;height:18px}}

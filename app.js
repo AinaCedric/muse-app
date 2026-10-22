@@ -143,7 +143,7 @@ function splitParts(text) {
 }
 
 // ---- 🧩 Interfaces interactives : Muse écrit un bloc ```muse-ui … ``` ; on l'affiche comme un mini-outil vivant dans une bulle isolée
-const UI_RE = /```[ \t]*(muse-ui|muse-cards|muse-map|muse-stats)[ \t]*\r?\n([\s\S]*?)(```|$)/g;
+const UI_RE = /```[ \t]*(muse-ui|muse-cards|muse-map|muse-stats|muse-watch)[ \t]*\r?\n([\s\S]*?)(```|$)/g;
 const UI_VARS = ['bg', 'panel', 'soft', 'txt', 'mut', 'acc', 'acc-soft', 'bd', 'code', 'ok', 'err'];
 function uiTheme() {
   const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue('--' + n).trim();
@@ -160,7 +160,7 @@ input,select,textarea,button{font:inherit;color:inherit}input,select,textarea{ba
 button{background:var(--acc);color:#fff;border:0;border-radius:999px;padding:9px 16px;min-height:40px;cursor:pointer}button.ghost{background:var(--soft);color:var(--txt)}
 canvas,svg,img{max-width:100%}</style>
 <script>
-const museSend=(t)=>parent.postMessage({museUi:${id},send:String(t).slice(0,2000)},'*');const museCopy=(t)=>parent.postMessage({museUi:${id},copy:String(t).slice(0,20000)},'*');
+const museSend=(t,now)=>parent.postMessage({museUi:${id},send:String(t).slice(0,2000),now:!!now},'*');const museCopy=(t)=>parent.postMessage({museUi:${id},copy:String(t).slice(0,20000)},'*');
 addEventListener('message',(e)=>{const d=e.data||{};if(d.museTheme){for(const[k,v]of Object.entries(d.museTheme)){if(k!=='dark')document.documentElement.style.setProperty('--'+k,v)}document.documentElement.style.colorScheme=d.museTheme.dark?'dark':'light'}});
 const __h=()=>parent.postMessage({museUi:${id},h:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*');
 addEventListener('load',__h);new ResizeObserver(__h).observe(document.documentElement);
@@ -190,7 +190,7 @@ addEventListener('message', (e) => {
   const d = e.data || {}; const fr = d.museUi && uiFrames.get(d.museUi);
   if (!fr || e.source !== fr.contentWindow) return;
   if (d.h) fr.style.height = Math.min(Math.max(d.h, 60), 1600) + 'px';
-  if (d.send) { input.value = d.send; input.focus(); input.dispatchEvent(new Event('input')); toast('Message prêt : appuie sur Envoyer'); }
+  if (d.send) { input.value = d.send; input.focus(); input.dispatchEvent(new Event('input')); if (d.now && isWatchConv() && !busy && d.send.length < 400) send(); else toast('Message prêt : appuie sur Envoyer'); }
   if (d.copy) navigator.clipboard.writeText(d.copy).then(() => toast('Copié'), () => toast('Copie impossible'));
   if (d.err) console.warn('Interface Muse :', d.err);
 });
@@ -202,12 +202,49 @@ function splitUI(text) {
     out.push({ t: text.slice(pos, m.index) });
     if (m[1] === 'muse-cards') out.push({ cards: m[2] });
     else if (m[1] === 'muse-stats') out.push({ stats: m[2] });
+    else if (m[1] === 'muse-watch') out.push(m[3] ? { watch: m[2] } : { t: '🔭 _(alerte incomplète : réponse coupée)_' });
     else if (m[1] === 'muse-map') out.push(m[3] ? { map: m[2] } : { t: '🗺️ _(carte incomplète : réponse coupée)_' });
     else if (m[3]) out.push({ ui: m[2] }); else out.push({ t: '🧩 _(interface incomplète : réponse coupée)_' });
     pos = UI_RE.lastIndex;
   }
   out.push({ t: text.slice(pos) });
-  return out.filter((x) => x.ui || x.cards || x.map || x.stats || x.t.trim());
+  return out.filter((x) => x.ui || x.cards || x.map || x.stats || x.watch || x.t.trim());
+}
+// ---- 🔭 Veille proactive : une seule discussion épinglée ; chaque alerte = carte organisée (bloc ```muse-watch en JSON) avec boutons d'action en un toucher
+const isWatchConv = () => /Veille proactive/.test(($('#list .item.on b') || {}).textContent || '');
+const WDONE = 'muse_watch_done';
+const wdone = () => { try { return JSON.parse(localStorage.getItem(WDONE) || '{}'); } catch { return {}; } };
+const wmark = (k) => { try { const o = wdone(); o[k] = 1; const ks = Object.keys(o); if (ks.length > 400) delete o[ks[0]]; localStorage.setItem(WDONE, JSON.stringify(o)); } catch { /* stockage indisponible */ } };
+function watchBox(raw, c) {
+  let dat; try { dat = JSON.parse(String(raw).trim()); } catch { return null; }
+  const items = (Array.isArray(dat.items) ? dat.items : []).slice(0, 6); if (!items.length) return null;
+  const when = new Date((c && c.created_at) || Date.now()), done = wdone();
+  const el = document.createElement('div'); el.className = 'wbox';
+  const head = document.createElement('div'); head.className = 'whead';
+  head.innerHTML = `<span>${ic('search')}</span><b>Veille</b><small>${esc(when.toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</small>`;
+  el.appendChild(head);
+  const KI = { mail: 'doc', agenda: 'cal', phone: 'phone' }, UL = { red: 'À faire maintenant', orange: 'Aujourd’hui', yellow: 'À voir' }, plain = [];
+  items.forEach((it, i) => {
+    const urg = ['red', 'orange', 'yellow'].includes(it.urgency) ? it.urgency : 'yellow', key = `${(c && c.id) || 'x'}:${i}`;
+    const row = document.createElement('div'); row.className = `wit ${urg}${done[key] ? ' done' : ''}`;
+    row.innerHTML = `<div class="wtop"><span class="wic">${ic(KI[it.kind] || 'chat')}</span><b></b><span class="wchip">${UL[urg]}</span></div><p></p><div class="wact"></div>`;
+    row.querySelector('b').textContent = `${i + 1}. ${String(it.title || '').slice(0, 90)}`; row.querySelector('p').textContent = String(it.detail || '').slice(0, 260);
+    plain.push(`${i + 1}. ${it.title || ''}. ${it.detail || ''}`);
+    const act = row.querySelector('.wact');
+    (Array.isArray(it.actions) ? it.actions : []).slice(0, 3).forEach((a) => {
+      const bt = document.createElement('button'); bt.type = 'button'; bt.className = /ignor/i.test(a.label || '') ? 'wb ghost' : 'wb'; bt.textContent = String(a.label || 'Action').slice(0, 40); bt.title = 'Envoie à Muse : ' + String(a.say || '').slice(0, 200);
+      bt.onclick = () => {
+        const say = String(a.say || '').slice(0, 380); if (!say) return;
+        if (busy) { toast('Muse est déjà en train de répondre : réessaie dans un instant.'); return; }
+        wmark(key); row.classList.add('done'); bt.textContent = '✓ ' + bt.textContent;
+        input.value = say; input.dispatchEvent(new Event('input')); send();
+      };
+      act.appendChild(bt);
+    });
+    if (!act.children.length) act.remove();
+    el.appendChild(row);
+  });
+  return { el, plain: plain.join('\n') };
 }
 // ---- 📰 Cartes d'actualités / résultats : bloc ```muse-cards (## Titre, puis badge:, img:, sources:, intérêt:, et le texte)
 function parseCards(src) {
@@ -750,6 +787,7 @@ function show(c) {
         d.appendChild(box); raws.push(seg.stats.replace(/\|/g, ' : ')); return;
       }
       if (seg.map) { d.appendChild(mapBox(seg.map, attsIn(c.body))); d.classList.add('hasUi'); raws.push(mapPlain(seg.map)); return; }
+      if (seg.watch) { const wb = watchBox(seg.watch, c); if (wb) { d.appendChild(wb.el); d.classList.add('hasUi'); raws.push(wb.plain); } return; }
       if (seg.cards) { d.appendChild(cardsBox(seg.cards)); d.classList.add('hasUi'); raws.push(cardsPlain(seg.cards)); return; }
       const { parts, all, plain } = splitParts(seg.t); raws.push(plain);
       parts.forEach((p) => { if (p.t !== undefined) d.insertAdjacentHTML('beforeend', render(p.t)); else { d.appendChild(gallery(p.imgs, all, !d.querySelector('.gallery,.mosaic'))); } });

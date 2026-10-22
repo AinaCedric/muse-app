@@ -88,20 +88,27 @@
       <div class="aact"><button class="ghost" id="wSave" type="button">Enregistrer</button><button class="ghost" id="wNow" type="button">🔭 Vérifier maintenant</button><button class="ghost" id="wHist" type="button">Alertes</button></div>
     </article>`;
   }
+  // La discussion unique de la veille : créée une fois, épinglée, toujours la même
+  async function ensureWatchIssue(w) {
+    let n = w.issue || (st.state[w.id] || {}).issue;
+    if (n) return n;
+    n = (await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: '🔭 Veille proactive', body: `<!--mission:${w.id}-->\nTes alertes de veille proactive, au même endroit. Réponds ici pour agir : « 1 prépare la réponse », « ignore 2 », « décale ce rendez-vous »…` }) })).number;
+    w.issue = n; try { await addLabel(n, L_PIN, 'a78bfa'); } catch { /* épinglage facultatif */ }
+    return n;
+  }
   async function watchSave(on) {
     const g = (id) => view.querySelector(id), now = new Date().toISOString();
     const item = { id: WID, name: 'Veille proactive', goal: 'Veille proactive : surveille mes mails, mon agenda et mes notifications, et préviens-moi seulement si c’est important.', watch: true,
       mode: g('#wPhone').checked ? 'prive' : 'perso', schedule: { kind: 'hours', every: +g('#wEvery').value || 2 }, active: { from: +g('#wFrom').value, to: +g('#wTo').value }, focus: g('#wFocus').value.trim(), enabled: on };
     const old = watchOf(), before = st.items.slice();
     if (old) Object.assign(old, item, { created: old.created }); else st.items.push({ ...item, created: now });
-    try { await save(`Veille proactive ${on ? 'activée' : 'désactivée'}`); toast(on ? 'Veille activée' : 'Veille désactivée'); render(); }
+    try { if (on) await ensureWatchIssue(watchOf()); await save(`Veille proactive ${on ? 'activée' : 'désactivée'}`); toast(on ? 'Veille activée : tes alertes arriveront dans la discussion « Veille proactive »' : 'Veille désactivée'); render(); if (on) loadList(); }
     catch (e) { st.items = before; toast('' + e.message); render(); }
   }
   async function watchNow() {
     const w = watchOf(); if (!w) { toast('Active d’abord la veille.'); return; }
     try {
-      let n = w.issue || (st.state[w.id] || {}).issue;
-      if (!n) { n = (await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: '🔁 Veille proactive', body: `<!--mission:${w.id}-->\nAlertes de la veille proactive.` }) })).number; w.issue = n; await save('Veille : discussion').catch(() => {}); }
+      const had = w.issue || (st.state[w.id] || {}).issue, n = await ensureWatchIssue(w); if (!had) await save('Veille : discussion').catch(() => {});
       await gh(`/repos/${cfg.repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body: `🔭 **Veille proactive** — vérification lancée à la main. Regarde mes mails, mon agenda${w.mode === 'prive' ? ' et mes notifications' : ''} et dis-moi ce qui compte.${w.focus ? `\n\nÀ surveiller en priorité : ${w.focus}` : ''}\n\n<!--mode:${w.mode || 'perso'}--><!--mission:${w.id}--><!--watch-now-->` }) });
       close(); await openConv(n); toast('Vérification lancée');
     } catch (e) { toast('' + e.message); }
