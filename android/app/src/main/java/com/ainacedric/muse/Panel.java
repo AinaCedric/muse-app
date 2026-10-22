@@ -625,6 +625,8 @@ class Panel {
             case "surprise": c = Color.rgb(236, 90, 170); Bubble.reaction("happy", 3200); break;
             case "alerte": c = Color.rgb(255, 122, 64); Bubble.reaction("sad", 3200); break;
             case "triste": c = Color.rgb(100, 150, 245); Bubble.reaction("sad", 3200); break;
+            case "taquine": c = Color.rgb(190, 125, 255); Bubble.reaction("happy", 3200); break;
+            case "inquiete": c = Color.rgb(140, 165, 205); Bubble.reaction("sad", 3200); break;
             case "calme": c = Color.rgb(100, 217, 178); break;
             case "pense": c = ACCL; break;
             default: c = 0;
