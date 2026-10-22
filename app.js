@@ -667,10 +667,21 @@ const convIcon = (t) => {
   if (/^[a-z]+$/.test(t.trim()) && t.trim().length > 2 && !/bonjour|salut|coucou|merci/.test(t)) return 'star';
   return 'chat';
 };
+const seenMap = () => { try { return JSON.parse(localStorage.getItem('muse_seen') || 'null'); } catch { return null; } };
+function unreadSync(l) { // compare le nombre de messages à ce que j'ai déjà vu
+  let m = seenMap(); const first = !m; m = m || {};
+  l.forEach((i) => { if (first || i.number === issueNo || m[i.number] == null) m[i.number] = i.comments; });
+  try { localStorage.setItem('muse_seen', JSON.stringify(m)); } catch {}
+  return m;
+}
+function markSeen(n, c) { const m = seenMap() || {}; m[n] = c; try { localStorage.setItem('muse_seen', JSON.stringify(m)); } catch {} }
+let seenNow = {};
 function convItem(i, archived) {
   const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '') + (archived ? ' arch' : '');
-  d.innerHTML = `<span class="ci">${ic(convIcon(i.title))}</span>${hasL(i, L_PIN) && !archived ? `<span class="pinI">${ic('pin')}</span>` : ''}<b></b><i class="more" title="Options">${ic('dots')}</i>`;
+  d.innerHTML = `<span class="ci">${ic(convIcon(i.title))}</span>${hasL(i, L_PIN) && !archived ? `<span class="pinI">${ic('pin')}</span>` : ''}<b></b><em class="unr" hidden></em><i class="more" title="Options">${ic('dots')}</i>`;
   d.querySelector('b').textContent = i.title;
+  const un = i.number === issueNo || archived ? 0 : Math.max(0, (i.comments || 0) - (seenNow[i.number] ?? i.comments));
+  if (un) { const u = d.querySelector('.unr'); u.hidden = false; u.textContent = un > 9 ? '9+' : un; d.classList.add('hasUnr'); }
   d.onclick = () => { closeMenu(); openConv(i.number); };
   const more = d.querySelector('.more');
   more.onclick = (e) => { e.stopPropagation(); convMenu(more, i, archived); };
@@ -685,6 +696,7 @@ async function loadList() {
   if (!cfg.repo || !cfg.token) return;
   try {
     const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request && !(i.body || '').startsWith('<!--auto:')); // les historiques d'automatisations vivent dans l'onglet ⚡
+    seenNow = unreadSync(l);
     const list = $('#list'); list.innerHTML = '';
     const pins = l.filter((i) => hasL(i, L_PIN)), rest = l.filter((i) => !hasL(i, L_PIN));
     const head = (t) => { const h = document.createElement('div'); h.className = 'lhead'; h.textContent = t; list.appendChild(h); };
@@ -825,6 +837,7 @@ async function openConv(n) {
     // Une réponse est peut-être encore en préparation : on reprend l'attente.
     if (last && !last.body.includes(REPLY) && !last.body.includes(ERROR) && Date.now() - new Date(last.created_at) < 20 * 60 * 1000) wait(n, last.created_at);
   } catch (e) { add('bot', '' + e.message, 'err'); }
+  try { const it = await gh(`/repos/${cfg.repo}/issues/${n}`); markSeen(n, it.comments); } catch {}
   loadList();
 }
 function newChat() { if (window.autosClose) autosClose(); try { $('#agentPane').hidden = true; $('#agentMini').hidden = true; } catch {} stopTts(); pollId++; busy = false; setSend('idle'); avatar('idle'); issueNo = null; empty(); $('#side').classList.remove('open'); loadList(); }
@@ -1460,3 +1473,7 @@ function autoRead(cs) {
 
 // Icône du mode dans la pastille du haut (suit le mode choisi)
 (() => { const syncMode = () => { if (modeSel.dataset.v !== modeSel.value) modeSel.dataset.v = modeSel.value; }; syncMode(); modeSel.addEventListener('change', syncMode); setInterval(syncMode, 800); })();
+
+// pastille rouge : rafraîchit la liste de temps en temps pour voir les nouvelles réponses
+setInterval(() => { if (document.visibilityState === 'visible' && cfg.repo && cfg.token && !busy) loadList(); }, 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && cfg.repo && cfg.token) loadList(); });
