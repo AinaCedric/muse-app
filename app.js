@@ -654,6 +654,7 @@ function convMenu(anchor, i, archived) {
   setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { closeMenu(); document.removeEventListener('pointerdown', off, true); } }, true), 0);
 }
 const convIcon = (t) => {
+  if (/^\s*⚡/.test(t)) return 'bolt';
   t = String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   if (/agenda|calendrier|programme|planning|rendez|reunion|semaine|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|rdv/.test(t)) return 'cal';
   if (/vocal|voix|live|audio|micro/.test(t)) return 'mic';
@@ -679,7 +680,7 @@ let seenNow = {};
 function convItem(i, archived) {
   const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '') + (archived ? ' arch' : '');
   d.innerHTML = `<span class="ci">${ic(convIcon(i.title))}</span>${hasL(i, L_PIN) && !archived ? `<span class="pinI">${ic('pin')}</span>` : ''}<b></b><em class="unr" hidden></em><i class="more" title="Options">${ic('dots')}</i>`;
-  d.querySelector('b').textContent = i.title;
+  d.querySelector('b').textContent = String(i.title).replace(/^\s*⚡\s*/, '');
   const un = i.number === issueNo || archived ? 0 : Math.max(0, (i.comments || 0) - (seenNow[i.number] ?? i.comments));
   if (un) { const u = d.querySelector('.unr'); u.hidden = false; u.textContent = un > 9 ? '9+' : un; d.classList.add('hasUnr'); }
   d.onclick = () => { closeMenu(); openConv(i.number); };
@@ -695,7 +696,7 @@ function convItem(i, archived) {
 async function loadList() {
   if (!cfg.repo || !cfg.token) return;
   try {
-    const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request && !(i.body || '').startsWith('<!--auto:')); // les historiques d'automatisations vivent dans l'onglet ⚡
+    const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request);  // les historiques d'automatisations (⚡) sont aussi dans la liste
     seenNow = unreadSync(l);
     const list = $('#list'); list.innerHTML = '';
     const pins = l.filter((i) => hasL(i, L_PIN)), rest = l.filter((i) => !hasL(i, L_PIN));

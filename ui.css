@@ -416,6 +416,8 @@ main.autoview #autos{padding-top:72px}
 @media(max-width:560px){#mode{max-width:78px;padding-right:24px!important}.planBtn{padding:0 10px!important}#top .tl{gap:6px}}
 @media(max-width:560px){.planBtn{font-size:0!important;width:38px;padding:0!important;justify-content:center;gap:0}.planBtn::before{width:18px;height:18px}}
 
+.item.isAuto .ci{color:#f5b942}
 .item .unr{font-style:normal;flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#ef4444;color:#fff;font:700 11px/18px var(--sans);text-align:center;box-shadow:0 0 0 2px var(--bg,#0b0b12);margin-left:6px}
+.item.isAuto .ci{color:#f5b942}
 .item .unr[hidden]{display:none}
 .item.hasUnr b{font-weight:700}
