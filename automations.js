@@ -25,6 +25,14 @@
   const appLabel = (v) => (APPS.find((a) => a[0] === v) || [v, v])[1];
   const rid = () => 'a' + Array.from(crypto.getRandomValues(new Uint8Array(4)), (x) => x.toString(16).padStart(2, '0')).join('');
 
+  // 🔭 Discussion « Veille proactive » (créée quand on active la veille)
+  async function veilleIssue() {
+    const l = await gh(`/repos/${cfg.repo}/issues?state=open&per_page=100`);
+    const it = (l || []).find((i) => !i.pull_request && /Veille proactive/.test(i.title));
+    if (!it) throw new Error('La discussion « Veille proactive » n’existe pas encore : active d’abord la veille (Missions → Veille proactive).');
+    return it.number;
+  }
+
   async function load() {
     try {
       const f = await gh(`/repos/${cfg.repo}/contents/${FILE}`);
@@ -47,7 +55,8 @@
     }
   }
 
-  const summary = (r) => {
+  const summary = (r) => { const x = summary0(r); return r.dest === 'veille' ? x + ' · 🔭 dans Veille proactive' : x; };
+  const summary0 = (r) => {
     const t = r.trigger || {}, who = `« ${esc(t.match || '…')} »`;
     if (!t.match) return `Quand un message arrive sur ${esc(appLabel(t.app) || 'l’appli')} (tous les contacts, hors groupes) → ${({ ask: 'Muse te propose la réponse', auto: 'Muse répond seule', none: 'Muse te résume le message' })[replyOf(r)]}`;
     const when = t.by === 'text' ? `Quand un message contient ${who}` : t.by === 'any' ? `Quand ${who} apparaît dans une notification` : `Quand ${who} m’écrit`;
@@ -103,7 +112,7 @@
     st.items = st.items.filter((x) => x.id !== r.id);
     try {
       await save(`Automatisation supprimée : ${r.name}`);
-      if (r.issue) gh(`/repos/${cfg.repo}/issues/${r.issue}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {});
+      if (r.issue && r.dest !== 'veille') gh(`/repos/${cfg.repo}/issues/${r.issue}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {});
       toast('Automatisation supprimée'); render(); loadList();
     } catch (e) { st.items = before; toast('' + e.message); render(); }
   }
@@ -131,6 +140,7 @@
     $('#aReply').innerHTML = REPLIES.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
     $('#aReply').value = r ? replyOf(r) : 'ask';
     $('#aReply').onchange = hint; hint();
+    $('#aDest').value = r && r.dest === 'veille' ? 'veille' : 'own';
     $('#aMax').value = r ? r.maxPerHour || 6 : 6;
     $('#aMsg').textContent = '';
     dlg.showModal();
@@ -144,19 +154,28 @@
     if (!name || (!match && !app)) { $('#aMsg').textContent = 'Donne un nom, et soit un contact ou un mot, soit une application précise (pour tous ses messages).'; return; }
     if ($('#aApp').value === '__custom' && !app) { $('#aMsg').textContent = 'Indique un morceau du nom de l’appli (ex. « signal »).'; return; }
     const btn = $('#aSave'); btn.disabled = true;
-    const data = { name, enabled: editing ? editing.enabled : true, instruction: editing ? editing.instruction || '' : '', replyMode: $('#aReply').value, autoReply: $('#aReply').value !== 'none', maxPerHour: max, trigger: { type: 'notification', match, by: $('#aBy').value, app } };
+    const dest = $('#aDest').value === 'veille' ? 'veille' : 'own';
+    const data = { name, dest, enabled: editing ? editing.enabled : true, instruction: editing ? editing.instruction || '' : '', replyMode: $('#aReply').value, autoReply: $('#aReply').value !== 'none', maxPerHour: max, trigger: { type: 'notification', match, by: $('#aBy').value, app } };
     try {
+      let vIssue = 0;
+      if (dest === 'veille') vIssue = await veilleIssue();
       if (editing) {
+        const wasShared = editing.dest === 'veille';
         Object.assign(editing, data);
-        if (editing.issue) gh(`/repos/${cfg.repo}/issues/${editing.issue}`, { method: 'PATCH', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120) }) }).catch(() => {});
+        if (dest === 'veille') editing.issue = vIssue;
+        else if (wasShared) {   // retour à un historique à soi : on en crée un
+          const iss = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120), body: `<!--auto:${editing.id}-->\nHistorique de l’automatisation « ${name} » : les messages reçus et les réponses de Muse apparaissent ici.` }) });
+          editing.issue = iss.number;
+        }
+        if (editing.issue && dest !== 'veille') gh(`/repos/${cfg.repo}/issues/${editing.issue}`, { method: 'PATCH', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120) }) }).catch(() => {});
         await save(`Automatisation modifiée : ${name}`);
       } else {
         const id = rid();
-        const iss = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120), body: `<!--auto:${id}-->\nHistorique de l’automatisation « ${name} » : les messages reçus et les réponses de Muse apparaissent ici.` }) });
+        const iss = dest === 'veille' ? { number: vIssue } : await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120), body: `<!--auto:${id}-->\nHistorique de l’automatisation « ${name} » : les messages reçus et les réponses de Muse apparaissent ici.` }) });
         const item = { id, issue: iss.number, created: new Date().toISOString(), ...data };
         st.items.push(item);
         try { await save(`Automatisation créée : ${name}`); }
-        catch (e) { st.items.pop(); gh(`/repos/${cfg.repo}/issues/${iss.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {}); throw e; }
+        catch (e) { st.items.pop(); if (dest !== 'veille') gh(`/repos/${cfg.repo}/issues/${iss.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {}); throw e; }
       }
       dlg.close(); toast('Automatisation enregistrée'); render(); loadList();
     } catch (e) { $('#aMsg').textContent = '' + e.message; }
