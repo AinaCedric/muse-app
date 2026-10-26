@@ -60,6 +60,10 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".NotifAnswer"
+            android:exported="false" />
+
         <service
             android:name=".GuardJob"
             android:exported="false"

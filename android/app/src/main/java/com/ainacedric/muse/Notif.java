@@ -7,6 +7,8 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.app.Notification.Action;
+import android.graphics.drawable.Icon;
 
 import org.json.JSONObject;
 
@@ -51,9 +53,22 @@ class Notif {
         b.setAutoCancel(true);
         b.setColor(0xFF5B3FD6);
         b.setContentIntent(PendingIntent.getActivity(c, issue, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
-        nm.notify(issue > 0 ? 1000 + issue : next++, b.build());
+        int nid = issue > 0 ? 1000 + issue : next++;
+        // ✅ Oui / ❌ Non directement dans la notification (question de confirmation) : pas besoin d'ouvrir l'appli
+        if (cmd.optBoolean("ask", false) && issue > 0 && Store.brainLinked(c)) {
+            b.addAction(new Action.Builder(Icon.createWithResource(c, android.R.drawable.checkbox_on_background), "✅ Oui", answer(c, issue, nid, "OUI")).build());
+            b.addAction(new Action.Builder(Icon.createWithResource(c, android.R.drawable.ic_delete), "❌ Non", answer(c, issue, nid, "NON")).build());
+        }
+        nm.notify(nid, b.build());
         out.put("shown", true);
         Bus.log("Notification : " + title);
         return out;
+    }
+
+    private static PendingIntent answer(Context c, int issue, int nid, String a) {
+        Intent i = new Intent(c, NotifAnswer.class);
+        i.putExtra("issue", issue); i.putExtra("nid", nid); i.putExtra("a", a);
+        i.setAction("muse.answer." + issue + "." + a);
+        return PendingIntent.getBroadcast(c, issue * 2 + ("OUI".equals(a) ? 0 : 1), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 }
