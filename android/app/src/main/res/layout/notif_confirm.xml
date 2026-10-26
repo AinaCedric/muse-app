@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification « Muse attend ton accord » (dépliée) : pastille appli · contact, bulle du message, rappel -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:paddingTop="2dp" android:paddingBottom="4dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <ImageView android:id="@+id/n_face" android:layout_width="40dp" android:layout_height="40dp"
+            android:scaleType="fitCenter" android:contentDescription="Muse" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:orientation="vertical" android:paddingStart="10dp">
+            <TextView android:id="@+id/n_head" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textAppearance="@android:style/TextAppearance.Material.Notification.Title"
+                android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/n_chip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" android:background="@drawable/notif_chip"
+                android:paddingStart="9dp" android:paddingEnd="9dp" android:paddingTop="2dp" android:paddingBottom="2dp"
+                android:textColor="#FF8F75FF" android:textSize="12sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+    <TextView android:id="@+id/n_msg" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_gravity="end" android:layout_marginTop="10dp" android:layout_marginStart="40dp"
+        android:background="@drawable/notif_bubble"
+        android:paddingStart="14dp" android:paddingEnd="14dp" android:paddingTop="9dp" android:paddingBottom="9dp"
+        android:textColor="#FFFFFFFF" android:textSize="15sp" android:maxLines="5" android:ellipsize="end" />
+    <TextView android:id="@+id/n_hint" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="8dp" android:gravity="end"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" android:textSize="12sp" />
+</LinearLayout>

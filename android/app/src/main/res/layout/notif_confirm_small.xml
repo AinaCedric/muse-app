@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification « Muse attend ton accord » (repliée) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="horizontal" android:gravity="center_vertical">
+    <ImageView android:id="@+id/n_face" android:layout_width="34dp" android:layout_height="34dp"
+        android:scaleType="fitCenter" android:contentDescription="Muse" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+        android:orientation="vertical" android:paddingStart="10dp">
+        <TextView android:id="@+id/n_head" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Title"
+            android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/n_msg" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>
