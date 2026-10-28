@@ -61,6 +61,11 @@ let issueNo = null, busy = false, pollId = 0;
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const strip = (s) => s.replace(/<!--[\s\S]*?-->/g, '').trim();
+// 💬 Mode discussion : Muse sépare ses bulles par une ligne « [[+]] »
+const BUB_G = /\n?[ \t]*\[\[\+\]\][ \t]*\n?/g;
+const bubbles = (t) => String(t).split(BUB_G).map((x) => x.trim()).filter(Boolean);
+let chatMode = true; try { chatMode = localStorage.getItem('muse_chat') !== '0'; } catch {}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function srcHtml(inner) {
   const list = inner.split(/\s*;\s*/).map((x) => { const [n, u] = x.split('|').map((y) => (y || '').trim()); const url = (u || n || '').replace(/&amp;/g, '&'); return /^https?:\/\//.test(url) ? { name: u ? n : '', url } : null; }).filter(Boolean).slice(0, 6);
   if (!list.length) return '';
@@ -721,7 +726,7 @@ async function shareConv(i) {
   try {
     toast('Préparation du partage…');
     const cs = await fetchComments(i.number);
-    const clean = (t) => strip(t).replace(/```[ \t]*muse-ui[\s\S]*?(```|$)/g, '[interface interactive]').replace(/```[ \t]*muse-map[\s\S]*?(```|$)/g, '[carte]').replace(/```[ \t]*muse-cards[\s\S]*?(```|$)/g, (b) => b.replace(/^```.*$/gm, '').replace(/^\s*(img|image|sources?|badge)\s*:.*$/gim, '')).replace(/\[\[(IMG|SRC):[^\]]*\]\]/g, '').trim();
+    const clean = (t) => strip(t).replace(/\n?[ \t]*\[\[\+\]\][ \t]*\n?/g, '\n').replace(/```[ \t]*muse-ui[\s\S]*?(```|$)/g, '[interface interactive]').replace(/```[ \t]*muse-map[\s\S]*?(```|$)/g, '[carte]').replace(/```[ \t]*muse-cards[\s\S]*?(```|$)/g, (b) => b.replace(/^```.*$/gm, '').replace(/^\s*(img|image|sources?|badge)\s*:.*$/gim, '')).replace(/\[\[(IMG|SRC):[^\]]*\]\]/g, '').trim();
     const parts = [strip(i.body || '') ? `Cédric : ${clean(i.body)}` : '', ...cs.filter((c) => !c.body.includes(LIVE) && !c.body.includes(ERROR)).map((c) => `${c.body.includes(REPLY) ? 'Muse' : 'Cédric'} : ${clean(c.body)}`)].filter(Boolean);
     const text = `${i.title}\n\n${parts.join('\n\n')}`;
     if (navigator.share) { try { await navigator.share({ title: i.title, text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
@@ -788,10 +793,15 @@ const attsIn = (body) => [...body.matchAll(/<!--att:([^|>]+)\|([^|>]*)\|([^>]*?)
 function show(c) {
   if (c.body.startsWith('<!--muse-ctl-->')) return null;
   if (c.body.includes(LIVE)) return null;
+  if (c.body.includes('<!--checkin-->') && !c.body.includes(REPLY)) return null;   // déclencheur d'un petit mot spontané : invisible
   if (c.body.includes(REPLY)) {
     let txt = strip(c.body), meta = '', isPlan = /\[\[PLAN\]\]/.test(txt); txt = txt.replace(/\n?[ \t]*\[\[PLAN\]\][ \t]*/g, '');
+    const pre = [];   // 💬 bulles de discussion : toutes sauf la dernière sont des messages à part ; la dernière suit le chemin habituel (outils, boutons, pièces jointes)
+    { const bs = bubbles(txt);
+      if (bs.length > 1 && !/```[ \t]*muse-/.test(txt)) { bs.slice(0, -1).forEach((b, i) => { pre.push(b); if (i >= (c._played || 0)) add('bot', b, 'chatb'); }); txt = bs[bs.length - 1]; }
+      else txt = txt.replace(BUB_G, '\n\n'); }
     txt = txt.replace(/^[ \t]*🧭[^\n]*?Mode choisi\s*:\s*([^\n]*)$/m, (_, m) => { meta = m.replace(/[_*]/g, '').replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim(); return ''; }).trim();
-    const d = add('bot', ''); const raws = [];
+    const d = add('bot', ''); const raws = []; if (pre.length) d.classList.add('chatb');
     splitUI(txt).forEach((seg) => {
       if (seg.ui) { d.appendChild(uiBox(seg.ui)); d.classList.add('hasUi'); raws.push("J'ai préparé une interface interactive."); return; }
       if (seg.stats) {
@@ -806,6 +816,7 @@ function show(c) {
       parts.forEach((p) => { if (p.t !== undefined) d.insertAdjacentHTML('beforeend', render(p.t)); else { d.appendChild(gallery(p.imgs, all, !d.querySelector('.gallery,.mosaic'))); } });
     });
     d.dataset.raw = raws.filter(Boolean).join('\n\n').replace(/\[\[SRC:[^\]]*\]\]/g, '');
+    if (pre.length) d.dataset.raw = pre.join('\n\n') + '\n\n' + d.dataset.raw;
     if (meta) { const s = document.createElement('span'); s.className = 'meta'; s.textContent = 'Mode : ' + meta; d.appendChild(s); }
     addTts(d);
     if (isPlan) { d.classList.add('isPlan'); planRow(d); }
@@ -960,6 +971,30 @@ async function stopRun() {
   loadList();
 }
 
+// 💬 Bulles « humaines » : « écrit… » puis le message, l'un après l'autre (durée selon la longueur)
+function typingDots() { const d = document.createElement('div'); d.className = 'm bot typing'; d.innerHTML = '<i></i><i></i><i></i>'; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; }
+async function chatPlay(c, my) {
+  if (!c.body.includes(REPLY) || /```[ \t]*muse-/.test(c.body)) return;
+  const bs = bubbles(strip(c.body).replace(/\[\[PLAN\]\]/g, ''));
+  if (bs.length < 2) return;
+  c._played = 0;
+  for (let i = 0; i < bs.length; i++) {
+    const len = bs[i].replace(/\[\[[^\]]*\]\]/g, '').length;
+    let ms = Math.min(2800, Math.max(600, 380 + len * 26)); if (i === 0) ms += 300;
+    const t = typingDots(); avatar('thinking');
+    await sleep(ms); t.remove();
+    if (my !== pollId) return;
+    if (i < bs.length - 1) { add('bot', bs[i], 'chatb'); c._played = i + 1; avatar('happy'); await sleep(220 + Math.random() * 280); }
+  }
+}
+function chatBtnSet() {
+  const b = $('#chatBtn'); if (!b) return;
+  b.dataset.s = chatMode ? 'on' : 'off';
+  b.textContent = chatMode ? 'Discussion : oui' : 'Discussion : non';
+  b.title = chatMode ? 'Muse répond comme une personne : plusieurs petits messages, avec « écrit… ». Clique pour couper.' : 'Muse répond en un seul message. Clique pour activer le mode discussion.';
+}
+if ($('#chatBtn')) { $('#chatBtn').onclick = () => { chatMode = !chatMode; try { localStorage.setItem('muse_chat', chatMode ? '1' : '0'); } catch {} chatBtnSet(); toast($('#chatBtn').textContent); }; chatBtnSet(); }
+
 async function wait(n, since) {
   const my = ++pollId; busy = true; setSend('wait');
   let workMode; const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
@@ -977,13 +1012,13 @@ async function wait(n, since) {
       // ⚡ Aperçu en direct : le texte s'écrit dans la bulle pendant que Muse répond
       const stc = cs.length ? null : [...all].reverse().find((c) => c.body.startsWith('<!--muse-stream-->') && new Date(c.created_at) >= new Date(since));
       if (stc) {
-        const tx = stc.body.slice(18).replace(/\[\[[^\]]*\]\]/g, '').replace(/\[\[[^\]]*$/, '').replace(/```[ \t]*muse-[\s\S]*$/, '').trim();
+        const tx = stc.body.slice(18).replace(BUB_G, '\n\n').replace(/\[\[[^\]]*\]\]/g, '').replace(/\[\[[^\]]*$/, '').replace(/```[ \t]*muse-[\s\S]*$/, '').trim();
         if (tx) { if (!sb) { sb = document.createElement('div'); sb.className = 'm bot streaming'; msgs.appendChild(sb); bubble.style.display = 'none'; avatar('thinking'); } if (sb._t !== tx) { sb._t = tx; sb.innerHTML = render(tx) + '<span class="cursor"></span>'; msgs.scrollTop = msgs.scrollHeight; } }
       }
       const lv = cs.length ? null : liveOf(all);
       if (lv) { if (!card) { card = liveCard(); bubble.style.display = 'none'; avatar('working'); } liveUpdate(card, lv); }
       else if (card && !cs.length) { card.remove(); card = null; AP.done(); bubble.style.display = ''; avatar(workMode ? 'working' : 'thinking'); }
-      if (cs.length) { if (sb) { sb.remove(); sb = null; } if (card) { card.remove(); AP.done(!cs.some((c) => c.body.includes(ERROR))); } bubble.remove(); cs.forEach(show); autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
+      if (cs.length) { if (sb) { sb.remove(); sb = null; } if (card) { card.remove(); AP.done(!cs.some((c) => c.body.includes(ERROR))); } bubble.remove(); for (const rc of cs) { if (my !== pollId) break; if (chatMode) await chatPlay(rc, my); show(rc); } autoRead(cs); avatar(cs.some((c) => c.body.includes(ERROR)) ? 'sad' : 'happy'); break; }
     } catch { /* réseau coupé : on réessaie */ }
   }
   if (my === pollId) {
@@ -1061,7 +1096,7 @@ async function send() {
       markers = await upload(issueNo, files, (k) => { up.textContent = `Envoi des pièces jointes · ${k}/${files.length}`; });
       up.remove();
     }
-    const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->${once === 'go' ? '<!--plan-go-->' : once === 'direct' ? '' : once === 'plan' || planState === 'on' ? '<!--plan-->' : planState === 'auto' ? '<!--plan:auto-->' : ''}` }) });
+    const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->${chatMode ? '<!--chat:1-->' : ''}${once === 'go' ? '<!--plan-go-->' : once === 'direct' ? '' : once === 'plan' || planState === 'on' ? '<!--plan-->' : planState === 'auto' ? '<!--plan:auto-->' : ''}` }) });
     sent = true;
     wait(issueNo, c.created_at);
   } catch (e) {
@@ -1313,7 +1348,7 @@ const TTS = (() => {
   // Texte « parlable » : sans markdown, emojis, liens, code ni lignes techniques
   T.clean = (md) => {
     let t = String(md || '')
-      .replace(/<!--[\s\S]*?-->/g, ' ').replace(/\[\[IMG:[^\]]*\]\]/g, ' ').replace(/\[\[REMEMBER:[\s\S]*?\]\]/g, ' ')
+      .replace(/\n?[ \t]*\[\[\+\]\][ \t]*\n?/g, '\n\n').replace(/<!--[\s\S]*?-->/g, ' ').replace(/\[\[IMG:[^\]]*\]\]/g, ' ').replace(/\[\[REMEMBER:[\s\S]*?\]\]/g, ' ')
       .replace(/^[ \t]*(🧭|ℹ️|🧠|📎)[^\n]*$/gm, ' ')
       .replace(/^[ \t]*Code de confirmation\s*:[^\n]*$/gim, ' ')
       .replace(/^[ \t]*Sources?\s*:[\s\S]*$/im, ' ')

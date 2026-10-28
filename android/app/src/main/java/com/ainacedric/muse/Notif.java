@@ -108,7 +108,12 @@ class Notif {
             Notification.MessagingStyle st = new Notification.MessagingStyle(me);
             boolean plain = title.isEmpty() || title.equals("Muse a répondu");
             if (!plain) { st.setConversationTitle(title); st.setGroupConversation(true); }
-            st.addMessage(text, System.currentTimeMillis(), muse);
+            // 💬 mode discussion : chaque bulle (une par ligne) devient un message distinct
+            long t0 = System.currentTimeMillis();
+            String[] bub = text.split("\n");
+            int nb = 0;
+            for (String part : bub) { if (part.trim().isEmpty()) continue; st.addMessage(part.trim(), t0 + nb, muse); nb++; }
+            if (nb == 0) st.addMessage(text, t0, muse);
             b.setStyle(st);
             if (face != null) b.setLargeIcon(face);
             if (canAnswer) b.addAction(replyAction(c, issue, nid, mode, "💬 Répondre", "Répondre à Muse…", "REPLY"));
