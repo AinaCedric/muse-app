@@ -65,4 +65,42 @@ class Voice {
             return false;
         }
     }
+
+    private static volatile long lastSpoken = 0;
+
+    /** Résumé parlé d'une action de Muse : attend que le téléphone soit déverrouillé (jusqu'à 10 min), pas de nuit, pas pendant un appel. */
+    static void sayWhenUnlocked(final Context c, final String text) {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    android.app.KeyguardManager km = (android.app.KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
+                    android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+                    int h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+                    if (h >= 22 || h < 7) return;   // pas de voix la nuit
+                    long t0 = System.currentTimeMillis();
+                    while (System.currentTimeMillis() - t0 < 10 * 60 * 1000) {
+                        boolean unlocked = pm.isInteractive() && !km.isKeyguardLocked();
+                        android.media.AudioManager am = (android.media.AudioManager) c.getSystemService(Context.AUDIO_SERVICE);
+                        boolean inCall = am != null && am.getMode() == android.media.AudioManager.MODE_IN_CALL;
+                        if (unlocked && !inCall) break;
+                        Thread.sleep(2000);
+                    }
+                    if (km.isKeyguardLocked()) return;
+                    synchronized (Voice.class) {
+                        long wait = lastSpoken + 4000 - System.currentTimeMillis();
+                        if (wait > 0) Thread.sleep(wait);
+                        try { Bubble.note("🔊 " + (text.length() > 90 ? text.substring(0, 88) + "…" : text)); } catch (Throwable ignore) { }
+                        // phrases courtes : chaque appel attend la fin de la phrase
+                        for (String part : text.split("(?<=[.!?…])\\s+")) {
+                            String p = part.trim();
+                            if (p.isEmpty()) continue;
+                            if (p.length() > 220) p = p.substring(0, 220);
+                            if (!say(c, p)) break;
+                        }
+                        lastSpoken = System.currentTimeMillis();
+                    }
+                } catch (Throwable t) { Bus.log("Résumé parlé impossible : " + t.getMessage()); }
+            }
+        }, "muse-say").start();
+    }
 }

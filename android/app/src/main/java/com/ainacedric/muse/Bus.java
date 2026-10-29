@@ -199,6 +199,9 @@ class Bus {
                     out = ping();
                 } else if (opName.equals("notify")) {
                     out = Notif.show(c, cmd);
+                    // 🔊 Muse dit à voix haute le résumé de ce qu'elle a fait / envoyé (dès que le téléphone est déverrouillé)
+                    final String say = cmd.optString("say", "").trim();
+                    if (!say.isEmpty()) Voice.sayWhenUnlocked(c, say);
                 } else if ((opName.equals("notif_reply") || opName.equals("handoff")) && Shield.handedBack()) {
                     Shield.noteRefused();
                     throw new Exception(HANDED_BACK);
