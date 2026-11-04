@@ -1,4 +1,5 @@
 {
+  "id": "/muse-app/?app=muse2",
   "name": "Muse",
   "short_name": "Muse",
   "start_url": "./",
@@ -25,5 +26,8 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "display_override": [
+    "standalone"
   ]
 }
