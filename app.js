@@ -801,6 +801,7 @@ function show(c) {
   if (c.body.includes(LIVE)) return null;
   if (c.body.includes('<!--checkin-->') && !c.body.includes(REPLY)) return null;   // déclencheur d'un petit mot spontané : invisible
   if (c.body.includes(REPLY)) {
+    { const rx = (c.body.match(/<!--react:([^>]{1,20}?)-->/) || [])[1]; setReact(lastUserEl(), rx || '', false); }
     const firstIdx = msgs.children.length;
     if (!c._chip) { const ch = speakerChip(c); if (ch) msgs.appendChild(ch); }
     let txt = strip(c.body), meta = '', isPlan = /\[\[PLAN\]\]/.test(txt); txt = txt.replace(/\n?[ \t]*\[\[PLAN\]\][ \t]*/g, '');
@@ -839,7 +840,7 @@ function show(c) {
       mk('Confirmer', 'yes', 'OUI'); mk('Annuler', 'no', 'Non, annule'); d.appendChild(row);
     } const used = new Set(); for (const m of txt.matchAll(/```[ \t]*muse-map[ \t]*\r?\n([\s\S]*?)```/g)) { const pm = parseMap(m[1]); if (pm) pm.places.forEach((p) => p.photo && used.add(p.photo.toLowerCase())); }
     const a = attsIn(c.body).filter((x) => !used.has(x.name.toLowerCase())); if (a.length) { d.appendChild(attsBox(a)); d.classList.add('hasAtts'); } return d; }
-  if (c.body.includes(ERROR)) return add('bot', strip(c.body), 'err');
+  if (c.body.includes(ERROR)) { setReact(lastUserEl(), '', false); return add('bot', strip(c.body), 'err'); }
   return stamp(addUser(strip(c.body), attsIn(c.body)), c.created_at);
 }
 
@@ -981,6 +982,17 @@ async function stopRun() {
 
 // 💬 Bulles « humaines » : « écrit… » puis le message, l'un après l'autre (durée selon la longueur)
 // 🧸 Qui parle : l'agent de la discussion, ou celui dont la réponse est recopiée chez le Chef (<!--agent-say:id-->)
+// 😄 Réaction de Muse sur TA bulle (comme sur Messenger) : 👀 pendant qu'elle lit, puis son emoji
+const lastUserEl = () => [...msgs.querySelectorAll('.m.user')].pop() || null;
+function setReact(el, e, pending) {
+  if (!el) return;
+  const old = el.querySelector(':scope > .react');
+  if (!e) { if (old && old.classList.contains('pending')) { old.remove(); el.classList.remove('hasReact'); } return; }
+  if (old && old.textContent === e && !pending) { old.classList.remove('pending'); return; }
+  if (old) old.remove();
+  const r = document.createElement('span'); r.className = 'react' + (pending ? ' pending' : ''); r.textContent = e; r.title = pending ? 'Muse lit ton message' : 'Réaction de Muse';
+  el.appendChild(r); el.classList.add('hasReact');
+}
 function speakerChip(c) {
   if (!window.museSpeaker) return null;
   const sp = museSpeaker(issueNo, c.body); if (!sp) return null;
@@ -1017,6 +1029,7 @@ async function wait(n, since) {
   let workMode; const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
   workMode = ordi || perso || phone; avatar(workMode ? 'working' : 'thinking'); let shown = label;
   { const sp = window.museSpeaker && museSpeaker(n, ''); if (sp) shown = shown.replace(/^Muse\b/, sp.name); }
+  setReact(lastUserEl(), '👀', true);
   const bubble = add('bot', shown, 'wait'); const t0 = Date.now(); let card = null, sb = null;
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
@@ -1042,7 +1055,7 @@ async function wait(n, since) {
   if (my === pollId) {
     if (sb) { sb.remove(); sb = null; }
     if (card) { card.remove(); AP.done(false); }
-    if (Date.now() - t0 >= MAXW) { bubble.className = 'm bot err'; bubble.textContent = 'Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
+    if (Date.now() - t0 >= MAXW) { setReact(lastUserEl(), '', false); bubble.className = 'm bot err'; bubble.textContent = 'Pas de réponse pour l’instant. Rouvre cette discussion dans un moment : Muse répondra dès que possible.'; avatar('sad'); }
     busy = false; setSend('idle'); loadList();
   }
 }

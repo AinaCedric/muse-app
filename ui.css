@@ -523,3 +523,12 @@ main.autoview #autos{padding-top:72px}
 @media(prefers-reduced-motion:reduce){.agCard.working .agAv3,.agSt.work i{animation:none}}
 .memList{list-style:none;padding:0;margin:8px 0 12px;display:grid;gap:6px;max-height:45vh;overflow:auto}.memList li{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:12px;font-size:14px}.memList li span{flex:1}.memDel{padding:2px 8px}
 #agMemDlg{width:min(560px,94vw)}
+
+/* 😄 Réactions de Muse sur les bulles de Cédric */
+.m.user{position:relative}
+.m.user.hasReact{margin-bottom:10px}
+.m.user>.react{position:absolute;right:12px;bottom:-15px;min-width:30px;height:28px;padding:0 6px;display:grid;place-items:center;border-radius:999px;background:var(--panel,#fff);border:1px solid var(--bd);box-shadow:0 4px 12px rgba(0,0,0,.14);font-size:16px;line-height:1;color:initial;animation:reactPop .35s cubic-bezier(.3,1.6,.5,1) both;white-space:nowrap}
+.m.user>.react.pending{opacity:.85;animation:reactPop .35s cubic-bezier(.3,1.6,.5,1) both,reactLook 1.6s ease-in-out .4s infinite}
+@keyframes reactPop{from{transform:scale(0) rotate(-20deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes reactLook{0%,100%{transform:translateX(0)}50%{transform:translateX(-2px)}}
+@media(prefers-reduced-motion:reduce){.m.user>.react{animation:none}}
