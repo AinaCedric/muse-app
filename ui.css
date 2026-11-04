@@ -477,3 +477,28 @@ main.autoview #autos{padding-top:72px}
 .hSum{margin:0 0 14px;padding:12px 14px;border-radius:14px;font-weight:600}.hSum.ok{background:#16a34a18;color:#16a34a}.hSum.ko{background:#ef444418;color:#ef4444}
 @media(max-width:640px){.agGrid,.hGrid,.agTpls{grid-template-columns:1fr}}
 .hGrid,.agGrid{align-items:start}.hCard.warn .hFix{background:color-mix(in srgb,#d97706 8%,transparent)}
+
+/* 🧸 Avatars 3D des agents */
+.agAv3{flex:none;width:60px;height:60px;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(60,40,140,.22))}
+.agAv3.big{width:72px;height:72px}
+.agTpl .agAv3{width:48px;height:48px}
+.ciAv{width:22px;height:22px;object-fit:contain;vertical-align:middle}
+.acWho .ciAv{width:20px;height:20px;margin-right:2px}
+#agHeadCv{position:relative;width:88px;height:88px;display:block;cursor:grab;touch-action:none}
+#agDlg{width:min(760px,96vw)}
+.agStudio{display:grid;grid-template-columns:240px 1fr;gap:18px;align-items:start;margin-bottom:8px}
+.agStage{display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px;border-radius:20px;background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--acc,#7c5cff) 14%,transparent),transparent 70%),color-mix(in srgb,var(--panel) 60%,transparent);border:1px solid var(--bd)}
+#agCv{width:220px;height:220px;cursor:grab;touch-action:none}
+.agOpts>label{display:block;margin:10px 0 4px;font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.agOpts>label:first-child{margin-top:0}
+.agChips{display:flex;flex-wrap:wrap;gap:6px}
+.agChips button{border:1px solid var(--bd);background:transparent;color:var(--txt);border-radius:999px;padding:5px 11px;font:500 12.5px var(--sans);cursor:pointer}
+.agChips button.on{background:var(--acc,#7c5cff);border-color:transparent;color:#fff}
+.agPairs{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.agPair{width:26px;height:26px;border-radius:50%;border:2px solid transparent;background:linear-gradient(135deg,var(--a),var(--b));cursor:pointer}
+.agPair.on{border-color:var(--txt)}
+.agPairs input[type=color]{width:30px;height:28px;padding:0;border:1px solid var(--bd);border-radius:8px;background:none;cursor:pointer}
+.agRow2{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}.agTog{display:flex;align-items:center;gap:8px;font-size:13.5px}
+.agTog input[type=color]{width:30px;height:26px;padding:0;border:1px solid var(--bd);border-radius:8px}
+@media(max-width:640px){.agStudio{grid-template-columns:1fr}.agStage{justify-self:center}}
+.agTog{white-space:nowrap}

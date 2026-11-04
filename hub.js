@@ -33,7 +33,7 @@
   // Discussion ↔ agent (pour que chaque message envoyé dans la discussion d'un agent lui soit adressé)
   window.museAgentOf = (n) => { const a = n && st.items.find((x) => Number(x.issue) === Number(n) && x.enabled !== false); return a ? a.id : ''; };
   window.museAgentMode = (n) => { const a = n && st.items.find((x) => Number(x.issue) === Number(n)); return a ? a.mode || 'auto' : ''; };
-  setTimeout(() => { if (cfg.repo && cfg.token) load().catch(() => {}); }, 1500);
+  setTimeout(() => { if (cfg.repo && cfg.token) load().then(() => { loadList(); syncHeader(); }).catch(() => {}); }, 1500);
 
   // ---------- Navigation (même écran que Automatisations / Missions)
   const side = $('#missBtn');
@@ -48,7 +48,7 @@
   function openShell(btn) {
     if (!need()) return false;
     stopTts(); pollId++; busy = false; $('#send').disabled = false; avatar('idle'); issueNo = null;
-    offAll(); btn.classList.add('on');
+    offAll(); btn.classList.add('on'); syncHeader();
     mainEl.classList.add('autoview'); $('#side').classList.remove('open'); loadList();
     view.hidden = false; view.innerHTML = '<div class="ainner"><p class="hint">Chargement…</p></div>';
     return true;
@@ -59,7 +59,12 @@
   // =====================================================================
   // 🧩 AGENTS
   // =====================================================================
-  const av = (a, big) => `<span class="agAv${big ? ' big' : ''}" style="--c:${q(a.color || '#7c5cff')}">${esc(a.emoji || '🤖')}</span>`;
+  const A3 = window.Agent3D;
+  const lookOf = (a) => (a && a.look) || (A3 && A3.PRESETS[a && a.id]) || (A3 && A3.DEF) || {};
+  const img = (a, px = 128) => (A3 && A3.ok ? A3.snapshot(lookOf(a), px) : '');
+  const av = (a, big) => { const u = img(a, big ? 160 : 112); return u ? `<img class="agAv3${big ? ' big' : ''}" src="${u}" alt="">` : `<span class="agAv${big ? ' big' : ''}" style="--c:${q(a.color || '#7c5cff')}">${esc(a.emoji || '🤖')}</span>`; };
+  window.museAgentImg = (n) => { const a = n && st.items.find((x) => Number(x.issue) === Number(n)); return a ? img(a, 64) : ''; };
+  window.museAgentImgById = (id) => { const a = st.items.find((x) => x.id === id); return a ? img(a, 64) : ''; };
   function renderAgents() {
     const cards = st.items.map((a) => `<article class="acard agCard${a.enabled === false ? ' off' : ''}" data-id="${q(a.id)}">
       <div class="ahead"><div class="atitle">${av(a)}<div><b>${esc(a.name)}</b><small>${esc(modeLabel(a.mode))}</small></div></div>
@@ -89,7 +94,7 @@
   }
   async function addTemplate(t) {
     if (!t) return;
-    st.items.push({ ...t, instructions: '', enabled: true, created: new Date().toISOString() });
+    st.items.push({ ...t, look: { ...lookOf(t) }, instructions: '', enabled: true, created: new Date().toISOString() });
     try { await save(`Agent ajouté : ${t.name}`); toast(`${t.emoji} ${t.name} rejoint l’équipe`); renderAgents(); }
     catch (e) { st.items = st.items.filter((x) => x.id !== t.id); toast('' + e.message); renderAgents(); }
   }
@@ -102,7 +107,7 @@
   async function talk(a) {
     try {
       if (!a.issue) {
-        const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: `${a.emoji || '🤖'} ${a.name}`.slice(0, 120), body: `<!--agent:${a.id}-->\nDiscussion de l’agent ${a.name}.` }) });
+        const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: a.name.slice(0, 120), body: `<!--agent:${a.id}-->\nDiscussion de l’agent ${a.name}.` }) });
         a.issue = i.number; addLabel(i.number, L_PIN, 'a78bfa').catch(() => {});
         await save(`Agent ${a.name} : discussion`);
       }
@@ -111,45 +116,99 @@
       input.placeholder = `Écrire à ${a.name}…`; input.focus();
     } catch (e) { toast('' + e.message); }
   }
-  // Formulaire
-  let dlg = null, editing = null, pickColor = COLORS[0];
+  // Formulaire : nom, métier, consignes, mode + atelier de l'avatar 3D (aperçu animé, on le fait tourner au doigt)
+  let dlg = null, editing = null, look = null, prev = null;
+  const chips = (key, list) => `<div class="agChips" data-k="${key}">${list.map(([v, l]) => `<button type="button" data-v="${v}">${esc(l)}</button>`).join('')}</div>`;
   function buildDlg() {
+    const O = A3.OPTIONS;
     dlg = document.createElement('dialog'); dlg.id = 'agDlg';
     dlg.innerHTML = `<h3 id="agT">Nouvel agent</h3>
-      <div class="agRow"><div><label for="agEmoji">Emoji</label><input id="agEmoji" maxlength="4" style="width:70px;text-align:center;font-size:22px"></div>
-        <div style="flex:1"><label for="agName">Nom</label><input id="agName" maxlength="40" placeholder="Boîte mail" autocomplete="off"></div></div>
-      <label>Couleur</label><div class="agColors">${COLORS.map((c) => `<button type="button" class="agC" data-c="${c}" style="--c:${c}" aria-label="${c}"></button>`).join('')}</div>
+      <div class="agStudio">
+        <div class="agStage"><canvas id="agCv" width="220" height="220"></canvas><button type="button" class="ghost" id="agRnd">🎲 Au hasard</button><small class="hint">Fais-le tourner avec le doigt</small></div>
+        <div class="agOpts">
+          <label>Forme</label>${chips('shape', O.shape)}
+          <label>Couleurs</label><div class="agPairs">${A3.PAIRS.map(([a, b], k) => `<button type="button" class="agPair" data-k="${k}" style="--a:${a};--b:${b}" aria-label="couleurs ${k + 1}"></button>`).join('')}<input type="color" id="agC1" title="Couleur du haut"><input type="color" id="agC2" title="Couleur du bas"></div>
+          <label>Matière</label>${chips('mat', O.mat)}
+          <label>Yeux</label>${chips('eyes', O.eyes)}
+          <label>Bouche</label>${chips('mouth', O.mouth)}
+          <label>Accessoire</label>${chips('acc', O.acc)}
+          <div class="agRow2"><label class="agTog"><input type="checkbox" id="agCheeks"> Joues roses</label><label class="agTog">Couleur de l’accessoire <input type="color" id="agAccC"></label></div>
+        </div>
+      </div>
+      <label for="agName">Nom</label><input id="agName" maxlength="40" placeholder="Boîte mail" autocomplete="off">
       <label for="agRole">Son métier</label><textarea id="agRole" rows="3" placeholder="Trie mes e-mails, résume ce qui compte…"></textarea>
       <label for="agIns">Consignes (facultatif)</label><textarea id="agIns" rows="3" placeholder="Tutoie mes clients, signe « Cédric », jamais de rendez-vous avant 9 h…"></textarea>
       <label for="agMode">Ce qu’il peut utiliser</label><select id="agMode">${MODES.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select>
       <div id="agMsg" class="hint"></div>
       <div class="row"><button class="ghost" id="agCancel" type="button">Annuler</button><button class="btn" id="agSave" type="button">Enregistrer</button></div>`;
     document.body.appendChild(dlg);
-    dlg.querySelector('#agCancel').onclick = () => dlg.close();
-    dlg.querySelector('#agSave').onclick = saveForm;
-    dlg.querySelectorAll('.agC').forEach((b) => (b.onclick = () => { pickColor = b.dataset.c; dlg.querySelectorAll('.agC').forEach((x) => x.classList.toggle('on', x === b)); }));
+    const $d = (x) => dlg.querySelector(x);
+    $d('#agCancel').onclick = () => dlg.close();
+    dlg.addEventListener('close', () => { if (prev) { prev.dispose(); prev = null; } });
+    $d('#agSave').onclick = saveForm;
+    dlg.querySelectorAll('.agChips').forEach((g) => g.querySelectorAll('button').forEach((b) => (b.onclick = () => { look[g.dataset.k] = b.dataset.v; paint(); })));
+    dlg.querySelectorAll('.agPair').forEach((b) => (b.onclick = () => { [look.c1, look.c2] = A3.PAIRS[+b.dataset.k]; paint(); }));
+    $d('#agC1').oninput = (e) => { look.c1 = e.target.value; paint(); };
+    $d('#agC2').oninput = (e) => { look.c2 = e.target.value; paint(); };
+    $d('#agAccC').oninput = (e) => { look.accColor = e.target.value; paint(); };
+    $d('#agCheeks').onchange = (e) => { look.cheeks = e.target.checked; paint(); };
+    $d('#agRnd').onclick = () => { look = A3.random(); paint(); if (prev) prev.state('happy'); };
+  }
+  let paintT = 0;
+  function paint() {
+    const $d = (x) => dlg.querySelector(x);
+    dlg.querySelectorAll('.agChips').forEach((g) => g.querySelectorAll('button').forEach((b) => b.classList.toggle('on', look[g.dataset.k] === b.dataset.v)));
+    dlg.querySelectorAll('.agPair').forEach((b) => { const [x, y] = A3.PAIRS[+b.dataset.k]; b.classList.toggle('on', x === look.c1 && y === look.c2); });
+    $d('#agC1').value = look.c1; $d('#agC2').value = look.c2; $d('#agAccC').value = look.accColor; $d('#agCheeks').checked = !!look.cheeks;
+    clearTimeout(paintT); paintT = setTimeout(() => { if (prev) prev.set(look); }, 40);
   }
   function edit(a) {
+    if (!A3 || !A3.ok) { toast('3D indisponible sur cet appareil'); }
     if (!dlg) buildDlg();
     editing = a; const $d = (x) => dlg.querySelector(x);
     $d('#agT').textContent = a ? `Modifier ${a.name}` : 'Nouvel agent';
-    $d('#agEmoji').value = a ? a.emoji || '🤖' : '🤖'; $d('#agName').value = a ? a.name : '';
+    $d('#agName').value = a ? a.name : '';
     $d('#agRole').value = a ? a.role || '' : ''; $d('#agIns').value = a ? a.instructions || '' : ''; $d('#agMode').value = a ? a.mode || 'auto' : 'auto';
-    pickColor = (a && a.color) || COLORS[st.items.length % COLORS.length];
-    dlg.querySelectorAll('.agC').forEach((x) => x.classList.toggle('on', x.dataset.c === pickColor));
+    look = A3.norm(a ? lookOf(a) : A3.random());
     $d('#agMsg').textContent = ''; dlg.showModal();
+    if (!prev) prev = A3.live($d('#agCv'), look, 220);
+    paint();
   }
   async function saveForm() {
     const $d = (x) => dlg.querySelector(x), name = $d('#agName').value.trim(), role = $d('#agRole').value.trim();
     if (!name || !role) { $d('#agMsg').textContent = 'Donne au moins un nom et un métier.'; return; }
-    const data = { name, role, emoji: $d('#agEmoji').value.trim() || '🤖', color: pickColor, instructions: $d('#agIns').value.trim(), mode: $d('#agMode').value };
+    const data = { name, role, look: { ...look }, color: look.c1, instructions: $d('#agIns').value.trim(), mode: $d('#agMode').value };
     const before = st.items.map((x) => ({ ...x }));
-    if (editing) Object.assign(editing, data); else st.items.push({ id: rid(), ...data, enabled: true, created: new Date().toISOString() });
+    if (editing) { Object.assign(editing, data); delete editing.emoji; } else st.items.push({ id: rid(), ...data, enabled: true, created: new Date().toISOString() });
     const b = $d('#agSave'); b.disabled = true;
-    try { await save(editing ? `Agent modifié : ${name}` : `Agent créé : ${name}`); if (editing && editing.issue) gh(`/repos/${cfg.repo}/issues/${editing.issue}`, { method: 'PATCH', body: JSON.stringify({ title: `${data.emoji} ${name}` }) }).catch(() => {}); dlg.close(); renderAgents(); }
+    try { await save(editing ? `Agent modifié : ${name}` : `Agent créé : ${name}`); if (editing && editing.issue) gh(`/repos/${cfg.repo}/issues/${editing.issue}`, { method: 'PATCH', body: JSON.stringify({ title: name }) }).catch(() => {}); dlg.close(); renderAgents(); loadList(); syncHeader(); }
     catch (e) { st.items = before; $d('#agMsg').textContent = '' + e.message; }
     b.disabled = false;
   }
+
+  // ---------- 🎭 En-tête : dans la discussion d'un agent, c'est SON avatar 3D qui s'affiche (et bouge selon ce qu'il fait)
+  let head = null, headFor = '';
+  const wrapEl = $('#avatarWrap'), museCv = $('#avatar'), nameEl = $('#whoName b');
+  function syncHeader() {
+    const a = issueNo && st.items.find((x) => Number(x.issue) === Number(issueNo));
+    const key = a ? a.id + JSON.stringify(lookOf(a)) : '';
+    if (key === headFor) { if (a && nameEl) nameEl.textContent = a.name; return; }
+    headFor = key;
+    if (head) { head.dispose(); head = null; }
+    const old = wrapEl && wrapEl.querySelector('#agHeadCv'); if (old) old.remove();
+    if (!a || !A3 || !A3.ok || !wrapEl) { if (museCv) museCv.style.display = ''; if (nameEl) nameEl.textContent = 'Muse'; return; }
+    const cv = document.createElement('canvas'); cv.id = 'agHeadCv'; cv.width = cv.height = 88; cv.title = a.name;
+    museCv.style.display = 'none'; wrapEl.appendChild(cv);
+    head = A3.live(cv, lookOf(a), 88);
+    if (!head) { cv.remove(); museCv.style.display = ''; return; }
+    if (nameEl) nameEl.textContent = a.name;
+    cv.onclick = () => head && head.state('happy');
+  }
+  // l'avatar de l'agent suit les mêmes états que Muse (réfléchit, travaille, content, souci)
+  if (window.MuseAvatar) { const set = MuseAvatar.setState.bind(MuseAvatar); MuseAvatar.setState = (s, ms) => { set(s, ms); if (head) head.state(s); }; }
+  const _open = window.openConv; window.openConv = async function (n) { const r = await _open.apply(this, arguments); syncHeader(); return r; };
+  const _new = window.newChat; window.newChat = function () { const r = _new.apply(this, arguments); syncHeader(); return r; };
+  const _close = window.autosClose; window.autosClose = function () { const r = _close && _close.apply(this, arguments); syncHeader(); return r; };
 
   // =====================================================================
   // 📒 JOURNAL · 🩺 SANTÉ
@@ -196,7 +255,7 @@
       const d = dayKey(e.at); if (d !== day) { day = d; html += `<h4 class="acDay">${esc(d)}</h4>`; }
       const undo = e.acts.some((a) => a.ok && a.undo);
       html += `<article class="acard acEntry" data-i="${i}">
-        <div class="acHead"><span class="acTime">${hm(e.at)}</span>${e.agent ? `<span class="acWho">${esc(e.agent.emoji || '')} ${esc(e.agent.name)}</span>` : ''}<a href="#" class="acConv">${esc(e.title || `Discussion n°${e.issue}`)}</a></div>
+        <div class="acHead"><span class="acTime">${hm(e.at)}</span>${e.agent ? `<span class="acWho">${window.museAgentImgById(e.agent.id) ? `<img class="ciAv" src="${window.museAgentImgById(e.agent.id)}" alt="">` : esc(e.agent.emoji || '')} ${esc(e.agent.name)}</span>` : ''}<a href="#" class="acConv">${esc(e.title || `Discussion n°${e.issue}`)}</a></div>
         <ul class="acActs">${e.acts.map((a) => `<li class="${a.ok ? '' : 'ko'}"><span class="acK" title="${q((KIND[a.kind] || ['•', ''])[1])}">${(KIND[a.kind] || ['•'])[0]}</span><span><b>${esc(a.label || a.tool)}</b>${a.detail ? `<em>« ${esc(a.detail)} »</em>` : ''}${a.ok ? '' : `<small>✗ ${esc(a.err || 'échec')}</small>`}</span><span class="acT">${hm(a.t)}</span></li>`).join('')}</ul>
         <div class="aact"><button class="ghost acOpen" type="button">Ouvrir la discussion</button>${undo ? '<button class="ghost acUndo" type="button">↩️ Annuler</button>' : ''}</div>
       </article>`;

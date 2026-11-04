@@ -686,6 +686,7 @@ function convItem(i, archived) {
   const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '') + (archived ? ' arch' : '');
   d.innerHTML = `<span class="ci">${ic(convIcon(i.title))}</span>${hasL(i, L_PIN) && !archived ? `<span class="pinI">${ic('pin')}</span>` : ''}<b></b><em class="unr" hidden></em><i class="more" title="Options">${ic('dots')}</i>`;
   d.querySelector('b').textContent = String(i.title).replace(/^\s*⚡\s*/, '');
+  { const av = window.museAgentImg && museAgentImg(i.number); if (av) { d.querySelector('.ci').innerHTML = `<img class="ciAv" src="${av}" alt="">`; d.querySelector('b').textContent = String(i.title).replace(/^\s*\S+\s+/u, (m) => (/[\p{Extended_Pictographic}]/u.test(m) ? '' : m)); } }
   const un = i.number === issueNo || archived ? 0 : Math.max(0, (i.comments || 0) - (seenNow[i.number] ?? i.comments));
   if (un) { const u = d.querySelector('.unr'); u.hidden = false; u.textContent = un > 9 ? '9+' : un; d.classList.add('hasUnr'); }
   d.onclick = () => { closeMenu(); openConv(i.number); };
