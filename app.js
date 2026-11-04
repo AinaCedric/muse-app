@@ -683,7 +683,7 @@ function unreadSync(l) { // compare le nombre de messages à ce que j'ai déjà 
 function markSeen(n, c) { const m = seenMap() || {}; m[n] = c; try { localStorage.setItem('muse_seen', JSON.stringify(m)); } catch {} }
 let seenNow = {};
 function convItem(i, archived) {
-  const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '') + (archived ? ' arch' : '');
+  const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '') + (archived ? ' arch' : ''); d.dataset.n = i.number;
   d.innerHTML = `<span class="ci">${ic(convIcon(i.title))}</span>${hasL(i, L_PIN) && !archived ? `<span class="pinI">${ic('pin')}</span>` : ''}<b></b><em class="unr" hidden></em><i class="more" title="Options">${ic('dots')}</i>`;
   d.querySelector('b').textContent = String(i.title).replace(/^\s*⚡\s*/, '');
   { const av = window.museAgentImg && museAgentImg(i.number); if (av) { d.querySelector('.ci').innerHTML = `<img class="ciAv" src="${av}" alt="">`; d.querySelector('b').textContent = String(i.title).replace(/^\s*\S+\s+/u, (m) => (/[\p{Extended_Pictographic}]/u.test(m) ? '' : m)); } }
@@ -699,10 +699,12 @@ function convItem(i, archived) {
   d.addEventListener('touchmove', () => { clearTimeout(lp); lp = null; }, { passive: true });
   return d;
 }
+// Discussions techniques (journal, santé) : utilisées par l'onglet Activité, jamais affichées dans la liste
+const isTech = (i) => hasL(i, 'muse-sante') || hasL(i, 'muse-journal') || /^(🩺 Santé|📒 Journal) de Muse$/.test(String(i.title || ''));
 async function loadList() {
   if (!cfg.repo || !cfg.token) return;
   try {
-    const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request);  // les historiques d'automatisations (⚡) sont aussi dans la liste
+    const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request && !isTech(i));  // les historiques d'automatisations (⚡) sont aussi dans la liste
     seenNow = unreadSync(l); window.museLastList = l;
     const list = $('#list'); list.innerHTML = '';
     // 🧭 Le Chef (agent) est toujours tout en haut des épinglées, même s'il n'a pas bougé depuis longtemps
@@ -725,7 +727,7 @@ async function loadArchived(box) {
   try {
     const a = (await gh(`/repos/${cfg.repo}/issues?state=closed&labels=${L_ARC}&sort=updated&per_page=50`)).filter((i) => !i.pull_request);
     box.innerHTML = a.length ? '' : '<div class="lhead">Aucune discussion archivée</div>';
-    a.forEach((i) => box.appendChild(convItem(i, true)));
+    a.filter((i) => !isTech(i)).forEach((i) => box.appendChild(convItem(i, true)));
   } catch (e) { box.innerHTML = ''; if (e.status === 422 || e.status === 404) box.innerHTML = '<div class="lhead">Aucune discussion archivée</div>'; else toast('' + e.message); }
 }
 async function shareConv(i) {

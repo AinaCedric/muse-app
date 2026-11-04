@@ -33,7 +33,63 @@
   // Discussion ↔ agent (pour que chaque message envoyé dans la discussion d'un agent lui soit adressé)
   window.museAgentOf = (n) => { const a = n && st.items.find((x) => Number(x.issue) === Number(n) && x.enabled !== false); return a ? a.id : ''; };
   window.museAgentMode = (n) => { const a = n && st.items.find((x) => Number(x.issue) === Number(n)); return a ? a.mode || 'auto' : ''; };
-  setTimeout(() => { if (cfg.repo && cfg.token) load().then(() => { loadList(); syncHeader(); }).catch(() => {}); }, 1500);
+  setTimeout(() => { if (cfg.repo && cfg.token) load().then(async () => { loadList(); syncHeader(); await autoFix(); listLive(); }).catch(() => {}); }, 1500);
+  // 🔧 Si la Veille proactive n'est pas encore chez le Chef (regroupement pas fait ou incomplet), on le refait tout seul
+  async function autoFix() {
+    try {
+      const chef = st.items.find((a) => a.id === 'chef');
+      const f = await gh(`/repos/${cfg.repo}/contents/data/missions.json`).catch(() => null); if (!f) return;
+      const w = (JSON.parse(b64d(f.content)).items || []).find((m) => m.watch && m.enabled !== false);
+      const l = await gh(`/repos/${cfg.repo}/issues?state=open&per_page=100`).catch(() => []);
+      const stray = (l || []).some((i) => !i.pull_request && /Veille proactive/.test(i.title) && (!chef || Number(i.number) !== Number(chef.issue)));
+      if ((w && (!chef || Number(w.issue) !== Number(chef.issue))) || stray) { const r = await regroup(); loadList(); if (r.moved.length || r.archived) toast('Veille proactive déplacée chez le Chef'); }
+    } catch (e) { console.warn('regroupement auto', e.message); }
+  }
+  // 🟢 Liste des discussions : un agent qui travaille s'anime (halo, petits points, ce qu'il fait), puis une coche quand il a fini
+  let prevWork = new Set(); const doneUntil = {};
+  function decorateList() {
+    const now = Date.now(), work = new Set();
+    for (const a of st.items) { const s = stat[a.id] || {}; if (s.state === 'working' && s.since && now - Date.parse(s.since) < 20 * 60000) work.add(a.id); }
+    for (const id of prevWork) if (!work.has(id)) doneUntil[id] = now + 3200;
+    prevWork = work;
+    document.querySelectorAll('#list .item[data-n]').forEach((el) => {
+      const a = st.items.find((x) => Number(x.issue) === Number(el.dataset.n));
+      const w = a && work.has(a.id), done = a && !w && doneUntil[a.id] > now;
+      el.classList.toggle('agWork', !!w); el.classList.toggle('agDone', !!done);
+      const b = el.querySelector('b'); if (!b) return;
+      let wrap = el.querySelector('.nmW');
+      if (w) {
+        if (!wrap) { wrap = document.createElement('span'); wrap.className = 'nmW'; b.before(wrap); wrap.appendChild(b); }
+        let ln = wrap.querySelector('.agLine'); if (!ln) { ln = document.createElement('small'); ln.className = 'agLine'; wrap.appendChild(ln); }
+        ln.textContent = shortTask((stat[a.id] || {}).task);
+        if (!el.querySelector('.agDots')) { const d = document.createElement('span'); d.className = 'agDots'; d.innerHTML = '<i></i><i></i><i></i>'; const m = el.querySelector('.more'); m ? m.before(d) : el.appendChild(d); }
+      } else {
+        if (wrap) { wrap.before(b); wrap.remove(); }
+        const d = el.querySelector('.agDots'); if (d) d.remove();
+      }
+    });
+    if (Object.values(doneUntil).some((t) => t > now)) setTimeout(decorateList, 3300);
+  }
+  // « Lis tes mails non lus de ce matin » → « lit tes mails… »
+  function shortTask(t) {
+    t = String(t || '').replace(/^Pour [^:]{1,40}:\s*/, '').trim();
+    const k = t.toLowerCase();
+    if (/reel|vid[ée]o/.test(k)) return 'regarde une vidéo…';
+    if (/veille/.test(k)) return 'surveille tes mails et ton agenda…';
+    if (/message re[çc]u|messenger|whatsapp|r[ée]pon/.test(k)) return 'répond à un message…';
+    if (/mail|e-mail|inbox/.test(k)) return 'lit tes mails…';
+    if (/agenda|rendez|calendrier/.test(k)) return 'regarde ton agenda…';
+    if (/cherche|recherche|prix|compar/.test(k)) return 'cherche sur le web…';
+    if (/code|odoo|module|bug/.test(k)) return 'écrit du code…';
+    return t ? (t.length > 34 ? t.slice(0, 33) + '…' : t) : 'travaille…';
+  }
+  let listT = 0;
+  function listLive() {
+    clearInterval(listT);
+    const tick = async () => { if (document.hidden || !st.items.length) return; await loadStatus(); decorateList(); };
+    tick(); listT = setInterval(tick, 15000);
+  }
+  { const _ll = window.loadList; window.loadList = async function () { const r = await _ll.apply(this, arguments); decorateList(); return r; }; }
 
   // ---------- Navigation (même écran que Automatisations / Missions)
   const side = $('#missBtn');

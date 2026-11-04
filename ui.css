@@ -532,3 +532,20 @@ main.autoview #autos{padding-top:72px}
 @keyframes reactPop{from{transform:scale(0) rotate(-20deg);opacity:0}to{transform:none;opacity:1}}
 @keyframes reactLook{0%,100%{transform:translateX(0)}50%{transform:translateX(-2px)}}
 @media(prefers-reduced-motion:reduce){.m.user>.react{animation:none}}
+
+/* 🟢 Agent au travail dans la liste des discussions */
+.item .nmW{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.2}
+.item .nmW b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .agLine{font-size:11.5px;color:var(--acc,#8b7bff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(90deg,currentColor 0%,currentColor 35%,#fff 50%,currentColor 65%,currentColor 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:agShine 2.2s linear infinite}
+.item .ci{position:relative}
+.item.agWork .ci::before{content:'';position:absolute;inset:-5px;border-radius:50%;background:conic-gradient(from var(--ang,0deg),#7C6BFF,#F06AB0,#4CC9F0,transparent 70%,#7C6BFF);-webkit-mask:radial-gradient(circle,transparent 58%,#000 61%);mask:radial-gradient(circle,transparent 58%,#000 61%);animation:agSpin 1.4s linear infinite}
+.item.agWork .ciAv{animation:agHop 1.1s ease-in-out infinite}
+.item.agWork .unr{display:none!important}
+.agDots{display:inline-flex;gap:3px;align-items:center;padding:5px 7px;border-radius:999px;background:color-mix(in srgb,var(--acc,#7c5cff) 16%,transparent);margin-left:auto}
+.agDots i{width:5px;height:5px;border-radius:50%;background:var(--acc,#8b7bff);animation:tyb 1.1s infinite ease-in-out}
+.agDots i:nth-child(2){animation-delay:.15s}.agDots i:nth-child(3){animation-delay:.3s}
+.item.agDone .ci::after{content:'✓';position:absolute;right:-6px;bottom:-5px;width:15px;height:15px;border-radius:50%;background:#22c55e;color:#fff;font:700 10px/15px var(--sans);text-align:center;box-shadow:0 0 0 2px var(--panel,#1b1830);animation:reactPop .35s cubic-bezier(.3,1.6,.5,1) both}
+@keyframes agSpin{to{transform:rotate(360deg)}}
+@keyframes agHop{0%,100%{transform:translateY(0)}45%{transform:translateY(-2.5px) scale(1.06)}}
+@keyframes agShine{from{background-position:100% 0}to{background-position:-150% 0}}
+@media(prefers-reduced-motion:reduce){.item.agWork .ci::before,.item.agWork .ciAv,.item .agLine,.agDots i{animation:none}}
