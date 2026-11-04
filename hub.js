@@ -41,8 +41,8 @@
       const f = await gh(`/repos/${cfg.repo}/contents/data/missions.json`).catch(() => null); if (!f) return;
       const w = (JSON.parse(b64d(f.content)).items || []).find((m) => m.watch && m.enabled !== false);
       const l = await gh(`/repos/${cfg.repo}/issues?state=open&per_page=100`).catch(() => []);
-      const stray = (l || []).some((i) => !i.pull_request && /Veille proactive/.test(i.title) && (!chef || Number(i.number) !== Number(chef.issue)));
-      if ((w && (!chef || Number(w.issue) !== Number(chef.issue))) || stray) { const r = await regroup(); loadList(); if (r.moved.length || r.archived) toast('Veille proactive déplacée chez le Chef'); }
+      const stray = (l || []).some((i) => !i.pull_request && (/Veille proactive/.test(i.title) || (i.labels || []).some((x) => x.name === 'muse-checkin') || /^💬 Muse$/.test(i.title)) && (!chef || Number(i.number) !== Number(chef.issue)));
+      if ((w && (!chef || Number(w.issue) !== Number(chef.issue))) || stray) { const r = await regroup(); loadList(); if (r.moved.length || r.archived) toast('Veille proactive et petits mots de Muse déplacés chez le Chef'); }
     } catch (e) { console.warn('regroupement auto', e.message); }
   }
   // 🟢 Liste des discussions : un agent qui travaille s'anime (halo, petits points, ce qu'il fait), puis une coche quand il a fini
@@ -242,7 +242,7 @@
       <div class="atop"><div><h2>Agents</h2><p class="hint">Ton équipe : chaque agent a son nom, son métier, ses consignes et sa discussion. Le <b>Chef</b> peut confier une partie du travail aux autres : ils la font chacun dans leur discussion, et tu es prévenu.</p></div>
         <button class="btn" id="agNew" type="button">${ic('plus')}<span>Nouvel agent</span></button></div>
       ${st.items.length ? `<div class="agGrid">${cards}</div>` : `<div class="aempty"><span class="abolt big">${ic('users')}</span><h3>Aucun agent pour l’instant</h3><p>Ajoute-les en un clic ci-dessous : tu pourras tout modifier.</p></div>`}
-      <div class="anote agMergeNote">${ic('users')}<span>${st.meta && st.meta.merged ? `✅ Regroupé : la <b>Veille proactive</b> est chez le <b>Chef</b>, l’agenda et les mails chez <b>Boîte mail</b>, Facebook et WhatsApp chez <b>Messages</b>.` : `Regrouper la <b>Veille proactive</b> dans le <b>Chef</b>, l’<b>agenda</b> et les mails dans <b>Boîte mail</b>, <b>Facebook</b> et <b>WhatsApp</b> dans <b>Messages</b>.`}</span><button class="ghost" id="agMerge" type="button">${st.meta && st.meta.merged ? '🔀 Refaire' : '🔀 Regrouper'}</button></div>
+      <div class="anote agMergeNote">${ic('users')}<span>${st.meta && st.meta.merged ? `✅ Regroupé : la <b>Veille proactive</b> et les petits mots de <b>💬 Muse</b> sont chez le <b>Chef</b>, l’agenda et les mails chez <b>Boîte mail</b>, Facebook et WhatsApp chez <b>Messages</b>.` : `Regrouper la <b>Veille proactive</b> et <b>💬 Muse</b> dans le <b>Chef</b>, l’<b>agenda</b> et les mails dans <b>Boîte mail</b>, <b>Facebook</b> et <b>WhatsApp</b> dans <b>Messages</b>.`}</span><button class="ghost" id="agMerge" type="button">${st.meta && st.meta.merged ? '🔀 Refaire' : '🔀 Regrouper'}</button></div>
       ${tpl ? `<h4 class="agH">Modèles prêts</h4><div class="agTpls">${tpl}</div>` : ''}
       <div class="anote">${ic('users')}<span>Muse reste là : les discussions normales marchent comme avant. Un agent n’est qu’une Muse spécialisée, avec <b>les mêmes garde-fous</b>.</span></div>
     </div>`;
@@ -333,7 +333,7 @@
     const done = new Set();
     for (const [n, to] of toArchive) { if (done.has(n) || [chef.issue, mails.issue, msgs.issue].map(Number).includes(n)) continue; done.add(n); await archiveIssue(n, to); }
     // La discussion « Veille proactive » elle-même (si elle n'était pas encore liée à la mission)
-    try { const l = await gh(`/repos/${cfg.repo}/issues?state=open&per_page=100`); for (const i of l || []) if (!i.pull_request && /Veille proactive/.test(i.title) && !done.has(i.number) && Number(i.number) !== Number(chef.issue)) { done.add(i.number); await archiveIssue(i.number, chef.name); } } catch {}
+    try { const l = await gh(`/repos/${cfg.repo}/issues?state=open&per_page=100`); for (const i of l || []) if (!i.pull_request && (/Veille proactive/.test(i.title) || (i.labels || []).some((x) => x.name === 'muse-checkin') || /^💬 Muse$/.test(i.title)) && !done.has(i.number) && Number(i.number) !== Number(chef.issue)) { done.add(i.number); await archiveIssue(i.number, chef.name); } } catch {}
     st.meta = { ...(st.meta || {}), merged: new Date().toISOString() };
     await save('Regroupement dans les agents terminé');
     return { moved, archived: done.size };
