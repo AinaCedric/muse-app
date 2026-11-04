@@ -705,7 +705,12 @@ async function loadList() {
     const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request);  // les historiques d'automatisations (⚡) sont aussi dans la liste
     seenNow = unreadSync(l);
     const list = $('#list'); list.innerHTML = '';
-    const pins = l.filter((i) => hasL(i, L_PIN)), rest = l.filter((i) => !hasL(i, L_PIN));
+    // 🧭 Le Chef (agent) est toujours tout en haut des épinglées, même s'il n'a pas bougé depuis longtemps
+    const chefN = window.museChefIssue ? museChefIssue() : 0;
+    if (chefN && !l.some((i) => i.number === chefN)) { try { const c = await gh(`/repos/${cfg.repo}/issues/${chefN}`); if (c && c.state === 'open') l.push(c); } catch { /* discussion supprimée */ } }
+    const isChef = (i) => chefN && i.number === chefN;
+    l.forEach((i) => { if (isChef(i) && !hasL(i, L_PIN)) i.labels = [...(i.labels || []), { name: L_PIN }]; });   // affiché avec l'épingle
+    const pins = l.filter((i) => isChef(i) || hasL(i, L_PIN)).sort((a, b) => isChef(b) - isChef(a)), rest = l.filter((i) => !isChef(i) && !hasL(i, L_PIN));
     const head = (t) => { const h = document.createElement('div'); h.className = 'lhead'; h.textContent = t; list.appendChild(h); };
     if (pins.length) { head('Épinglées'); pins.forEach((i) => list.appendChild(convItem(i))); if (rest.length) head('Récentes'); }
     rest.forEach((i) => list.appendChild(convItem(i)));

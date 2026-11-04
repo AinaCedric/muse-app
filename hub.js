@@ -64,6 +64,7 @@
   const img = (a, px = 128) => (A3 && A3.ok ? A3.snapshot(lookOf(a), px) : '');
   const av = (a, big) => { const u = img(a, big ? 160 : 112); return u ? `<img class="agAv3${big ? ' big' : ''}" src="${u}" alt="">` : `<span class="agAv${big ? ' big' : ''}" style="--c:${q(a.color || '#7c5cff')}">${esc(a.emoji || '🤖')}</span>`; };
   window.museAgentImg = (n) => { const a = n && st.items.find((x) => Number(x.issue) === Number(n)); return a ? img(a, 64) : ''; };
+  window.museChefIssue = () => { const a = st.items.find((x) => x.id === 'chef' && x.enabled !== false); return a && a.issue ? Number(a.issue) : 0; };
   window.museAgentImgById = (id) => { const a = st.items.find((x) => x.id === id); return a ? img(a, 64) : ''; };
   function renderAgents() {
     const cards = st.items.map((a) => `<article class="acard agCard${a.enabled === false ? ' off' : ''}" data-id="${q(a.id)}">
