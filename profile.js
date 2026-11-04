@@ -49,6 +49,33 @@
     try { const j = JSON.parse(res.body.slice(res.body.indexOf('-->') + 3)); return { state: j.ok ? 'ok' : 'offline', data: j.data || {}, ms: Date.now() - t0 }; } catch { return { state: 'offline' }; }
   }
 
+  // Ordre quelconque à un appareil relié (téléphone, PC, serveur 24 h/24) — utilisé par l'onglet Activité → Santé
+  const relIssue = {};
+  async function relayCall(which, op, args = {}, wait = 25000) {
+    const L = link(); if (!L) return { state: 'unlinked' };
+    let no = which === 'phone' ? L.i : relIssue[which];
+    if (!no) {
+      const l = await rgh(L, `/repos/${L.r}/issues?state=open&per_page=50`);
+      const re = which === 'phone' ? /relais/i : which === 'server' ? /relais serveur/i : /relais pc/i;
+      const it = (l || []).find((i) => !i.pull_request && re.test(i.title) && (which !== 'phone' || !/relais (pc|serveur)/i.test(i.title)));
+      if (!it) return { state: 'none' };
+      no = it.number; relIssue[which] = no;
+    }
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(4)), (x) => x.toString(16).padStart(2, '0')).join('');
+    const t0 = Date.now();
+    const posted = await rgh(L, `/repos/${L.r}/issues/${no}/comments`, { method: 'POST', body: JSON.stringify({ body: `<!--cmd:${id}-->\n${JSON.stringify({ op, ...args })}` }) });
+    let res = null;
+    while (Date.now() - t0 < wait && !res) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const cs = await rgh(L, `/repos/${L.r}/issues/${no}/comments?per_page=50&since=${encodeURIComponent(new Date(t0 - 60000).toISOString())}`).catch(() => []);
+      res = (cs || []).find((c) => c.body.startsWith(`<!--res:${id}-->`));
+    }
+    for (const c of [posted, res].filter(Boolean)) rgh(L, `/repos/${L.r}/issues/comments/${c.id}`, { method: 'DELETE' }).catch(() => {});
+    if (!res) return { state: 'offline' };
+    try { const j = JSON.parse(res.body.slice(res.body.indexOf('-->') + 3)); return j.ok ? { state: 'ok', data: j.data || {}, ms: Date.now() - t0 } : { state: 'error', err: j.error || '' }; } catch { return { state: 'offline' }; }
+  }
+  window.museRelay = { linked: () => !!link(), call: relayCall };
+
   // ---------- Tuiles
   const dev = { phone: { state: 'unknown' }, pc: { state: 'unknown' }, at: 0 };
   let sel = '';

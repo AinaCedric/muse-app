@@ -1096,7 +1096,7 @@ async function send() {
       markers = await upload(issueNo, files, (k) => { up.textContent = `Envoi des pièces jointes · ${k}/${files.length}`; });
       up.remove();
     }
-    const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->${chatMode ? '<!--chat:1-->' : ''}${once === 'go' ? '<!--plan-go-->' : once === 'direct' ? '' : once === 'plan' || planState === 'on' ? '<!--plan-->' : planState === 'auto' ? '<!--plan:auto-->' : ''}` }) });
+    const c = await gh(`/repos/${cfg.repo}/issues/${issueNo}/comments`, { method: 'POST', body: JSON.stringify({ body: `${message || '(pièce jointe)'}${markers}\n\n<!--mode:${modeSel.value}-->${chatMode ? '<!--chat:1-->' : ''}${window.museAgentOf && museAgentOf(issueNo) ? `<!--agent:${museAgentOf(issueNo)}-->` : ''}${once === 'go' ? '<!--plan-go-->' : once === 'direct' ? '' : once === 'plan' || planState === 'on' ? '<!--plan-->' : planState === 'auto' ? '<!--plan:auto-->' : ''}` }) });
     sent = true;
     wait(issueNo, c.created_at);
   } catch (e) {

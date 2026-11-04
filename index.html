@@ -358,9 +358,9 @@ textarea::placeholder{color:var(--faint)}
 @media(max-width:600px){.lb-p,.lb-n{top:auto;bottom:18px;margin:0}.lb-p{left:16px}.lb-n{right:16px}}
 
 /* Automatisations */
-#autoBtn,#missBtn{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:9px 14px;border-radius:18px;background:transparent;border:1px solid transparent;font-weight:500;text-align:left;color:var(--txt)}
-#autoBtn:hover,#autoBtn.on,#missBtn:hover,#missBtn.on{background:var(--soft);border-color:var(--bd)}
-#autoBtn svg,#missBtn svg{width:17px;height:17px;color:var(--acc)}
+#autoBtn,#missBtn,#agBtn,#actBtn{display:flex;align-items:center;gap:8px;margin:0 12px 10px;padding:9px 14px;border-radius:18px;background:transparent;border:1px solid transparent;font-weight:500;text-align:left;color:var(--txt)}
+#autoBtn:hover,#autoBtn.on,#missBtn:hover,#missBtn.on,#agBtn:hover,#agBtn.on,#actBtn:hover,#actBtn.on{background:var(--soft);border-color:var(--bd)}
+#autoBtn svg,#missBtn svg,#agBtn svg,#actBtn svg{width:17px;height:17px;color:var(--acc)}
 #autos{flex:1;overflow:auto;padding:26px 18px 40px}
 #autos[hidden]{display:none}
 main.autoview #msgs,main.autoview #pending,main.autoview #listen,main.autoview form{display:none}
@@ -857,6 +857,7 @@ a.apItem{text-decoration:none}
 <script src="./app.js"></script>
 <script src="./automations.js"></script>
 <script src="./missions.js"></script>
+<script src="./hub.js"></script>
 <script src="./memory.js"></script>
 <script src="./profile.js"></script>
 <script src="./google.js"></script>
