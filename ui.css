@@ -549,3 +549,5 @@ main.autoview #autos{padding-top:72px}
 @keyframes agHop{0%,100%{transform:translateY(0)}45%{transform:translateY(-2.5px) scale(1.06)}}
 @keyframes agShine{from{background-position:100% 0}to{background-position:-150% 0}}
 @media(prefers-reduced-motion:reduce){.item.agWork .ci::before,.item.agWork .ciAv,.item .agLine,.agDots i{animation:none}}
+#instBar{position:fixed;left:12px;right:12px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:18px;background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--bd);box-shadow:var(--shadow);font-size:14px;animation:chatIn .3s ease both}
+#instBar span{flex:1}#instBar .btn{padding:8px 14px}#instBar .ghost{padding:6px 10px}

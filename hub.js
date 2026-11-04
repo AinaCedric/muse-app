@@ -575,3 +575,25 @@
     await Promise.all([ask('phone', 'ping'), ask('pc', 'status'), ask('server', 'status')]);
   }
 })();
+
+// 📲 Muse ouverte dans un onglet Chrome (barre d'adresse visible) : proposer de l'installer comme une vraie appli plein écran
+(() => {
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
+  if (standalone()) return;
+  let prompt = null;
+  const show = () => {
+    if (document.getElementById('instBar') || standalone()) return;
+    try { if (Date.now() - Number(localStorage.getItem('muse_inst_no') || 0) < 3 * 864e5) return; } catch {}
+    const b = document.createElement('div'); b.id = 'instBar';
+    b.innerHTML = `<span>📲 Ouvre Muse en <b>plein écran</b>, sans la barre de Chrome</span><button type="button" class="btn" id="instGo">Installer</button><button type="button" class="ghost" id="instNo" aria-label="Plus tard">✕</button>`;
+    document.body.appendChild(b);
+    b.querySelector('#instNo').onclick = () => { b.remove(); try { localStorage.setItem('muse_inst_no', String(Date.now())); } catch {} };
+    b.querySelector('#instGo').onclick = async () => {
+      if (prompt) { prompt.prompt(); try { await prompt.userChoice; } catch {} prompt = null; b.remove(); }
+      else toast('Dans Chrome : menu ⋮ → « Installer l’application » (pas « Ajouter à l’écran d’accueil »)');
+    };
+  };
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); prompt = e; show(); });
+  window.addEventListener('appinstalled', () => { const b = document.getElementById('instBar'); if (b) b.remove(); toast('Muse est installée : ouvre-la depuis son icône'); });
+  if (/Android/i.test(navigator.userAgent)) setTimeout(show, 4000);
+})();

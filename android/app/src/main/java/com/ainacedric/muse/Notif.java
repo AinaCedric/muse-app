@@ -76,8 +76,7 @@ class Notif {
         int nid = issue > 0 ? 1000 + issue : next++;
         boolean canAnswer = issue > 0 && Store.brainLinked(c);
 
-        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(Chat.URL + (issue > 0 ? "?c=" + issue : "")));
-        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Intent open = Chat.view(c, Chat.URL + (issue > 0 ? "?c=" + issue : ""));   // plein écran, sans barre Chrome
 
         Notification.Builder b = new Notification.Builder(c, chan);
         b.setSmallIcon(R.drawable.ic_stat_muse);
