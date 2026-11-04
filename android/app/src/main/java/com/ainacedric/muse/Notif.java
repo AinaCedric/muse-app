@@ -28,6 +28,21 @@ class Notif {
     static final int ACCENT = 0xFF7C5CFF;
     static final String KEY_TEXT = "muse_text";
 
+    /** 🔴 Chiffre rouge sur l'icône : une notification par discussion non lue (n° 1000 + discussion).
+     *  L'appli Muse envoie ici les discussions que Cédric a lues (on retire leur notification) et le total de non-lus. */
+    static JSONObject badge(Context c, JSONObject cmd) throws Exception {
+        NotificationManager nm = c.getSystemService(NotificationManager.class);
+        org.json.JSONArray seen = cmd.optJSONArray("seen");
+        int removed = 0;
+        if (seen != null) for (int i = 0; i < seen.length(); i++) { int n = seen.optInt(i, 0); if (n > 0) { nm.cancel(1000 + n); removed++; } }
+        if (cmd.optInt("count", -1) == 0) {   // plus rien de non lu : on retire toutes les réponses de Muse encore affichées
+            for (android.service.notification.StatusBarNotification sb : nm.getActiveNotifications()) if (sb.getId() >= 1000) { nm.cancel(sb.getId()); removed++; }
+        }
+        int left = 0;
+        for (android.service.notification.StatusBarNotification sb : nm.getActiveNotifications()) if (sb.getId() >= 1000) left++;
+        return new JSONObject().put("removed", removed).put("left", left);
+    }
+
     static JSONObject show(Context c, JSONObject cmd) throws Exception {
         JSONObject out = new JSONObject();
         String title = cmd.optString("title", "Muse a répondu");
@@ -131,7 +146,13 @@ class Notif {
             b.setStyle(new Notification.BigTextStyle().bigText(text));
             if (face != null) b.setLargeIcon(face);
         }
-        nm.notify(nid, b.build());
+        b.setNumber(1);
+        Notification built = b.build();
+        try {   // MIUI (Xiaomi) : compteur de l'icône
+            Object extra = built.getClass().getDeclaredField("extraNotification").get(built);
+            if (extra != null) extra.getClass().getDeclaredMethod("setMessageCount", int.class).invoke(extra, 1);
+        } catch (Throwable ignore) { }
+        nm.notify(nid, built);
         out.put("shown", true);
         Bus.log("Notification : " + title);
         return out;

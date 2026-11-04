@@ -89,7 +89,26 @@
     const tick = async () => { if (document.hidden || !st.items.length) return; await loadStatus(); decorateList(); };
     tick(); listT = setInterval(tick, 15000);
   }
-  { const _ll = window.loadList; window.loadList = async function () { const r = await _ll.apply(this, arguments); decorateList(); return r; }; }
+  { const _ll = window.loadList; window.loadList = async function () { const r = await _ll.apply(this, arguments); decorateList(); badgeSync(); return r; }; }
+  // 🔴 Chiffre rouge sur l'icône Muse du téléphone = nombre de discussions non lues.
+  // Navigateur : API de badge (si le système la prend en charge). Téléphone : l'appli Android retire la notification des discussions lues ;
+  // le lanceur (MIUI…) affiche sur l'icône « Muse » le nombre de discussions qui ont encore une réponse non lue.
+  let badgeT = 0, lastBadge = '';
+  function badgeSync() {
+    clearTimeout(badgeT);
+    badgeT = setTimeout(() => {
+      const l = window.museLastList || []; let seen = {}; try { seen = JSON.parse(localStorage.getItem('muse_seen') || '{}') || {}; } catch {}
+      let total = 0; const read = [];
+      for (const i of l) { const s0 = Number(i.number) === Number(issueNo) ? i.comments : seen[i.number]; const un = s0 == null ? 0 : Math.max(0, (i.comments || 0) - s0); if (un) total++; else read.push(i.number); }
+      try { if (navigator.setAppBadge) (total ? navigator.setAppBadge(total) : navigator.clearAppBadge()).catch(() => {}); } catch { /* pas pris en charge */ }
+      const key = `${total}|${read.join(',')}`;
+      if (key === lastBadge || !window.museRelay || !museRelay.linked()) return;
+      lastBadge = key;
+      museRelay.call('phone', 'badge', { count: total, seen: read.slice(0, 80) }, 8000).catch(() => {});
+    }, 1500);
+  }
+  window.museBadgeSync = badgeSync;
+  { const _ms = window.markSeen; if (_ms) window.markSeen = function () { const r = _ms.apply(this, arguments); badgeSync(); return r; }; }
 
   // ---------- Navigation (même écran que Automatisations / Missions)
   const side = $('#missBtn');

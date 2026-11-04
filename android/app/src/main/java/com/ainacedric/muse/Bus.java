@@ -193,10 +193,12 @@ class Bus {
             try {
                 JSONObject cmd = new JSONObject(b.substring(end + 3).trim());
                 opName = cmd.optString("op", "?");
-                if (!opName.equals("notify") && !opName.equals("ping")) activeUntil = System.currentTimeMillis() + 3 * 60 * 1000;
+                if (!opName.equals("notify") && !opName.equals("ping") && !opName.equals("badge")) activeUntil = System.currentTimeMillis() + 3 * 60 * 1000;
                 JSONObject out;
                 if (opName.equals("ping")) {
                     out = ping();
+                } else if (opName.equals("badge")) {
+                    out = Notif.badge(c, cmd);
                 } else if (opName.equals("notify")) {
                     out = Notif.show(c, cmd);
                     // 🔊 Muse dit à voix haute le résumé de ce qu'elle a fait / envoyé (dès que le téléphone est déverrouillé)

@@ -49,6 +49,23 @@
             </intent-filter>
         </activity>
 
+        <!-- Icône « Muse » : ouvre le chat ; le chiffre rouge des discussions non lues s'affiche dessus -->
+        <activity
+            android:name=".OpenChat"
+            android:exported="true"
+            android:label="Muse"
+            android:icon="@mipmap/ic_muse_chat"
+            android:roundIcon="@mipmap/ic_muse_chat"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".GuardReceiver"
             android:exported="true">
