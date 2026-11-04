@@ -33,6 +33,15 @@
     return it.number;
   }
 
+  // 🧩 Destinations partagées : « veille » (ancienne discussion Veille) ou « agent:<id> » (discussion d'un agent : Messages, Boîte mail…)
+  const shared = (d) => !!d && d !== 'own';
+  async function destIssue(dest) {
+    if (dest === 'veille') return veilleIssue();
+    const id = String(dest).replace(/^agent:/, '');
+    if (!window.museAgentIssue) throw new Error('Agents indisponibles : ouvre une fois l’onglet Agents.');
+    return museAgentIssue(id);
+  }
+  const destLabel = (d) => { if (d === 'veille') return '🔭 dans Veille proactive'; if (/^agent:/.test(d || '')) { const a = (window.museAgentList ? museAgentList() : []).find((x) => 'agent:' + x.id === d); return `🧩 chez ${a ? a.name : 'un agent'}`; } return ''; };
   async function load() {
     try {
       const f = await gh(`/repos/${cfg.repo}/contents/${FILE}`);
@@ -55,7 +64,7 @@
     }
   }
 
-  const summary = (r) => { const x = summary0(r); return r.dest === 'veille' ? x + ' · 🔭 dans Veille proactive' : x; };
+  const summary = (r) => { const x = summary0(r); return shared(r.dest) ? `${x} · ${destLabel(r.dest)}` : x; };
   const summary0 = (r) => {
     const t = r.trigger || {}, who = `« ${esc(t.match || '…')} »`;
     if (!t.match) return `Quand un message arrive sur ${esc(appLabel(t.app) || 'l’appli')} (tous les contacts, hors groupes) → ${({ ask: 'Muse te propose la réponse', auto: 'Muse répond seule', none: 'Muse te résume le message' })[replyOf(r)]}`;
@@ -112,7 +121,7 @@
     st.items = st.items.filter((x) => x.id !== r.id);
     try {
       await save(`Automatisation supprimée : ${r.name}`);
-      if (r.issue && r.dest !== 'veille') gh(`/repos/${cfg.repo}/issues/${r.issue}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {});
+      if (r.issue && !shared(r.dest)) gh(`/repos/${cfg.repo}/issues/${r.issue}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {});
       toast('Automatisation supprimée'); render(); loadList();
     } catch (e) { st.items = before; toast('' + e.message); render(); }
   }
@@ -140,7 +149,9 @@
     $('#aReply').innerHTML = REPLIES.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
     $('#aReply').value = r ? replyOf(r) : 'ask';
     $('#aReply').onchange = hint; hint();
-    $('#aDest').value = r && r.dest === 'veille' ? 'veille' : 'own';
+    { const ags = (window.museAgentList ? museAgentList() : []).filter((a) => a.enabled !== false);
+      $('#aDest').innerHTML = '<option value="own">⚡ Dans l’historique de cette automatisation</option>' + ags.map((a) => `<option value="agent:${esc(a.id)}">🧩 Dans la discussion de l’agent ${esc(a.name)}</option>`).join('') + (r && r.dest === 'veille' ? '<option value="veille">🔭 Dans « Veille proactive »</option>' : '');
+      $('#aDest').value = r && shared(r.dest) && [...$('#aDest').options].some((o) => o.value === r.dest) ? r.dest : 'own'; }
     $('#aMax').value = r ? r.maxPerHour || 6 : 6;
     $('#aMsg').textContent = '';
     dlg.showModal();
@@ -154,28 +165,28 @@
     if (!name || (!match && !app)) { $('#aMsg').textContent = 'Donne un nom, et soit un contact ou un mot, soit une application précise (pour tous ses messages).'; return; }
     if ($('#aApp').value === '__custom' && !app) { $('#aMsg').textContent = 'Indique un morceau du nom de l’appli (ex. « signal »).'; return; }
     const btn = $('#aSave'); btn.disabled = true;
-    const dest = $('#aDest').value === 'veille' ? 'veille' : 'own';
+    const dest = $('#aDest').value || 'own';
     const data = { name, dest, enabled: editing ? editing.enabled : true, instruction: editing ? editing.instruction || '' : '', replyMode: $('#aReply').value, autoReply: $('#aReply').value !== 'none', maxPerHour: max, trigger: { type: 'notification', match, by: $('#aBy').value, app } };
     try {
       let vIssue = 0;
-      if (dest === 'veille') vIssue = await veilleIssue();
+      if (shared(dest)) vIssue = await destIssue(dest);
       if (editing) {
-        const wasShared = editing.dest === 'veille';
+        const wasShared = shared(editing.dest);
         Object.assign(editing, data);
-        if (dest === 'veille') editing.issue = vIssue;
+        if (shared(dest)) editing.issue = vIssue;
         else if (wasShared) {   // retour à un historique à soi : on en crée un
           const iss = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120), body: `<!--auto:${editing.id}-->\nHistorique de l’automatisation « ${name} » : les messages reçus et les réponses de Muse apparaissent ici.` }) });
           editing.issue = iss.number;
         }
-        if (editing.issue && dest !== 'veille') gh(`/repos/${cfg.repo}/issues/${editing.issue}`, { method: 'PATCH', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120) }) }).catch(() => {});
+        if (editing.issue && !shared(dest)) gh(`/repos/${cfg.repo}/issues/${editing.issue}`, { method: 'PATCH', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120) }) }).catch(() => {});
         await save(`Automatisation modifiée : ${name}`);
       } else {
         const id = rid();
-        const iss = dest === 'veille' ? { number: vIssue } : await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120), body: `<!--auto:${id}-->\nHistorique de l’automatisation « ${name} » : les messages reçus et les réponses de Muse apparaissent ici.` }) });
+        const iss = shared(dest) ? { number: vIssue } : await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: `⚡ ${name}`.slice(0, 120), body: `<!--auto:${id}-->\nHistorique de l’automatisation « ${name} » : les messages reçus et les réponses de Muse apparaissent ici.` }) });
         const item = { id, issue: iss.number, created: new Date().toISOString(), ...data };
         st.items.push(item);
         try { await save(`Automatisation créée : ${name}`); }
-        catch (e) { st.items.pop(); if (dest !== 'veille') gh(`/repos/${cfg.repo}/issues/${iss.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {}); throw e; }
+        catch (e) { st.items.pop(); if (!shared(dest)) gh(`/repos/${cfg.repo}/issues/${iss.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'not_planned' }) }).catch(() => {}); throw e; }
       }
       dlg.close(); toast('Automatisation enregistrée'); render(); loadList();
     } catch (e) { $('#aMsg').textContent = '' + e.message; }

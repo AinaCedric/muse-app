@@ -17,16 +17,16 @@
     { id: 'odoo', emoji: '🧑‍💻', name: 'Dev Odoo', color: '#f59e0b', mode: 'dev', role: 'Développeur Odoo 12 à 19, React, WordPress, Docker : code prêt à copier, revues, migrations, débogage, explications claires.' },
     { id: 'recherche', emoji: '🔎', name: 'Chercheur', color: '#06b6d4', mode: 'ordi', role: 'Recherches approfondies sur le web avec sources, comparatifs et prix à Madagascar, résultats vérifiés.' },
   ];
-  const st = { items: [], sha: null, loaded: false };
+  const st = { items: [], sha: null, loaded: false, meta: {} };
 
   // ---------- Fichier des agents
   async function load() {
-    try { const f = await gh(`/repos/${cfg.repo}/contents/${FILE}`); st.sha = f.sha; const d = JSON.parse(b64d(f.content)); st.items = Array.isArray(d.items) ? d.items : []; }
+    try { const f = await gh(`/repos/${cfg.repo}/contents/${FILE}`); st.sha = f.sha; const d = JSON.parse(b64d(f.content)); st.items = Array.isArray(d.items) ? d.items : []; st.meta = d.meta || {}; }
     catch (e) { if (e.status !== 404) throw e; st.sha = null; st.items = []; }
     st.loaded = true;
   }
   async function save(msg) {
-    const body = { message: msg, content: b64e(JSON.stringify({ version: 1, items: st.items }, null, 2)), ...(st.sha ? { sha: st.sha } : {}) };
+    const body = { message: msg, content: b64e(JSON.stringify({ version: 1, meta: st.meta || {}, items: st.items }, null, 2)), ...(st.sha ? { sha: st.sha } : {}) };
     try { st.sha = (await gh(`/repos/${cfg.repo}/contents/${FILE}`, { method: 'PUT', body: JSON.stringify(body) })).content.sha; }
     catch (e) { if (e.status === 409 || e.status === 422) { await load().catch(() => {}); throw new Error('La liste des agents a changé entre-temps : elle est rechargée, refais ta modification.'); } throw e; }
   }
@@ -53,9 +53,15 @@
     view.hidden = false; view.innerHTML = '<div class="ainner"><p class="hint">Chargement…</p></div>';
     return true;
   }
-  agBtn.onclick = async () => { if (!openShell(agBtn)) return; try { await load(); renderAgents(); } catch (e) { view.innerHTML = `<div class="ainner"><p class="hint">${esc('' + e.message)}</p></div>`; } };
+  agBtn.onclick = async () => { if (!openShell(agBtn)) return; try { await load(); renderAgents(); if (!(st.meta && st.meta.merged) && !regroupTried) { regroupTried = true; runRegroup(); } } catch (e) { view.innerHTML = `<div class="ainner"><p class="hint">${esc('' + e.message)}</p></div>`; } };
   acBtn.onclick = () => { if (!openShell(acBtn)) return; renderActivity(tab); };
 
+  let regroupTried = false;
+  async function runRegroup() {
+    const b = view.querySelector('#agMerge'); if (b) { b.disabled = true; b.textContent = '⏳ Regroupement…'; }
+    try { const r = await regroup(); renderAgents(); loadList(); toast(r.moved.length ? `Regroupé : ${r.moved.length} élément${r.moved.length > 1 ? 's' : ''} déplacé${r.moved.length > 1 ? 's' : ''}, ${r.archived} ancienne${r.archived > 1 ? 's' : ''} discussion${r.archived > 1 ? 's' : ''} archivée${r.archived > 1 ? 's' : ''}` : 'Tout est déjà regroupé'); }
+    catch (e) { toast('Regroupement : ' + e.message); if (b) { b.disabled = false; b.textContent = '🔀 Regrouper'; } }
+  }
   // =====================================================================
   // 🧩 AGENTS
   // =====================================================================
@@ -80,10 +86,12 @@
       <div class="atop"><div><h2>Agents</h2><p class="hint">Ton équipe : chaque agent a son nom, son métier, ses consignes et sa discussion. Le <b>Chef</b> peut confier une partie du travail aux autres : ils la font chacun dans leur discussion, et tu es prévenu.</p></div>
         <button class="btn" id="agNew" type="button">${ic('plus')}<span>Nouvel agent</span></button></div>
       ${st.items.length ? `<div class="agGrid">${cards}</div>` : `<div class="aempty"><span class="abolt big">${ic('users')}</span><h3>Aucun agent pour l’instant</h3><p>Ajoute-les en un clic ci-dessous : tu pourras tout modifier.</p></div>`}
+      <div class="anote agMergeNote">${ic('users')}<span>${st.meta && st.meta.merged ? `✅ Regroupé : la <b>Veille proactive</b> est chez le <b>Chef</b>, l’agenda et les mails chez <b>Boîte mail</b>, Facebook et WhatsApp chez <b>Messages</b>.` : `Regrouper la <b>Veille proactive</b> dans le <b>Chef</b>, l’<b>agenda</b> et les mails dans <b>Boîte mail</b>, <b>Facebook</b> et <b>WhatsApp</b> dans <b>Messages</b>.`}</span><button class="ghost" id="agMerge" type="button">${st.meta && st.meta.merged ? '🔀 Refaire' : '🔀 Regrouper'}</button></div>
       ${tpl ? `<h4 class="agH">Modèles prêts</h4><div class="agTpls">${tpl}</div>` : ''}
       <div class="anote">${ic('users')}<span>Muse reste là : les discussions normales marchent comme avant. Un agent n’est qu’une Muse spécialisée, avec <b>les mêmes garde-fous</b>.</span></div>
     </div>`;
     view.querySelector('#agNew').onclick = () => edit(null);
+    const rg = view.querySelector('#agMerge'); if (rg) rg.onclick = runRegroup;
     view.querySelectorAll('.agTpl').forEach((b) => (b.onclick = () => addTemplate(TEMPLATES.find((t) => t.id === b.dataset.id))));
     view.querySelectorAll('.agCard').forEach((c) => {
       const a = st.items.find((x) => x.id === c.dataset.id);
@@ -105,6 +113,75 @@
     try { await save(`Agent retiré : ${a.name}`); if (a.issue) addLabel(a.issue, L_ARC, '9ca3af').catch(() => {}); renderAgents(); }
     catch (e) { st.items = before; toast('' + e.message); renderAgents(); }
   }
+  // Discussion d'un agent (créée au besoin) — utilisée aussi par les automatisations et le regroupement
+  async function ensureIssue(a) {
+    if (a.issue) return Number(a.issue);
+    const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: a.name.slice(0, 120), body: `<!--agent:${a.id}-->\nDiscussion de l’agent ${a.name}.` }) });
+    a.issue = i.number; addLabel(i.number, L_PIN, 'a78bfa').catch(() => {});
+    return a.issue;
+  }
+  window.museAgentList = () => st.items.slice();
+  window.museAgentIssue = async (id) => {
+    if (!st.loaded) await load();
+    const a = st.items.find((x) => x.id === id); if (!a) throw new Error('Agent introuvable');
+    const had = a.issue, n = await ensureIssue(a); if (!had) await save(`Agent ${a.name} : discussion`);
+    return n;
+  };
+
+  // 🔀 Regroupement : Veille proactive → Chef · Agenda / mails → Boîte mail · Facebook, Messenger, WhatsApp → Messages
+  async function readJson(file) { try { const f = await gh(`/repos/${cfg.repo}/contents/${file}`); return { sha: f.sha, data: JSON.parse(b64d(f.content)) }; } catch (e) { if (e.status === 404) return { sha: null, data: null }; throw e; } }
+  async function writeJson(file, sha, data, msg) { return gh(`/repos/${cfg.repo}/contents/${file}`, { method: 'PUT', body: JSON.stringify({ message: msg, content: b64e(JSON.stringify(data, null, 2)), ...(sha ? { sha } : {}) }) }); }
+  async function archiveIssue(n, to) {
+    if (!n) return;
+    try {
+      await gh(`/repos/${cfg.repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body: `<!--muse-ctl-->📦 Cette discussion continue maintenant chez l’agent **${to}**.` }) });
+      await addLabel(n, L_ARC, '9ca3af').catch(() => {});
+      await gh(`/repos/${cfg.repo}/issues/${n}/labels/${L_PIN}`, { method: 'DELETE' }).catch(() => {});
+      await gh(`/repos/${cfg.repo}/issues/${n}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) });
+    } catch { /* déjà archivée */ }
+  }
+  const RE_MSG = /(facebook|messenger|orca|katana|mlite|whatsapp|instagram|telegram|sms|messag)/i, RE_MAIL = /(agenda|calendar|calendrier|rendez|gmail|e-?mail|mail\b|inbox|outlook)/i;
+  async function regroup() {
+    if (!st.loaded) await load();
+    for (const id of ['chef', 'mails', 'messages']) if (!st.items.some((a) => a.id === id)) { const t = TEMPLATES.find((x) => x.id === id); st.items.push({ ...t, look: { ...lookOf(t) }, instructions: '', enabled: true, created: new Date().toISOString() }); }
+    const A = (id) => st.items.find((a) => a.id === id);
+    for (const id of ['chef', 'mails', 'messages']) { A(id).enabled = true; await ensureIssue(A(id)); }
+    await save('Agents : Chef, Boîte mail et Messages prêts');
+    const chef = A('chef'), mails = A('mails'), msgs = A('messages'), moved = [], toArchive = [];
+    // Missions : la veille va chez le Chef, les missions agenda / mails chez Boîte mail
+    const M = await readJson('data/missions.json'), MS = await readJson('data/missions-state.json');
+    if (M.data && Array.isArray(M.data.items)) {
+      for (const m of M.data.items) {
+        const old = Number(m.issue || (MS.data && MS.data.items && MS.data.items[m.id] && MS.data.items[m.id].issue) || 0);
+        const to = m.watch ? chef : RE_MAIL.test(`${m.name} ${m.goal}`) ? mails : RE_MSG.test(`${m.name} ${m.goal}`) ? msgs : null;
+        if (!to || old === Number(to.issue)) continue;
+        m.issue = Number(to.issue); moved.push(`${m.watch ? '🔭 Veille proactive' : '🔁 ' + m.name} → ${to.name}`); if (old) toArchive.push([old, to.name]);
+      }
+      await writeJson('data/missions.json', M.sha, M.data, 'Missions regroupées dans les agents');
+    }
+    // Automatisations : Facebook / Messenger / WhatsApp → Messages · Agenda / mails → Boîte mail
+    const Au = await readJson('data/automations.json');
+    if (Au.data && Array.isArray(Au.data.items)) {
+      for (const r of Au.data.items) {
+        const txt = `${r.name || ''} ${JSON.stringify(r.trigger || {})}`;
+        const to = RE_MSG.test(txt) ? msgs : RE_MAIL.test(txt) ? mails : null;
+        if (!to || Number(r.issue) === Number(to.issue)) continue;
+        const old = Number(r.issue || 0), wasOwn = !r.dest || r.dest === 'own';
+        r.dest = 'agent:' + to.id; r.issue = Number(to.issue); moved.push(`⚡ ${r.name} → ${to.name}`);
+        if (old && wasOwn) toArchive.push([old, to.name]);
+      }
+      await writeJson('data/automations.json', Au.sha, Au.data, 'Automatisations regroupées dans les agents');
+    }
+    // Anciennes discussions : archivées (rien n'est perdu, elles restent dans « Archivées »)
+    const done = new Set();
+    for (const [n, to] of toArchive) { if (done.has(n) || [chef.issue, mails.issue, msgs.issue].map(Number).includes(n)) continue; done.add(n); await archiveIssue(n, to); }
+    // La discussion « Veille proactive » elle-même (si elle n'était pas encore liée à la mission)
+    try { const l = await gh(`/repos/${cfg.repo}/issues?state=open&per_page=100`); for (const i of l || []) if (!i.pull_request && /Veille proactive/.test(i.title) && !done.has(i.number) && Number(i.number) !== Number(chef.issue)) { done.add(i.number); await archiveIssue(i.number, chef.name); } } catch {}
+    st.meta = { ...(st.meta || {}), merged: new Date().toISOString() };
+    await save('Regroupement dans les agents terminé');
+    return { moved, archived: done.size };
+  }
+
   async function talk(a) {
     try {
       if (!a.issue) {
