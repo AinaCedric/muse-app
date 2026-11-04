@@ -703,7 +703,7 @@ async function loadList() {
   if (!cfg.repo || !cfg.token) return;
   try {
     const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request);  // les historiques d'automatisations (⚡) sont aussi dans la liste
-    seenNow = unreadSync(l);
+    seenNow = unreadSync(l); window.museLastList = l;
     const list = $('#list'); list.innerHTML = '';
     // 🧭 Le Chef (agent) est toujours tout en haut des épinglées, même s'il n'a pas bougé depuis longtemps
     const chefN = window.museChefIssue ? museChefIssue() : 0;
@@ -801,6 +801,8 @@ function show(c) {
   if (c.body.includes(LIVE)) return null;
   if (c.body.includes('<!--checkin-->') && !c.body.includes(REPLY)) return null;   // déclencheur d'un petit mot spontané : invisible
   if (c.body.includes(REPLY)) {
+    const firstIdx = msgs.children.length;
+    if (!c._chip) { const ch = speakerChip(c); if (ch) msgs.appendChild(ch); }
     let txt = strip(c.body), meta = '', isPlan = /\[\[PLAN\]\]/.test(txt); txt = txt.replace(/\n?[ \t]*\[\[PLAN\]\][ \t]*/g, '');
     const pre = [];   // 💬 bulles de discussion : toutes sauf la dernière sont des messages à part ; la dernière suit le chemin habituel (outils, boutons, pièces jointes)
     { const bs = bubbles(txt);
@@ -978,12 +980,21 @@ async function stopRun() {
 }
 
 // 💬 Bulles « humaines » : « écrit… » puis le message, l'un après l'autre (durée selon la longueur)
+// 🧸 Qui parle : l'agent de la discussion, ou celui dont la réponse est recopiée chez le Chef (<!--agent-say:id-->)
+function speakerChip(c) {
+  if (!window.museSpeaker) return null;
+  const sp = museSpeaker(issueNo, c.body); if (!sp) return null;
+  const d = document.createElement('div'); d.className = 'who' + (c.body.includes('<!--team-summary-->') ? ' sum' : '');
+  d.innerHTML = `${sp.img ? `<img src="${sp.img}" alt="">` : ''}<b></b>${c.body.includes('<!--team-summary-->') ? '<small>synthèse de l’équipe</small>' : ''}`;
+  d.querySelector('b').textContent = sp.name; return d;
+}
 function typingDots() { const d = document.createElement('div'); d.className = 'm bot typing'; d.innerHTML = '<i></i><i></i><i></i>'; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; }
 async function chatPlay(c, my) {
   if (!c.body.includes(REPLY) || /```[ \t]*muse-/.test(c.body)) return;
   const bs = bubbles(strip(c.body).replace(/\[\[PLAN\]\]/g, ''));
   if (bs.length < 2) return;
   c._played = 0;
+  { const ch = speakerChip(c); if (ch) { msgs.appendChild(ch); c._chip = true; } }
   for (let i = 0; i < bs.length; i++) {
     const len = bs[i].replace(/\[\[[^\]]*\]\]/g, '').length;
     let ms = Math.min(2800, Math.max(600, 380 + len * 26)); if (i === 0) ms += 300;
@@ -1005,7 +1016,8 @@ async function wait(n, since) {
   const my = ++pollId; busy = true; setSend('wait');
   let workMode; const ordi = modeSel.value === 'ordi', perso = modeSel.value === 'perso', phone = modeSel.value === 'phone', auto = modeSel.value === 'auto', MAXW = (ordi || phone || auto ? 18 : 5) * 60 * 1000, label = ordi ? 'Muse travaille sur son ordinateur' : perso ? 'Muse consulte ton agenda et tes e-mails' : phone ? 'Muse utilise ton téléphone' : 'Muse réfléchit';
   workMode = ordi || perso || phone; avatar(workMode ? 'working' : 'thinking'); let shown = label;
-  const bubble = add('bot', label, 'wait'); const t0 = Date.now(); let card = null, sb = null;
+  { const sp = window.museSpeaker && museSpeaker(n, ''); if (sp) shown = shown.replace(/^Muse\b/, sp.name); }
+  const bubble = add('bot', shown, 'wait'); const t0 = Date.now(); let card = null, sb = null;
   while (my === pollId && Date.now() - t0 < MAXW) {
     await new Promise((r) => setTimeout(r, 2000));
     if (my !== pollId) return;

@@ -73,6 +73,14 @@ class Notif {
         b.setCategory(ask ? Notification.CATEGORY_REMINDER : Notification.CATEGORY_MESSAGE);
         b.setContentIntent(PendingIntent.getActivity(c, issue, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
         Bitmap face = face(c, ask ? "muse_happy_00" : alert ? "muse_think_00" : "muse_idle_00");
+        // 🧸 Notification au visage de l'agent (image de son avatar 3D, envoyée par le cerveau) + son nom
+        String f64 = cmd.optString("face64", "");
+        if (!f64.isEmpty()) {
+            try { byte[] bb = android.util.Base64.decode(f64, android.util.Base64.DEFAULT); Bitmap fb = android.graphics.BitmapFactory.decodeByteArray(bb, 0, bb.length); if (fb != null) face = fb; }
+            catch (Throwable ignore) { }
+        }
+        String who = cmd.optString("agent", "");
+        if (who.isEmpty()) who = "Muse";
 
         if (ask) {
             // ---- 🔐 Carte de confirmation
@@ -103,7 +111,7 @@ class Notif {
             }
         } else if (Build.VERSION.SDK_INT >= 28) {
             // ---- 💬 Réponse / 🔔 alerte : style conversation, avec l'avatar de Muse
-            Person muse = new Person.Builder().setName("Muse").setIcon(face != null ? Icon.createWithBitmap(face) : null).setBot(true).build();
+            Person muse = new Person.Builder().setName(who).setIcon(face != null ? Icon.createWithBitmap(face) : null).setBot(true).build();
             Person me = new Person.Builder().setName("Moi").build();
             Notification.MessagingStyle st = new Notification.MessagingStyle(me);
             boolean plain = title.isEmpty() || title.equals("Muse a répondu");

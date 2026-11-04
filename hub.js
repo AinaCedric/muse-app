@@ -53,10 +53,18 @@
     view.hidden = false; view.innerHTML = '<div class="ainner"><p class="hint">Chargement…</p></div>';
     return true;
   }
-  agBtn.onclick = async () => { if (!openShell(agBtn)) return; try { await load(); renderAgents(); if (!(st.meta && st.meta.merged) && !regroupTried) { regroupTried = true; runRegroup(); } } catch (e) { view.innerHTML = `<div class="ainner"><p class="hint">${esc('' + e.message)}</p></div>`; } };
+  agBtn.onclick = async () => { if (!openShell(agBtn)) return; try { await load(); await loadStatus(); renderAgents(); syncFaces().catch(() => {}); startLive(); if (!(st.meta && st.meta.merged) && !regroupTried) { regroupTried = true; runRegroup(); } } catch (e) { view.innerHTML = `<div class="ainner"><p class="hint">${esc('' + e.message)}</p></div>`; } };
   acBtn.onclick = () => { if (!openShell(acBtn)) return; renderActivity(tab); };
 
-  let regroupTried = false;
+  let regroupTried = false, liveT = 0;
+  function startLive() {   // l'onglet Agents se met à jour tout seul (statut, non lus) tant qu'il est ouvert
+    clearInterval(liveT);
+    liveT = setInterval(async () => {
+      if (view.hidden || !agBtn.classList.contains('on') || document.hidden) { if (view.hidden || !agBtn.classList.contains('on')) clearInterval(liveT); return; }
+      if (document.querySelector('#agDlg[open]')) return;
+      await loadStatus(); const y = view.scrollTop; renderAgents(); view.scrollTop = y;
+    }, 12000);
+  }
   async function runRegroup() {
     const b = view.querySelector('#agMerge'); if (b) { b.disabled = true; b.textContent = '⏳ Regroupement…'; }
     try { const r = await regroup(); renderAgents(); loadList(); toast(r.moved.length ? `Regroupé : ${r.moved.length} élément${r.moved.length > 1 ? 's' : ''} déplacé${r.moved.length > 1 ? 's' : ''}, ${r.archived} ancienne${r.archived > 1 ? 's' : ''} discussion${r.archived > 1 ? 's' : ''} archivée${r.archived > 1 ? 's' : ''}` : 'Tout est déjà regroupé'); }
@@ -70,16 +78,89 @@
   const img = (a, px = 128) => (A3 && A3.ok ? A3.snapshot(lookOf(a), px) : '');
   const av = (a, big) => { const u = img(a, big ? 160 : 112); return u ? `<img class="agAv3${big ? ' big' : ''}" src="${u}" alt="">` : `<span class="agAv${big ? ' big' : ''}" style="--c:${q(a.color || '#7c5cff')}">${esc(a.emoji || '🤖')}</span>`; };
   window.museAgentImg = (n) => { const a = n && st.items.find((x) => Number(x.issue) === Number(n)); return a ? img(a, 64) : ''; };
+  // 🧸 Qui parle dans une discussion (pour l'étiquette au-dessus des réponses)
+  window.museSpeaker = (n, body) => {
+    const say = (String(body || '').match(/<!--agent-say:([\w-]+)-->/) || [])[1];
+    const a = (say && st.items.find((x) => x.id === say)) || (n && st.items.find((x) => Number(x.issue) === Number(n)));
+    return a ? { id: a.id, name: a.name, img: img(a, 64) } : null;
+  };
+  // 🖼️ Image de l'avatar déposée dans le dépôt (data/agents/<id>.png) : le cerveau la joint aux notifications du téléphone
+  const lookKey = (a) => JSON.stringify(lookOf(a));
+  async function uploadFace(a) {
+    if (!A3 || !A3.ok || a.faceKey === lookKey(a)) return false;
+    const url = A3.snapshot(lookOf(a), 96); if (!url) return false;
+    const path = `data/agents/${a.id}.png`; let sha = null;
+    try { sha = (await gh(`/repos/${cfg.repo}/contents/${path}`)).sha; } catch { /* nouvelle image */ }
+    await gh(`/repos/${cfg.repo}/contents/${path}`, { method: 'PUT', body: JSON.stringify({ message: `Avatar de ${a.name}`, content: url.split(',')[1], ...(sha ? { sha } : {}) }) });
+    a.faceKey = lookKey(a); return true;
+  }
+  async function syncFaces() { let ch = false; for (const a of st.items) { try { if (await uploadFace(a)) ch = true; } catch (e) { console.warn('avatar', e.message); } } if (ch) await save('Avatars des agents').catch(() => {}); }
+  // 🧠 Mémoire de l'agent : ce qu'il a appris de tes corrections (data/memory-agent-<id>.md), à relire, corriger, effacer
+  let mdlg = null;
+  async function memory(a) {
+    const path = `data/memory-agent-${a.id}.md`;
+    if (!mdlg) { mdlg = document.createElement('dialog'); mdlg.id = 'agMemDlg'; document.body.appendChild(mdlg); }
+    mdlg.innerHTML = `<h3>🧠 Mémoire de ${esc(a.name)}</h3><p class="hint">Chargement…</p>`; mdlg.showModal();
+    let sha = null, lines = [];
+    try { const f = await gh(`/repos/${cfg.repo}/contents/${path}`); sha = f.sha; lines = b64d(f.content).split('\n').filter((l) => /^- /.test(l)).map((l) => l.slice(2)); } catch (e) { if (e.status !== 404) { mdlg.querySelector('.hint').textContent = '' + e.message; return; } }
+    const draw = () => {
+      const today = new Date().toISOString().slice(0, 10), fresh = lines.filter((l) => l.includes(`(${today})`)).length;
+      mdlg.innerHTML = `<h3>🧠 Mémoire de ${esc(a.name)}</h3>
+        <p class="hint">Ce que ${esc(a.name)} a appris en travaillant avec toi (quand tu corriges un brouillon ou un ton, il le note tout seul).${fresh ? ` <b>${fresh} appris aujourd’hui.</b>` : ''}</p>
+        <ul class="memList">${lines.length ? lines.map((l, i) => `<li><span>${esc(l)}</span><button type="button" class="ghost memDel" data-i="${i}" title="Oublier">✕</button></li>`).join('') : '<li class="hint">Rien pour l’instant.</li>'}</ul>
+        <div class="agRow"><input id="memNew" maxlength="200" placeholder="Ajouter une règle (ex. signe toujours « Cédric »)" style="flex:1"><button class="ghost" id="memAdd" type="button">Ajouter</button></div>
+        <div id="memMsg" class="hint"></div>
+        <div class="row"><button class="ghost" id="memClose" type="button">Fermer</button><button class="btn" id="memSave" type="button">Enregistrer</button></div>`;
+      mdlg.querySelectorAll('.memDel').forEach((b) => (b.onclick = () => { lines.splice(+b.dataset.i, 1); draw(); }));
+      mdlg.querySelector('#memAdd').onclick = () => { const v = mdlg.querySelector('#memNew').value.trim(); if (v) { lines.push(`${v} (${today})`); draw(); } };
+      mdlg.querySelector('#memClose').onclick = () => mdlg.close();
+      mdlg.querySelector('#memSave').onclick = async () => {
+        const md = `# Mémoire de l'agent ${a.name}\n\n${lines.map((l) => `- ${l}`).join('\n')}\n`;
+        try { const r = await gh(`/repos/${cfg.repo}/contents/${path}`, { method: 'PUT', body: JSON.stringify({ message: `Mémoire de ${a.name}`, content: b64e(md), ...(sha ? { sha } : {}) }) }); sha = r.content.sha; toast('Mémoire enregistrée'); mdlg.close(); }
+        catch (e) { mdlg.querySelector('#memMsg').textContent = e.status === 409 ? 'La mémoire a changé entre-temps : rouvre-la.' : '' + e.message; }
+      };
+    };
+    draw();
+  }
+  // 🟢 Statut vivant : écrit par le cerveau dans « 🩺 Santé de Muse » (un commentaire par agent)
+  let stat = {}, missions = [], statAt = 0;
+  async function loadStatus() {
+    try {
+      const l = await gh(`/repos/${cfg.repo}/issues?state=all&labels=muse-sante&per_page=1`);
+      if (l && l[0]) { const cs = await gh(`/repos/${cfg.repo}/issues/${l[0].number}/comments?per_page=100`); stat = {}; for (const c of cs || []) { const m = c.body.match(/^<!--muse-ctl--><!--agent-status:([\w-]+)-->/); if (m) { try { stat[m[1]] = JSON.parse(c.body.slice(c.body.indexOf('\n') + 1)); } catch {} } } }
+      if (Date.now() - statAt > 120000) { try { const f = await gh(`/repos/${cfg.repo}/contents/data/missions.json`); missions = (JSON.parse(b64d(f.content)).items || []).filter((m) => m.enabled); } catch { missions = []; } statAt = Date.now(); }
+    } catch { /* statut facultatif */ }
+  }
+  const agoS = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 1 ? 'à l’instant' : m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`; };
+  function nextOf(a) {
+    const m = missions.find((x) => Number(x.issue) === Number(a.issue)); if (!m) return '';
+    const sc = m.schedule || {};
+    const w = sc.kind === 'hours' ? `toutes les ${sc.every || 6} h` : sc.kind === 'weekdays' ? `en semaine à ${sc.time || '08:00'}` : sc.kind === 'once' ? 'une fois' : `chaque jour à ${sc.time || '08:00'}`;
+    return `${m.watch ? '🔭 Veille' : '🔁 ' + m.name} · ${w}`;
+  }
+  function unreadOf(a) {
+    const l = window.museLastList || [], i = l.find((x) => Number(x.number) === Number(a.issue)); if (!i) return 0;
+    let seen = {}; try { seen = JSON.parse(localStorage.getItem('muse_seen') || '{}') || {}; } catch {}
+    return seen[i.number] == null ? 0 : Math.max(0, (i.comments || 0) - seen[i.number]);
+  }
+  function statusHtml(a) {
+    const s = stat[a.id] || {}, working = s.state === 'working' && s.since && Date.now() - Date.parse(s.since) < 20 * 60000;
+    const line = working ? `<span class="agSt work"><i></i>Travaille : ${esc(s.task || '…')} <small>${agoS(s.since)}</small></span>`
+      : s.last ? `<span class="agSt"><i></i>A fait : ${esc(s.last)} <small>${agoS(s.lastAt || s.at)}</small></span>` : `<span class="agSt idle"><i></i>Disponible</span>`;
+    const nx = nextOf(a);
+    return `${line}${nx ? `<span class="agNext">⏭️ ${esc(nx)}</span>` : ''}`;
+  }
   window.museChefIssue = () => { const a = st.items.find((x) => x.id === 'chef' && x.enabled !== false); return a && a.issue ? Number(a.issue) : 0; };
   window.museAgentImgById = (id) => { const a = st.items.find((x) => x.id === id); return a ? img(a, 64) : ''; };
   function renderAgents() {
-    const cards = st.items.map((a) => `<article class="acard agCard${a.enabled === false ? ' off' : ''}" data-id="${q(a.id)}">
-      <div class="ahead"><div class="atitle">${av(a)}<div><b>${esc(a.name)}</b><small>${esc(modeLabel(a.mode))}</small></div></div>
+    const cards = st.items.map((a) => { const s = stat[a.id] || {}, wk = s.state === 'working' && s.since && Date.now() - Date.parse(s.since) < 20 * 60000, un = unreadOf(a); return `<article class="acard agCard${a.enabled === false ? ' off' : ''}${wk ? ' working' : ''}" data-id="${q(a.id)}">
+      <div class="ahead"><div class="atitle"><span class="agAvW">${av(a)}${un ? `<em class="agUn">${un > 9 ? '9+' : un}</em>` : ''}</span><div><b>${esc(a.name)}</b><small>${esc(modeLabel(a.mode))}</small></div></div>
         <label class="sw" title="${a.enabled === false ? 'En pause' : 'Actif'}"><input type="checkbox" class="aon" ${a.enabled === false ? '' : 'checked'}><span></span></label></div>
+      <div class="agStatus">${statusHtml(a)}</div>
       <p class="ains">${esc(a.role || '')}</p>
       ${a.instructions ? `<p class="asum">📝 ${esc(a.instructions.slice(0, 160))}${a.instructions.length > 160 ? '…' : ''}</p>` : ''}
-      <div class="aact"><button class="btn agTalk" type="button">💬 Discuter</button><button class="ghost agEdit" type="button">Modifier</button><button class="ghost agDel" type="button">Supprimer</button></div>
-    </article>`).join('');
+      <div class="aact"><button class="btn agTalk" type="button">💬 Discuter</button><button class="ghost agEdit" type="button">Modifier</button><button class="ghost agMem" type="button">🧠 Mémoire</button><button class="ghost agDel" type="button">Supprimer</button></div>
+    </article>`; }).join('');
     const missing = TEMPLATES.filter((t) => !st.items.some((a) => a.id === t.id));
     const tpl = missing.map((t) => `<button type="button" class="agTpl" data-id="${t.id}">${av(t)}<span><b>${esc(t.name)}</b><small>${esc(t.role.slice(0, 70))}…</small></span>${ic('plus')}</button>`).join('');
     view.innerHTML = `<div class="ainner">
@@ -98,13 +179,14 @@
       c.querySelector('.aon').onchange = async (e) => { const prev = a.enabled; a.enabled = e.target.checked; try { await save(`Agent ${a.name} ${a.enabled ? 'activé' : 'en pause'}`); renderAgents(); } catch (er) { a.enabled = prev; toast('' + er.message); renderAgents(); } };
       c.querySelector('.agTalk').onclick = () => talk(a);
       c.querySelector('.agEdit').onclick = () => edit(a);
+      c.querySelector('.agMem').onclick = () => memory(a);
       c.querySelector('.agDel').onclick = () => remove(a);
     });
   }
   async function addTemplate(t) {
     if (!t) return;
     st.items.push({ ...t, look: { ...lookOf(t) }, instructions: '', enabled: true, created: new Date().toISOString() });
-    try { await save(`Agent ajouté : ${t.name}`); toast(`${t.emoji} ${t.name} rejoint l’équipe`); renderAgents(); }
+    try { await save(`Agent ajouté : ${t.name}`); syncFaces().catch(() => {}); toast(`${t.emoji} ${t.name} rejoint l’équipe`); renderAgents(); }
     catch (e) { st.items = st.items.filter((x) => x.id !== t.id); toast('' + e.message); renderAgents(); }
   }
   async function remove(a) {
@@ -259,7 +341,7 @@
     const before = st.items.map((x) => ({ ...x }));
     if (editing) { Object.assign(editing, data); delete editing.emoji; } else st.items.push({ id: rid(), ...data, enabled: true, created: new Date().toISOString() });
     const b = $d('#agSave'); b.disabled = true;
-    try { await save(editing ? `Agent modifié : ${name}` : `Agent créé : ${name}`); if (editing && editing.issue) gh(`/repos/${cfg.repo}/issues/${editing.issue}`, { method: 'PATCH', body: JSON.stringify({ title: name }) }).catch(() => {}); dlg.close(); renderAgents(); loadList(); syncHeader(); }
+    try { await save(editing ? `Agent modifié : ${name}` : `Agent créé : ${name}`); syncFaces().catch(() => {}); if (editing && editing.issue) gh(`/repos/${cfg.repo}/issues/${editing.issue}`, { method: 'PATCH', body: JSON.stringify({ title: name }) }).catch(() => {}); dlg.close(); renderAgents(); loadList(); syncHeader(); }
     catch (e) { st.items = before; $d('#agMsg').textContent = '' + e.message; }
     b.disabled = false;
   }
