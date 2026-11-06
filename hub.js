@@ -547,11 +547,22 @@
       return /^wss?:\/\/[\w.:-]+/.test(j.u || '') && String(j.t || '').length >= 20 ? j : null;
     } catch { return null; }
   }
+  // Le démon du PC publie lui-même son lien dans « 🩺 Santé de Muse » : l'appli le récupère toute seule (plus de code à coller)
+  async function fetchLiveLink() {
+    try {
+      const it = await techIssue('muse-sante'); if (!it) return null;
+      const c = (await tailComments(it, 200)).find((x) => x.body.startsWith('<!--muse-ctl--><!--live-link-->')); if (!c) return null;
+      const j = JSON.parse(c.body.slice(c.body.indexOf('\n') + 1)); if (!/^wss?:\/\/[\w.:-]+/.test(j.u || '') || String(j.t || '').length < 20) return null;
+      const code = 'MUSEV.' + btoa(unescape(encodeURIComponent(JSON.stringify({ u: j.u, t: j.t })))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      try { localStorage.setItem('muse_live_code', code); } catch {}
+      return liveLink();
+    } catch { return null; }
+  }
   let cdlg = null;
   function askLiveCode(a) {
     if (!cdlg) {
       cdlg = document.createElement('dialog'); cdlg.id = 'liveCodeDlg';
-      cdlg.innerHTML = `<h3>📞 Relier les appels</h3><p class="hint">Pour appeler tes agents depuis cet appareil, colle ton <b>code Muse Live</b> (il commence par <code>MUSEV.</code> : c’est le même que dans l’appli Muse Tél. ; sur le PC : <code>bash pc/voice-setup.sh</code> le réaffiche). Il reste sur cet appareil.</p>
+      cdlg.innerHTML = `<h3>📞 Relier les appels</h3><p class="hint">Pour appeler tes agents depuis cet appareil, il faut le lien de ton PC. D’habitude il arrive <b>tout seul</b> : allume le PC (démon Muse lancé, Tailscale connecté), attends une minute, puis retouche « Appeler ». Sinon, colle ici ton code <code>MUSEV.…</code> (le même que dans Muse Tél.).</p>
         <input id="lcIn" placeholder="MUSEV.…" autocomplete="off" spellcheck="false"><div id="lcMsg" class="hint"></div>
         <div class="row"><button class="ghost" id="lcNo" type="button">Annuler</button><button class="btn" id="lcOk" type="button">Enregistrer et appeler</button></div>`;
       document.body.appendChild(cdlg);
@@ -569,7 +580,7 @@
   async function callAgent(a) {
     if (!a) return;
     try { if (!a.issue) { await ensureIssue(a); await save(`Agent ${a.name} : discussion`); } } catch (e) { toast('' + e.message); return; }
-    const q = `?agent=${encodeURIComponent(a.id)}&issue=${encodeURIComponent(a.issue)}`, L = liveLink();
+    const q = `?agent=${encodeURIComponent(a.id)}&issue=${encodeURIComponent(a.issue)}`, L = (await fetchLiveLink()) || liveLink();
     let url;
     if (L) url = L.u.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/live\/?$/, '') + '/avatar' + q + '#t=' + encodeURIComponent(L.t);
     else if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) url = 'http://127.0.0.1:8790/avatar' + q;   // sur le PC lui-même
