@@ -675,12 +675,66 @@ const convIcon = (t) => {
 };
 const seenMap = () => { try { return JSON.parse(localStorage.getItem('muse_seen') || 'null'); } catch { return null; } };
 function unreadSync(l) { // compare le nombre de messages à ce que j'ai déjà vu
-  let m = seenMap(); const first = !m; m = m || {};
-  l.forEach((i) => { if (first || i.number === issueNo || m[i.number] == null) m[i.number] = i.comments; });
+  let m = seenMap(); const first = !m; m = m || {}; let changed = false;
+  l.forEach((i) => { if (first || i.number === issueNo || m[i.number] == null) { if (m[i.number] !== i.comments) changed = true; m[i.number] = Math.max(m[i.number] || 0, i.comments || 0); } });
   try { localStorage.setItem('muse_seen', JSON.stringify(m)); } catch {}
+  if (changed) seenPush();
   return m;
 }
-function markSeen(n, c) { const m = seenMap() || {}; m[n] = c; try { localStorage.setItem('muse_seen', JSON.stringify(m)); } catch {} }
+function markSeen(n, c) { const m = seenMap() || {}; m[n] = Math.max(m[n] || 0, c || 0); try { localStorage.setItem('muse_seen', JSON.stringify(m)); } catch {} seenPush(); }
+// 👁️ « Déjà lu » partagé entre le téléphone et le PC : une seule petite note technique (jamais lue par Muse, modifiée sur place)
+// dans une discussion fermée « 👁️ Lu sur mes appareils ». Chaque appareil garde le plus grand nombre de messages vus par discussion.
+const SEEN_L = 'muse-lus', SEEN_MARK = '<!--muse-ctl--><!--seen-->';
+const seenRemote = { issue: 0, cid: 0, pulledAt: 0, pushT: 0 };
+const seenMerge = (a, b) => { const o = { ...(a || {}) }; for (const [k, v] of Object.entries(b || {})) { const n = Number(v); if (Number.isFinite(n) && (o[k] == null || n > o[k])) o[k] = n; } return o; };
+async function seenFind(create) {
+  if (seenRemote.issue) return seenRemote.issue;
+  const l = await gh(`/repos/${cfg.repo}/issues?state=all&labels=${SEEN_L}&per_page=1`).catch(() => []);
+  if (l && l[0]) return (seenRemote.issue = l[0].number);
+  if (!create) return 0;
+  await gh(`/repos/${cfg.repo}/labels`, { method: 'POST', body: JSON.stringify({ name: SEEN_L, color: '94a3b8', description: 'Synchro des discussions lues (technique)' }) }).catch(() => {});
+  const i = await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: '👁️ Lu sur mes appareils', body: 'Technique : retient quelles discussions tu as déjà lues, pour que le téléphone et le PC soient d’accord. Ne pas supprimer.', labels: [SEEN_L] }) });
+  gh(`/repos/${cfg.repo}/issues/${i.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) }).catch(() => {});
+  return (seenRemote.issue = i.number);
+}
+async function seenRead() {
+  const n = await seenFind(false); if (!n) return {};
+  const cs = await gh(`/repos/${cfg.repo}/issues/${n}/comments?per_page=10`);
+  const c = (cs || []).find((x) => x.body.startsWith(SEEN_MARK)); if (!c) return {};
+  seenRemote.cid = c.id;
+  try { return JSON.parse(c.body.slice(c.body.indexOf('\n') + 1)) || {}; } catch { return {}; }
+}
+// Récupère ce qui a été lu sur les autres appareils → true si quelque chose a changé ici
+async function seenPull(force) {
+  if (!cfg.repo || !cfg.token) return false;
+  if (!force && Date.now() - seenRemote.pulledAt < 20000) return false;
+  seenRemote.pulledAt = Date.now();
+  try {
+    const remote = await seenRead(), local = seenMap() || {}, merged = seenMerge(local, remote);
+    const changed = Object.keys(merged).some((k) => merged[k] !== local[k]);
+    if (changed) try { localStorage.setItem('muse_seen', JSON.stringify(merged)); } catch {}
+    if (Object.keys(merged).some((k) => remote[k] == null || remote[k] < merged[k])) seenPush();   // cet appareil a lu des choses que les autres ne savent pas encore
+    return changed;
+  } catch { return false; }
+}
+// Envoie ce qui a été lu ici (regroupé : au plus une écriture toutes les 2,5 s)
+function seenPush() {
+  if (!cfg.repo || !cfg.token) return;
+  clearTimeout(seenRemote.pushT);
+  seenRemote.pushT = setTimeout(async () => {
+    try {
+      const n = await seenFind(true), remote = await seenRead(), merged = seenMerge(remote, seenMap() || {});
+      if (Object.keys(merged).every((k) => remote[k] === merged[k])) return;
+      const keep = Object.fromEntries(Object.entries(merged).sort((a, b) => Number(b[0]) - Number(a[0])).slice(0, 400));   // les 400 discussions les plus récentes
+      const body = `${SEEN_MARK}\n${JSON.stringify(keep)}`;
+      if (seenRemote.cid) await gh(`/repos/${cfg.repo}/issues/comments/${seenRemote.cid}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+      else seenRemote.cid = (await gh(`/repos/${cfg.repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body }) })).id;
+    } catch (e) { console.warn('synchro « lu » :', e.message); }
+  }, 2500);
+}
+// Pendant que l'appli est ouverte : toutes les 45 s, on regarde si tu as lu quelque chose sur l'autre appareil
+setInterval(async () => { if (document.visibilityState === 'visible' && cfg.repo && cfg.token && await seenPull(true)) loadList(); }, 45000);
+
 let seenNow = {};
 function convItem(i, archived) {
   const d = document.createElement('div'); d.className = 'item' + (i.number === issueNo ? ' on' : '') + (archived ? ' arch' : ''); d.dataset.n = i.number;
@@ -700,11 +754,12 @@ function convItem(i, archived) {
   return d;
 }
 // Discussions techniques (journal, santé) : utilisées par l'onglet Activité, jamais affichées dans la liste
-const isTech = (i) => hasL(i, 'muse-sante') || hasL(i, 'muse-journal') || /^(🩺 Santé|📒 Journal) de Muse$/.test(String(i.title || ''));
+const isTech = (i) => hasL(i, 'muse-sante') || hasL(i, 'muse-journal') || hasL(i, 'muse-lus') || /^(🩺 Santé|📒 Journal) de Muse$|^👁️ Lu sur mes appareils$/.test(String(i.title || ''));
 async function loadList() {
   if (!cfg.repo || !cfg.token) return;
   try {
     const l = (await gh(`/repos/${cfg.repo}/issues?state=open&sort=updated&per_page=60`)).filter((i) => !i.pull_request && !isTech(i));  // les historiques d'automatisations (⚡) sont aussi dans la liste
+    await seenPull();   // 👁️ ce que tu as lu sur l'autre appareil
     seenNow = unreadSync(l); window.museLastList = l;
     const list = $('#list'); list.innerHTML = '';
     // 🧭 Le Chef (agent) est toujours tout en haut des épinglées, même s'il n'a pas bougé depuis longtemps
@@ -1545,4 +1600,4 @@ function autoRead(cs) {
 
 // pastille rouge : rafraîchit la liste de temps en temps pour voir les nouvelles réponses
 setInterval(() => { if (document.visibilityState === 'visible' && cfg.repo && cfg.token && !busy) loadList(); }, 60000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && cfg.repo && cfg.token) loadList(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && cfg.repo && cfg.token) { seenRemote.pulledAt = 0; loadList(); } });   // 👁️ en revenant sur l'appli : on reprend tout de suite ce qui a été lu ailleurs
