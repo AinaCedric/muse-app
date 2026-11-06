@@ -611,3 +611,13 @@ main.autoview #autos{padding-top:72px}
 .agRRow input[type=number]{max-width:90px}
 .agRForm textarea{height:auto!important;min-height:64px}
 .agRForm [hidden]{display:none!important}
+
+/* 📞 Appeler un agent (en haut à droite de sa discussion) */
+.agCall{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px 0 12px;margin:2px 6px 0 0;border-radius:999px;border:1px solid var(--bd);background:color-mix(in srgb,var(--panel) 88%,transparent);color:var(--txt);font:600 14px var(--sans);cursor:pointer;box-shadow:var(--shadow,0 2px 8px #0002);transition:transform .2s,background .2s}
+.agCall:hover{background:color-mix(in srgb,#22c55e 14%,var(--panel))}
+.agCall:active{transform:scale(.96)}
+.agCall svg{color:#22c55e}
+.agCall[hidden]{display:none}
+main.autoview .agCall{visibility:hidden}
+@media(max-width:640px){.agCall span{display:none}.agCall{width:38px;padding:0;justify-content:center}}
+#liveCodeDlg input{width:100%;font-family:ui-monospace,monospace;font-size:13px}

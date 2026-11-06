@@ -252,7 +252,7 @@
       ${permName(a.perms) || routN(a) ? `<div class="agBadges">${permName(a.perms) ? `<span class="agPermB" title="Permissions de cet agent">${esc(permName(a.perms))}</span>` : ''}${routN(a) ? `<span class="agPermB rt" title="Routines de cet agent">⏰ ${routN(a)} routine${routN(a) > 1 ? 's' : ''}</span>` : ''}</div>` : ''}
       <p class="ains">${esc(a.role || '')}</p>
       ${a.instructions ? `<p class="asum">📝 ${esc(a.instructions.slice(0, 160))}${a.instructions.length > 160 ? '…' : ''}</p>` : ''}
-      <div class="aact"><button class="btn agTalk" type="button">💬 Discuter</button><button class="ghost agEdit" type="button">Modifier</button><button class="ghost agMem" type="button">🧠 Mémoire</button><button class="ghost agDel" type="button">Supprimer</button></div>
+      <div class="aact"><button class="btn agTalk" type="button">💬 Discuter</button><button class="ghost agCallB" type="button" title="Appel vocal avec son avatar">📞 Appeler</button><button class="ghost agEdit" type="button">Modifier</button><button class="ghost agMem" type="button">🧠 Mémoire</button><button class="ghost agDel" type="button">Supprimer</button></div>
     </article>`; }).join('');
     const missing = TEMPLATES.filter((t) => !st.items.some((a) => a.id === t.id));
     const tpl = missing.map((t) => `<button type="button" class="agTpl" data-id="${t.id}">${av(t)}<span><b>${esc(t.name)}</b><small>${esc(t.role.slice(0, 70))}…</small></span>${ic('plus')}</button>`).join('');
@@ -271,6 +271,7 @@
       const a = st.items.find((x) => x.id === c.dataset.id);
       c.querySelector('.aon').onchange = async (e) => { const prev = a.enabled; a.enabled = e.target.checked; try { await save(`Agent ${a.name} ${a.enabled ? 'activé' : 'en pause'}`); renderAgents(); } catch (er) { a.enabled = prev; toast('' + er.message); renderAgents(); } };
       c.querySelector('.agTalk').onclick = () => talk(a);
+      c.querySelector('.agCallB').onclick = () => callAgent(a);
       c.querySelector('.agEdit').onclick = () => edit(a);
       c.querySelector('.agMem').onclick = () => memory(a);
       c.querySelector('.agDel').onclick = () => remove(a);
@@ -535,11 +536,64 @@
     b.disabled = false;
   }
 
+  // 📞 Appeler un agent : conversation vocale avec SON avatar 3D (page Muse Live du PC), et tout l'appel est écrit dans SA discussion.
+  // Sur le PC : la page locale du démon. Sur le téléphone : le code Muse Live (MUSEV…, le même que dans l'appli Muse Tél.), gardé sur cet appareil.
+  const HANDSET = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h3.5l1.6 4.2-2.2 1.4a11 11 0 0 0 6.5 6.5l1.4-2.2L20 15.5V19a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 3.5 5.6 1.5 1.5 0 0 1 5 4z"/></svg>';
+  function liveLink() {
+    try {
+      const c = (localStorage.getItem('muse_live_code') || '').trim(); if (!c.startsWith('MUSEV.')) return null;
+      const b = c.slice(6).replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      const j = JSON.parse(decodeURIComponent(escape(atob(b + '==='.slice((b.length + 3) % 4)))));
+      return /^wss?:\/\/[\w.:-]+/.test(j.u || '') && String(j.t || '').length >= 20 ? j : null;
+    } catch { return null; }
+  }
+  let cdlg = null;
+  function askLiveCode(a) {
+    if (!cdlg) {
+      cdlg = document.createElement('dialog'); cdlg.id = 'liveCodeDlg';
+      cdlg.innerHTML = `<h3>📞 Relier les appels</h3><p class="hint">Pour appeler tes agents depuis cet appareil, colle ton <b>code Muse Live</b> (il commence par <code>MUSEV.</code> : c’est le même que dans l’appli Muse Tél. ; sur le PC : <code>bash pc/voice-setup.sh</code> le réaffiche). Il reste sur cet appareil.</p>
+        <input id="lcIn" placeholder="MUSEV.…" autocomplete="off" spellcheck="false"><div id="lcMsg" class="hint"></div>
+        <div class="row"><button class="ghost" id="lcNo" type="button">Annuler</button><button class="btn" id="lcOk" type="button">Enregistrer et appeler</button></div>`;
+      document.body.appendChild(cdlg);
+      cdlg.querySelector('#lcNo').onclick = () => cdlg.close();
+    }
+    cdlg.querySelector('#lcIn').value = ''; cdlg.querySelector('#lcMsg').textContent = '';
+    cdlg.querySelector('#lcOk').onclick = () => {
+      const v = cdlg.querySelector('#lcIn').value.trim();
+      try { localStorage.setItem('muse_live_code', v); } catch {}
+      if (!liveLink()) { try { localStorage.removeItem('muse_live_code'); } catch {} cdlg.querySelector('#lcMsg').textContent = 'Code invalide : il doit commencer par MUSEV. (copie-le en entier).'; return; }
+      cdlg.close(); callAgent(a);
+    };
+    cdlg.showModal();
+  }
+  async function callAgent(a) {
+    if (!a) return;
+    try { if (!a.issue) { await ensureIssue(a); await save(`Agent ${a.name} : discussion`); } } catch (e) { toast('' + e.message); return; }
+    const q = `?agent=${encodeURIComponent(a.id)}&issue=${encodeURIComponent(a.issue)}`, L = liveLink();
+    let url;
+    if (L) url = L.u.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/live\/?$/, '') + '/avatar' + q + '#t=' + encodeURIComponent(L.t);
+    else if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) url = 'http://127.0.0.1:8790/avatar' + q;   // sur le PC lui-même
+    else return askLiveCode(a);
+    const w = window.open(url, '_blank', 'noopener');
+    if (!w) location.href = url;
+    toast(`📞 Appel de ${a.name}…`);
+  }
+  window.museCallAgent = (id) => callAgent(st.items.find((x) => x.id === id));
+  const callBtn = (() => {
+    const tr = document.querySelector('#top .tr') || document.querySelector('.tr'); if (!tr) return null;
+    const b = document.createElement('button'); b.type = 'button'; b.id = 'agCall'; b.className = 'agCall'; b.hidden = true;
+    b.innerHTML = `${HANDSET}<span>Appeler</span>`; b.title = 'Appeler cet agent (conversation vocale avec son avatar)';
+    b.oncontextmenu = (e) => { e.preventDefault(); const a = issueNo && st.items.find((x) => Number(x.issue) === Number(issueNo)); if (a) askLiveCode(a); };   // clic droit / appui long : changer le code
+    b.onclick = () => { const a = issueNo && st.items.find((x) => Number(x.issue) === Number(issueNo)); callAgent(a); };
+    tr.prepend(b); return b;
+  })();
+
   // ---------- 🎭 En-tête : dans la discussion d'un agent, c'est SON avatar 3D qui s'affiche (et bouge selon ce qu'il fait)
   let head = null, headFor = '';
   const wrapEl = $('#avatarWrap'), museCv = $('#avatar'), nameEl = $('#whoName b');
   function syncHeader() {
     const a = issueNo && st.items.find((x) => Number(x.issue) === Number(issueNo));
+    if (callBtn) callBtn.hidden = !(a && a.enabled !== false);   // 📞 seulement dans la discussion d'un agent
     const key = a ? a.id + JSON.stringify(lookOf(a)) : '';
     if (key === headFor) { if (a && nameEl) nameEl.textContent = a.name; return; }
     headFor = key;
