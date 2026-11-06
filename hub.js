@@ -633,6 +633,7 @@
   const C_TOOLJOB = (n) => /gmail|calendar|drive|mail|agenda/i.test(n) ? 'mails' : /phone_notif|whatsapp|messenger|notif_reply|phone_type/i.test(n) ? 'messages' : /web|search|fetch|pc_web|video/i.test(n) ? 'recherche' : /files|pc_/i.test(n) ? 'odoo' : '';
   let cbar = null;
   function callBarUi(a) {
+    if (cbar && !cbar.querySelector('.cbEnd')) resetBar();
     if (!cbar) {
       cbar = document.createElement('div'); cbar.id = 'callBar';
       cbar.innerHTML = `<div class="cbTop"><span class="cbDot"></span><b class="cbName"></b><span class="cbClock">00:00</span><span class="cbState"></span></div>
@@ -782,15 +783,23 @@
     if (Number(issueNo) !== Number(a.issue)) await openConv(a.issue);
     let barge = true; try { barge = localStorage.getItem('museCallBarge') !== '0'; } catch {}
     Object.assign(CALL, { on: true, a, ws: null, rec: null, guard: null, vad: null, sources: [], playAt: 0, speaking: false, thinking: false, listening: false, fake: false, doneSeen: true, t0: 0, clock: '', tasks: {}, barge, bargeFail: false, state: '' });
-    cctx(); bigHead(a); callBarUi(a); cState('think', 'Ça sonne…'); syncHeader();
+    cctx(); bigHead(a); callBarUi(a); cState('think', 'Je joins ton PC…'); syncHeader();
     $('#who').dataset.call = '1'; if (nameEl) nameEl.textContent = a.name;
     requestAnimationFrame(cLoop);
+    // 🔎 D'abord : le PC est-il joignable depuis cet appareil ? (sinon on explique précisément quoi faire)
+    const base = L.u.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/live\/?$/, '');
+    let ping = null;
+    try { const r = await fetch(base + '/ping', { cache: 'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined }); ping = await r.json(); } catch { ping = null; }
+    if (!CALL.on) return;
+    if (!ping || !ping.ok) return callFail('unreach', base);
+    CALL.pinged = true;
     const ws = new WebSocket(L.u.replace(/\/live\/?$/, '') + '/live?t=' + encodeURIComponent(L.t)); CALL.ws = ws;
     ws.onopen = () => ws.send(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: a.id, issue: a.issue }));
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (!CALL.on || CALL.ws !== ws) return;
-      if (m.type === 'agent') { CALL.t0 = Date.now(); cState('idle', 'En ligne'); if (head) { head.gesture('wave'); head.job(C_JOBS.includes(m.id) ? m.id : jobOf(a)); } }
+      if (m.type === 'ready') { cState('think', 'Ça sonne…'); setTimeout(() => { if (CALL.on && !CALL.t0) { CALL.t0 = Date.now(); cState('idle', 'En ligne'); cListen(); } }, 3000); }   // démon plus ancien : pas de « agent »
+      else if (m.type === 'agent') { CALL.t0 = Date.now(); cState('idle', 'En ligne'); if (head) { head.gesture('wave'); head.job(C_JOBS.includes(m.id) ? m.id : jobOf(a)); } }
       else if (m.type === 'state') { if (m.s === 'speak') { CALL.thinking = false; if (head) head.busy(false); cState('speak', m.task ? 'Il te donne le résultat' : 'Il parle'); } else if (m.s === 'think') cState('think', 'Il réfléchit…'); }
       else if (m.type === 'audio') { cStopListening(); cPlay(m); }
       else if (m.type === 'speak') { cStopListening(); cSpeakFallback(m.text); }
@@ -803,8 +812,28 @@
       else if (m.type === 'error') { CALL.thinking = false; if (head) { head.busy(false); head.mood('inquiete'); } cState('idle', m.msg || 'Erreur'); }
     };
     ws.onerror = () => {};
-    ws.onclose = () => { if (CALL.on && CALL.ws === ws) endCall(CALL.t0 ? 'Appel coupé (PC injoignable).' : 'Impossible de joindre ton PC : allume-le (démon Muse + Tailscale).'); };
+    ws.onclose = () => { if (CALL.on && CALL.ws === ws) { if (CALL.t0) endCall('Appel coupé : le PC ne répond plus.'); else callFail('refused', base); } };
   }
+  // ❌ L'appel n'a pas pu commencer : on garde la barre ouverte avec l'explication et des boutons pour régler ça
+  function callFail(kind, base) {
+    const a = CALL.a; CALL.on = false;
+    cStopListening(); cStopGuard(); cStopPlayback(); try { if (CALL.ws) CALL.ws.close(); } catch {}
+    const host = base.replace(/^https?:\/\//, '');
+    const txt = kind === 'unreach'
+      ? `📵 Cet appareil n'arrive pas à joindre ton PC (${host}). Vérifie : ① l'appli Tailscale de cet appareil est activée (« Connected ») ; ② le PC est allumé, avec le démon Muse lancé ; ③ Chrome a le droit d'accéder aux appareils du réseau local (🔒 à gauche de l'adresse → Autorisations).`
+      : `🔐 Ton PC répond, mais il refuse l'appel (lien expiré ou démon pas à jour). Sur le PC : systemctl --user restart muse-daemon, attends une minute, puis réessaie.`;
+    if (cbar) {
+      cbar.dataset.s = 'fail'; cbar.querySelector('.cbState').textContent = 'Appel impossible';
+      cbar.querySelector('.cbSub').textContent = txt; cbar.querySelector('.cbYou').textContent = '';
+      cbar.querySelector('.cbBtns').innerHTML = `<button type="button" class="cbTest">🔎 Tester le lien</button><button type="button" class="cbRetry">🔁 Réessayer</button><button type="button" class="cbClose">Fermer</button>`;
+      cbar.querySelector('.cbTest').onclick = () => window.open(base + '/ping', '_blank', 'noopener');
+      cbar.querySelector('.cbRetry').onclick = () => { resetBar(); callAgent(a); };
+      cbar.querySelector('.cbClose').onclick = () => { resetBar(); cbar.hidden = true; document.body.classList.remove('inCall'); };
+    }
+    $('#who').classList.remove('calling'); delete $('#who').dataset.call; headFor = ''; syncHeader();
+    const st3 = $('#status'); if (st3) st3.textContent = 'en ligne';
+  }
+  function resetBar() { if (!cbar) return; cbar.remove(); cbar = null; }   // la barre sera recréée proprement au prochain appel
   function endCall(msg) {
     if (!CALL.on) return;
     const a = CALL.a, ws = CALL.ws; CALL.on = false;
