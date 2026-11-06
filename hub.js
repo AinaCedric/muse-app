@@ -793,10 +793,11 @@
     if (!CALL.on) return;
     if (!ping || !ping.ok) return callFail('unreach', base);
     CALL.pinged = true;
-    const ws = new WebSocket(L.u.replace(/\/live\/?$/, '') + '/live?t=' + encodeURIComponent(L.t)); CALL.ws = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: a.id, issue: a.issue }));
-    ws.onmessage = (ev) => {
-      let m; try { m = JSON.parse(ev.data); } catch { return; }
+    const ws = liveTransport(L, base, (data) => onMsg(data), () => { if (CALL.on && CALL.ws === ws) { if (CALL.t0) endCall('Appel coupé : le PC ne répond plus.'); else callFail('refused', base); } });
+    CALL.ws = ws;
+    ws.send(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: a.id, issue: a.issue }));
+    const onMsg = (data) => {
+      let m; try { m = JSON.parse(data); } catch { return; }
       if (!CALL.on || CALL.ws !== ws) return;
       if (m.type === 'ready') { cState('think', 'Ça sonne…'); setTimeout(() => { if (CALL.on && !CALL.t0) { CALL.t0 = Date.now(); cState('idle', 'En ligne'); cListen(); } }, 3000); }   // démon plus ancien : pas de « agent »
       else if (m.type === 'agent') { CALL.t0 = Date.now(); cState('idle', 'En ligne'); if (head) { head.gesture('wave'); head.job(C_JOBS.includes(m.id) ? m.id : jobOf(a)); } }
@@ -811,8 +812,32 @@
       else if (m.type === 'cmd' && m.c === 'close') endCall('Appel repris sur un autre appareil.');
       else if (m.type === 'error') { CALL.thinking = false; if (head) { head.busy(false); head.mood('inquiete'); } cState('idle', m.msg || 'Erreur'); }
     };
-    ws.onerror = () => {};
-    ws.onclose = () => { if (CALL.on && CALL.ws === ws) { if (CALL.t0) endCall('Appel coupé : le PC ne répond plus.'); else callFail('refused', base); } };
+  }
+  // 🔌 Liaison avec le PC : WebSocket d'abord ; si rien n'arrive en 4 s (proxy Tailscale + Chrome), on passe en « flux » (SSE + envois POST), qui passe partout.
+  function liveTransport(L, base, onMsg, onClose) {
+    const tok = encodeURIComponent(L.t), out = [];
+    let mode = 'ws', ws = null, es = null, sid = '', got = false, dead = false, timer = 0;
+    const T = { readyState: 0, send(str) { if (dead) return; if (mode === 'ws' && ws && ws.readyState === 1) ws.send(str); else if (mode === 'sse' && sid) post(str); else out.push(str); }, close() { dead = true; T.readyState = 3; clearTimeout(timer); try { if (ws) ws.close(); } catch {} try { if (es) es.close(); } catch {} } };
+    const post = (str) => fetch(`${base}/live/send?t=${tok}&sid=${sid}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: str }).then((r) => { if (!r.ok && r.status !== 404) throw new Error(r.status); if (r.status === 404 && !dead) { T.close(); onClose(); } }).catch(() => {});
+    const flush = () => { while (out.length) T.send(out.shift()); };
+    const fail = () => { if (dead) return; T.close(); onClose(); };
+    function sse() {
+      mode = 'sse'; try { if (ws) { ws.onclose = null; ws.close(); } } catch {} ws = null;
+      es = new EventSource(`${base}/live/sse?t=${tok}`);
+      es.addEventListener('sid', (e) => { sid = e.data; T.readyState = 1; flush(); });
+      es.onmessage = (e) => { got = true; if (!dead) onMsg(e.data); };
+      es.onerror = () => { if (!dead && (es.readyState === 2 || !sid || got)) fail(); };
+      timer = setTimeout(() => { if (!got && !dead) fail(); }, 9000);
+    }
+    try {
+      ws = new WebSocket(L.u.replace(/\/live\/?$/, '') + '/live?t=' + tok);
+      ws.onopen = () => { T.readyState = 1; flush(); };
+      ws.onmessage = (ev) => { if (!got) { got = true; clearTimeout(timer); } if (!dead) onMsg(ev.data); };
+      ws.onerror = () => {};
+      ws.onclose = () => { if (dead || mode !== 'ws') return; if (!got) { out.length = 0; out.push(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: CALL.a && CALL.a.id, issue: CALL.a && CALL.a.issue })); sse(); } else fail(); };
+      timer = setTimeout(() => { if (!got && !dead) { out.length = 0; out.push(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: CALL.a && CALL.a.id, issue: CALL.a && CALL.a.issue })); sse(); } }, 4000);
+    } catch { sse(); }
+    return T;
   }
   // ❌ L'appel n'a pas pu commencer : on garde la barre ouverte avec l'explication et des boutons pour régler ça
   function callFail(kind, base) {
@@ -838,7 +863,7 @@
     if (!CALL.on) return;
     const a = CALL.a, ws = CALL.ws; CALL.on = false;
     cStopListening(); cStopGuard(); cStopPlayback();
-    try { if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'stop' })); ws.close(); } } catch {}
+    try { if (ws) { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'stop' })); setTimeout(() => ws.close(), 300); } } catch {}
     if (head) head.gesture('wave');
     if (cbar) { cbar.querySelector('.cbState').textContent = msg || ''; setTimeout(() => { if (!CALL.on && cbar) { cbar.hidden = true; document.body.classList.remove('inCall'); } }, 1600); }
     toast(msg || 'Appel terminé.');
