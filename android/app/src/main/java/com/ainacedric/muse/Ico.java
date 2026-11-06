@@ -8,7 +8,7 @@ import android.view.View;
 
 /** Petites icônes dessinées au trait (micro, stop, envoyer, haut-parleur) : pas d'emojis dans le panneau. */
 class Ico extends View {
-    static final int MIC = 0, STOP = 1, UP = 2, SPEAKER = 3, MUTE = 4, SUN = 5, CLOSE = 6, KB = 7;
+    static final int MIC = 0, STOP = 1, UP = 2, SPEAKER = 3, MUTE = 4, SUN = 5, CLOSE = 6, KB = 7, FACE = 8;
     private final Paint p = new Paint();
     private int kind;
     private final RectF r = new RectF();
@@ -65,6 +65,15 @@ class Ico extends View {
                 p.setStrokeWidth(2.2f * s);
                 cv.drawLine(ox + 6.5f * s, oy + 6.5f * s, ox + 17.5f * s, oy + 17.5f * s, p);
                 cv.drawLine(ox + 17.5f * s, oy + 6.5f * s, ox + 6.5f * s, oy + 17.5f * s, p);
+                break;
+            case FACE:   // 🧸 visage de l'avatar : Muse Live en plein écran
+                cv.drawCircle(ox + 12 * s, oy + 12 * s, 9.5f * s, p);
+                p.setStyle(Paint.Style.FILL);
+                cv.drawCircle(ox + 8.6f * s, oy + 10.5f * s, 1.5f * s, p);
+                cv.drawCircle(ox + 15.4f * s, oy + 10.5f * s, 1.5f * s, p);
+                p.setStyle(Paint.Style.STROKE);
+                r.set(ox + 8 * s, oy + 11 * s, ox + 16 * s, oy + 17 * s);
+                cv.drawArc(r, 20, 140, false, p);
                 break;
             case KB:
                 r.set(ox + 2.5f * s, oy + 6 * s, ox + 21.5f * s, oy + 18 * s);

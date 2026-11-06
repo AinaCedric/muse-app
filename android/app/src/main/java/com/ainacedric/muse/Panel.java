@@ -393,6 +393,9 @@ class Panel {
             @Override public void onClick(View v) { close(); }
         });
         bar.addView(briefBtn);
+        if (Store.liveLinked(svc)) bar.addView(barBtn(Ico.FACE, Color.rgb(196, 181, 253), new View.OnClickListener() {
+            @Override public void onClick(View v) { openAvatar(); }
+        }));
         bar.addView(kbBtn);
         bar.addView(micBtn);
         bar.addView(closeBtn);
@@ -899,6 +902,19 @@ class Panel {
             @Override
             public void run() { close(); }
         }, 1500);
+    }
+
+    /** 🧸 Muse Live avec avatar 3D, en plein écran dans Chrome (page servie par le démon du PC, via Tailscale). Le jeton reste dans l'ancre #t=… */
+    private void openAvatar() {
+        try {
+            String u = Store.liveUrl(svc), t = Store.liveTok(svc);
+            String page = u.replaceFirst("^wss://", "https://").replaceFirst("^ws://", "http://").replaceFirst("/live/?$", "") + "/avatar#t=" + android.net.Uri.encode(t);
+            Intent i = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(page)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try { svc.getPackageManager().getPackageInfo("com.android.chrome", 0); i.setPackage("com.android.chrome"); } catch (Exception noChrome) { }
+            close();
+            svc.startActivity(i);
+            Bus.log("Muse Live (avatar) ouverte");
+        } catch (Throwable e) { Bus.log("Avatar : " + e.getMessage()); }
     }
 
     void close() {
