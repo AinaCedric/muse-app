@@ -580,14 +580,11 @@
   async function callAgent(a) {
     if (!a) return;
     try { if (!a.issue) { await ensureIssue(a); await save(`Agent ${a.name} : discussion`); } } catch (e) { toast('' + e.message); return; }
-    const q = `?agent=${encodeURIComponent(a.id)}&issue=${encodeURIComponent(a.issue)}`, L = (await fetchLiveLink()) || liveLink();
-    let url;
-    if (L) url = L.u.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/live\/?$/, '') + '/avatar' + q + '#t=' + encodeURIComponent(L.t);
-    else if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) url = 'http://127.0.0.1:8790/avatar' + q;   // sur le PC lui-même
-    else return askLiveCode(a);
-    const w = window.open(url, '_blank', 'noopener');
-    if (!w) location.href = url;
-    toast(`📞 Appel de ${a.name}…`);
+    if (CALL.on) return endCall('Appel terminé.');
+    const L = (await fetchLiveLink()) || liveLink();
+    if (L) return startCall(a, L);   // 📞 c'est la mascotte de l'agent, ici, qui répond
+    if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) { const u = 'http://127.0.0.1:8790/avatar' + `?agent=${encodeURIComponent(a.id)}&issue=${encodeURIComponent(a.issue)}`; if (!window.open(u, '_blank', 'noopener')) location.href = u; return; }   // secours : page du PC
+    askLiveCode(a);
   }
   window.museCallAgent = (id) => callAgent(st.items.find((x) => x.id === id));
   const callBtn = (() => {
@@ -604,7 +601,8 @@
   const wrapEl = $('#avatarWrap'), museCv = $('#avatar'), nameEl = $('#whoName b');
   function syncHeader() {
     const a = issueNo && st.items.find((x) => Number(x.issue) === Number(issueNo));
-    if (callBtn) callBtn.hidden = !(a && a.enabled !== false);   // 📞 seulement dans la discussion d'un agent
+    if (callBtn) { callBtn.hidden = !(a && a.enabled !== false); callBtn.classList.toggle('on', !!CALL.on); callBtn.querySelector('span').textContent = CALL.on ? 'Raccrocher' : 'Appeler'; }   // 📞 seulement dans la discussion d'un agent
+    if (CALL.on) return;   // pendant l'appel, la grande mascotte reste
     const key = a ? a.id + JSON.stringify(lookOf(a)) : '';
     if (key === headFor) { if (a && nameEl) nameEl.textContent = a.name; return; }
     headFor = key;
@@ -620,8 +618,206 @@
   }
   // l'avatar de l'agent suit les mêmes états que Muse (réfléchit, travaille, content, souci)
   if (window.MuseAvatar) { const set = MuseAvatar.setState.bind(MuseAvatar); MuseAvatar.setState = (s, ms) => { set(s, ms); if (head) head.state(s); }; }
+
+  // =====================================================================
+  // 📞 APPEL DANS L'APPLI : c'est la mascotte de l'agent, en haut de sa discussion, qui répond à la voix
+  // (bouche synchronisée sur la voix, visage selon l'humeur, petites mains qui font des gestes, accessoire du métier pendant un outil,
+  //  minuteur à côté de son nom). Le son et la voix viennent du démon du PC (Muse Live) ; tout l'appel est écrit dans la discussion.
+  // =====================================================================
+  const CALL = { on: false };
+  const SRc = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const C_HALT = /^(?:hé |eh |ok )?(attends?|stop|arr[êe]te|chut|tais[- ]toi|une seconde|deux secondes|pause)\b/i;
+  const C_QUIT = /^(au revoir|raccroche|c'est tout|bonne nuit|à plus|merci,? (c'est tout|au revoir))\b/i;
+  const C_JOBS = ['chef', 'mails', 'messages', 'gyoo', 'odoo', 'recherche'];
+  const C_MOOD_G = { joie: 'hop', pense: 'think', triste: 'tilt', surprise: 'tilt', taquine: 'tilt', inquiete: 'tilt' };
+  const C_TOOLJOB = (n) => /gmail|calendar|drive|mail|agenda/i.test(n) ? 'mails' : /phone_notif|whatsapp|messenger|notif_reply|phone_type/i.test(n) ? 'messages' : /web|search|fetch|pc_web|video/i.test(n) ? 'recherche' : /files|pc_/i.test(n) ? 'odoo' : '';
+  let cbar = null;
+  function callBarUi(a) {
+    if (!cbar) {
+      cbar = document.createElement('div'); cbar.id = 'callBar';
+      cbar.innerHTML = `<div class="cbTop"><span class="cbDot"></span><b class="cbName"></b><span class="cbClock">00:00</span><span class="cbState"></span></div>
+        <div class="cbSub"></div><div class="cbYou"></div><div class="cbTasks"></div>
+        <div class="cbBtns"><button type="button" class="cbBarge on" title="Le couper simplement en parlant">✋ Couper en parlant</button><button type="button" class="cbMic" title="Parler / le couper">🎙️</button><button type="button" class="cbEnd" title="Raccrocher">${HANDSET}</button></div>`;
+      document.body.appendChild(cbar);
+      cbar.querySelector('.cbEnd').onclick = () => endCall('Appel terminé.');
+      cbar.querySelector('.cbMic').onclick = () => { cctx(); if (CALL.speaking || CALL.thinking) cInterrupt(); else if (CALL.listening) { cStopListening(); cState('idle', 'Micro en pause'); } else cListen(); };
+      cbar.querySelector('.cbBarge').onclick = (e) => { CALL.barge = !CALL.barge; CALL.bargeFail = false; e.currentTarget.classList.toggle('on', CALL.barge); try { localStorage.setItem('museCallBarge', CALL.barge ? '1' : '0'); } catch {} };
+    }
+    cbar.querySelector('.cbName').textContent = `Appel · ${a.name}`;
+    cbar.querySelector('.cbSub').textContent = ''; cbar.querySelector('.cbYou').textContent = ''; cbar.querySelector('.cbTasks').innerHTML = '';
+    cbar.querySelector('.cbBarge').classList.toggle('on', CALL.barge);
+    cbar.hidden = false; document.body.classList.add('inCall'); placeBar();
+  }
+  // la barre d'appel se centre sur la zone de discussion (pas sur toute la fenêtre)
+  function placeBar() { if (!cbar) return; const m = $('#msgs') || $('main'); const r = m ? m.getBoundingClientRect() : null; const c = r && r.width ? r.left + r.width / 2 : innerWidth / 2; cbar.style.left = `${Math.max(12, Math.round(c - cbar.offsetWidth / 2))}px`; }
+  addEventListener('resize', placeBar);
+  const cState = (s, label) => {
+    CALL.state = s; if (cbar) { cbar.dataset.s = s; cbar.querySelector('.cbState').textContent = label || ''; }
+    if (head) head.state(s === 'listen' ? 'listening' : s === 'think' ? 'thinking' : 'idle');
+    cUi('state', { text: label, on: s });
+  };
+  const cUi = (ev, extra) => { try { if (CALL.ws && CALL.ws.readyState === 1) CALL.ws.send(JSON.stringify(Object.assign({ type: 'ui', ev }, extra || {}))); } catch {} };
+  // 🧸 La mascotte de l'en-tête grandit et sort ses mains pendant l'appel
+  function bigHead(a) {
+    if (head) { head.dispose(); head = null; }
+    const old = wrapEl && wrapEl.querySelector('#agHeadCv'); if (old) old.remove();
+    const cv = document.createElement('canvas'); cv.id = 'agHeadCv'; cv.className = 'calling'; cv.title = a.name;
+    if (museCv) museCv.style.display = 'none'; wrapEl.appendChild(cv);
+    head = A3.live(cv, lookOf(a), 150, jobOf(a), { hands: true });
+    headFor = 'call';   // l'en-tête ne se reconstruit pas pendant l'appel
+    $('#who').classList.add('calling');
+    if (head) head.gesture('wave');
+  }
+  // 🔊 Audio : phrases jouées dans l'ordre ; le niveau du son fait bouger la bouche
+  const cctx = () => {
+    if (!CALL.actx) { const A = new (window.AudioContext || window.webkitAudioContext)(); CALL.actx = A; CALL.gain = A.createGain(); CALL.an = A.createAnalyser(); CALL.an.fftSize = 1024; CALL.buf = new Float32Array(1024); CALL.gain.connect(CALL.an); CALL.an.connect(A.destination); }
+    if (CALL.actx.state === 'suspended') CALL.actx.resume();
+    return CALL.actx;
+  };
+  function cGestureFor(t) {
+    if (!head) return; t = String(t || '').toLowerCase();
+    if (/^(oui|exactement|d'accord|bien sûr|parfait|tout à fait|absolument|carrément)\b/.test(t)) return head.gesture('nod');
+    if (/^(non|pas du tout|surtout pas|malheureusement)\b/.test(t)) return head.gesture('shake');
+    if (/\b(bonjour|salut|coucou|allô|à plus|bonne (journée|soirée|nuit))\b/.test(t)) return head.gesture('wave');
+    if (/\b(bravo|génial|super|top|félicitations|youpi|incroyable)\b/.test(t)) return head.gesture('cheer');
+    if (/\b(je ne sais pas|aucune idée|peut-être|ça dépend)\b/.test(t)) return head.gesture('shrug');
+    if (/\?\s*$/.test(t) && Math.random() < 0.6) return head.gesture('tilt');
+  }
+  function cPlay(m) {
+    const A = cctx(), bin = atob(m.b64), n = bin.length >> 1, buf = A.createBuffer(1, n, m.sr), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v > 32767) v -= 65536; ch[i] = v / 32768; }
+    const src = A.createBufferSource(); src.buffer = buf; src.connect(CALL.gain);
+    const at = Math.max(A.currentTime + 0.05, CALL.playAt || 0); src.start(at); CALL.playAt = at + buf.duration;
+    CALL.sources.push(src);
+    if (!CALL.speaking) { CALL.speaking = true; cBargeWatch(); }
+    const txt = m.text || ''; setTimeout(() => { if (CALL.sources.includes(src) && cbar) { cbar.querySelector('.cbSub').textContent = txt; cGestureFor(txt); } }, Math.max(0, (at - A.currentTime) * 1000));
+    src.onended = () => { CALL.sources = CALL.sources.filter((x) => x !== src); if (!CALL.sources.length) cAfterSpeech(); };
+  }
+  function cSpeakFallback(text) {
+    if (!window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; CALL.speaking = true; CALL.fake = true; if (cbar) cbar.querySelector('.cbSub').textContent = text; cGestureFor(text);
+    u.onend = () => { CALL.fake = false; CALL.speaking = false; cAfterSpeech(); }; speechSynthesis.speak(u); cBargeWatch();
+  }
+  function cStopPlayback() {
+    CALL.sources.forEach((s) => { try { s.onended = null; s.stop(); } catch {} }); CALL.sources = []; CALL.playAt = 0; CALL.speaking = false; CALL.fake = false;
+    try { speechSynthesis.cancel(); } catch {}
+    cVadStop(); if (head) head.talk(0);
+  }
+  // ✋ Le couper en parlant (micro avec annulation d'écho) ; sinon les mots « attends / stop »
+  function cBargeWatch() { if (!CALL.on) return; if (CALL.barge && !CALL.bargeFail) cVadStart(); else cGuard(); }
+  async function cVadStart() {
+    if (CALL.vad) return; if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { CALL.bargeFail = true; return cGuard(); }
+    CALL.vad = { pending: true };
+    try {
+      const st2 = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+      if (!CALL.speaking || !CALL.on || !CALL.vad) { st2.getTracks().forEach((t) => t.stop()); CALL.vad = null; return; }
+      const A = cctx(), src = A.createMediaStreamSource(st2), an = A.createAnalyser(); an.fftSize = 1024; src.connect(an);
+      CALL.vad = { st: st2, src, an, buf: new Float32Array(1024), floor: 0, t0: performance.now(), over: 0, last: performance.now() };
+    } catch { CALL.vad = null; CALL.bargeFail = true; cGuard(); }
+  }
+  function cVadStop() { const v = CALL.vad; CALL.vad = null; if (v && v.st) { try { v.src.disconnect(); v.st.getTracks().forEach((t) => t.stop()); } catch {} } }
+  function cVadTick(now) {
+    const v = CALL.vad; if (!v || !v.an || !CALL.speaking) return;
+    v.an.getFloatTimeDomainData(v.buf); let s = 0; for (let i = 0; i < v.buf.length; i++) s += v.buf[i] * v.buf[i];
+    const rms = Math.sqrt(s / v.buf.length), dt = now - v.last; v.last = now;
+    if (now - v.t0 < 700) { v.floor = v.floor ? v.floor * 0.85 + rms * 0.15 : rms; return; }
+    v.over = rms > Math.max(0.035, v.floor * 2.8) ? v.over + dt : Math.max(0, v.over - dt * 0.5);
+    if (v.over > 300) { cUi('heard', { text: '…', on: true }); cInterrupt(); }
+  }
+  function cGuard() {
+    if (!SRc || CALL.guard || CALL.listening || !CALL.on) return;
+    try {
+      const g = new SRc(); g.lang = 'fr-FR'; g.interimResults = true; g.continuous = true; CALL.guard = g;
+      g.onresult = (e) => { const r = e.results[e.results.length - 1], t = (r && r[0] ? r[0].transcript : '').trim(); if (t && t.length < 32 && C_HALT.test(t)) { cUi('heard', { text: t, on: true }); cInterrupt(); } };
+      g.onerror = () => {}; g.onend = () => { CALL.guard = null; if (CALL.speaking && CALL.on && !CALL.listening && !CALL.vad) setTimeout(cGuard, 200); };
+      g.start();
+    } catch { CALL.guard = null; }
+  }
+  function cStopGuard() { const g = CALL.guard; CALL.guard = null; try { if (g) { g.onend = null; g.abort(); } } catch {} }
+  function cInterrupt() {
+    cStopGuard(); cStopPlayback(); try { CALL.ws.send(JSON.stringify({ type: 'stop' })); } catch {}
+    CALL.thinking = false; CALL.doneSeen = true; if (head) head.gesture('nod'); cState('idle', 'Je t’écoute'); setTimeout(cListen, 280);
+  }
+  function cAfterSpeech() {
+    if (!CALL.doneSeen || CALL.sources.length || !CALL.on) return;
+    cStopGuard(); cVadStop(); CALL.speaking = false; CALL.thinking = false; cState('idle', 'À toi'); cListen();
+  }
+  // 👂 Écoute
+  function cListen() {
+    if (!SRc) { cState('idle', 'Ce navigateur ne sait pas écouter : utilise Chrome.'); return; }
+    if (CALL.listening || !CALL.on || CALL.thinking || CALL.speaking) return;
+    cStopGuard(); cVadStop();
+    try {
+      const r = new SRc(); r.lang = 'fr-FR'; r.interimResults = true; r.continuous = false; CALL.rec = r;
+      r.onresult = (e) => { let t = '', fin = false; for (let i = 0; i < e.results.length; i++) { t += e.results[i][0].transcript; if (e.results[i].isFinal) fin = true; } if (cbar) cbar.querySelector('.cbYou').textContent = t; cUi('heard', { text: t, on: fin }); if (fin && t.trim()) cSend(t.trim()); };
+      r.onerror = (e) => { if (e.error === 'not-allowed') cState('idle', 'Micro refusé : autorise-le pour ce site.'); };
+      r.onend = () => { CALL.listening = false; if (cbar) cbar.querySelector('.cbMic').classList.remove('on'); if (CALL.on && !CALL.speaking && !CALL.thinking && CALL.state === 'listen') { setTimeout(cListen, 300); } };
+      r.start(); CALL.listening = true; if (cbar) cbar.querySelector('.cbMic').classList.add('on'); cState('listen', 'Je t’écoute…');
+    } catch { CALL.listening = false; }
+  }
+  function cStopListening() { try { if (CALL.rec) CALL.rec.abort(); } catch {} CALL.listening = false; }
+  function cSend(t) {
+    if (C_QUIT.test(t) && !Object.values(CALL.tasks).some((x) => !x.done)) { endCall('À plus tard !'); return; }
+    cStopListening(); cStopGuard(); cStopPlayback(); CALL.doneSeen = false; CALL.thinking = true;
+    if (head) head.gesture('nod'); cState('think', 'Il réfléchit…');
+    try { CALL.ws.send(JSON.stringify({ type: 'say', text: t })); } catch {}
+  }
+  function cTasks() {
+    if (!cbar) return; const l = Object.values(CALL.tasks).slice(-4);
+    cbar.querySelector('.cbTasks').innerHTML = l.map((t) => `<span class="cbTask${t.done ? ' done' : ''}">${t.done ? (t.ok ? '✅' : '⚠️') : '⏳'} ${esc(t.title)}</span>`).join('');
+  }
+  // 🔁 bouche + minuteur + détection de voix
+  function cLoop(now) {
+    if (!CALL.on) return;
+    let lvl = 0;
+    if (CALL.an && CALL.sources.length) { CALL.an.getFloatTimeDomainData(CALL.buf); let s = 0; for (let i = 0; i < CALL.buf.length; i += 2) s += CALL.buf[i] * CALL.buf[i]; lvl = Math.min(1, Math.max(0, (Math.sqrt(s / 512) - 0.012) * 7)); }
+    else if (CALL.fake) lvl = 0.25 + Math.abs(Math.sin(now / 90)) * 0.45;
+    if (head) head.talk(lvl);
+    cVadTick(now);
+    if (CALL.t0) { const s = Math.floor((Date.now() - CALL.t0) / 1000), mm = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); if (CALL.clock !== mm) { CALL.clock = mm; if (cbar) cbar.querySelector('.cbClock').textContent = mm; const stEl = $('#status'); if (stEl) stEl.textContent = '📞 ' + mm; } }
+    requestAnimationFrame(cLoop);
+  }
+  async function startCall(a, L) {
+    if (CALL.on) return;
+    if (Number(issueNo) !== Number(a.issue)) await openConv(a.issue);
+    let barge = true; try { barge = localStorage.getItem('museCallBarge') !== '0'; } catch {}
+    Object.assign(CALL, { on: true, a, ws: null, rec: null, guard: null, vad: null, sources: [], playAt: 0, speaking: false, thinking: false, listening: false, fake: false, doneSeen: true, t0: 0, clock: '', tasks: {}, barge, bargeFail: false, state: '' });
+    cctx(); bigHead(a); callBarUi(a); cState('think', 'Ça sonne…'); syncHeader();
+    $('#who').dataset.call = '1'; if (nameEl) nameEl.textContent = a.name;
+    requestAnimationFrame(cLoop);
+    const ws = new WebSocket(L.u.replace(/\/live\/?$/, '') + '/live?t=' + encodeURIComponent(L.t)); CALL.ws = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: a.id, issue: a.issue }));
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (!CALL.on || CALL.ws !== ws) return;
+      if (m.type === 'agent') { CALL.t0 = Date.now(); cState('idle', 'En ligne'); if (head) { head.gesture('wave'); head.job(C_JOBS.includes(m.id) ? m.id : jobOf(a)); } }
+      else if (m.type === 'state') { if (m.s === 'speak') { CALL.thinking = false; if (head) head.busy(false); cState('speak', m.task ? 'Il te donne le résultat' : 'Il parle'); } else if (m.s === 'think') cState('think', 'Il réfléchit…'); }
+      else if (m.type === 'audio') { cStopListening(); cPlay(m); }
+      else if (m.type === 'speak') { cStopListening(); cSpeakFallback(m.text); }
+      else if (m.type === 'done') { CALL.doneSeen = true; CALL.thinking = false; if (head) head.busy(false); if (!CALL.sources.length && !CALL.speaking) cAfterSpeech(); }
+      else if (m.type === 'mood') { if (head) { head.mood(String(m.m || 'calme')); const g = C_MOOD_G[m.m]; if (g) head.gesture(g); } }
+      else if (m.type === 'tool') { const j = C_TOOLJOB(m.name || ''); if (head) { if (j) head.job(j); head.busy(true); } if (m.label && cbar) cbar.querySelector('.cbState').textContent = m.label; }
+      else if (m.type === 'task') { CALL.tasks[m.id] = { title: String(m.title || m.text || '').slice(0, 60), done: false }; cTasks(); }
+      else if (m.type === 'task-done') { const t = CALL.tasks[m.id]; if (t) { t.done = true; t.ok = m.ok !== false; cTasks(); } if (head) head.gesture(m.ok === false ? 'shrug' : 'cheer'); }
+      else if (m.type === 'cmd' && m.c === 'close') endCall('Appel repris sur un autre appareil.');
+      else if (m.type === 'error') { CALL.thinking = false; if (head) { head.busy(false); head.mood('inquiete'); } cState('idle', m.msg || 'Erreur'); }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => { if (CALL.on && CALL.ws === ws) endCall(CALL.t0 ? 'Appel coupé (PC injoignable).' : 'Impossible de joindre ton PC : allume-le (démon Muse + Tailscale).'); };
+  }
+  function endCall(msg) {
+    if (!CALL.on) return;
+    const a = CALL.a, ws = CALL.ws; CALL.on = false;
+    cStopListening(); cStopGuard(); cStopPlayback();
+    try { if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'stop' })); ws.close(); } } catch {}
+    if (head) head.gesture('wave');
+    if (cbar) { cbar.querySelector('.cbState').textContent = msg || ''; setTimeout(() => { if (!CALL.on && cbar) { cbar.hidden = true; document.body.classList.remove('inCall'); } }, 1600); }
+    toast(msg || 'Appel terminé.');
+    setTimeout(() => { $('#who').classList.remove('calling'); delete $('#who').dataset.call; headFor = ''; syncHeader(); const st3 = $('#status'); if (st3) st3.textContent = 'en ligne'; if (a && Number(issueNo) === Number(a.issue)) openConv(a.issue); }, 1700);   // la discussion se recharge : l'appel y est écrit
+  }
+
   const _open = window.openConv; window.openConv = async function (n) { const r = await _open.apply(this, arguments); syncHeader(); return r; };
-  const _new = window.newChat; window.newChat = function () { const r = _new.apply(this, arguments); syncHeader(); return r; };
+  const _new = window.newChat; window.newChat = function () { if (CALL.on) endCall('Appel terminé.'); const r = _new.apply(this, arguments); syncHeader(); return r; };
   const _close = window.autosClose; window.autosClose = function () { const r = _close && _close.apply(this, arguments); syncHeader(); return r; };
 
   // =====================================================================

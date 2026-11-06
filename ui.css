@@ -621,3 +621,31 @@ main.autoview #autos{padding-top:72px}
 main.autoview .agCall{visibility:hidden}
 @media(max-width:640px){.agCall span{display:none}.agCall{width:38px;padding:0;justify-content:center}}
 #liveCodeDlg input{width:100%;font-family:ui-monospace,monospace;font-size:13px}
+
+/* 📞 Appel dans l'appli : la mascotte de l'agent grandit et répond */
+#who.calling #avatarWrap{width:150px;height:150px;transition:width .35s var(--spring,ease),height .35s var(--spring,ease)}
+#agHeadCv.calling{width:150px;height:150px}
+#who.calling #avatarWrap::before{opacity:.9;--ring1:#22c55e;--ring2:#86efac;animation-duration:2.4s}
+#who[data-call] #whoName small{color:#22c55e;font-variant-numeric:tabular-nums;font-weight:600}
+.agCall.on{background:#ef4444;color:#fff;border-color:#ef4444}.agCall.on svg{color:#fff;transform:rotate(135deg)}
+#callBar{position:fixed;left:12px;bottom:calc(96px + env(safe-area-inset-bottom));z-index:70;width:min(560px,calc(100vw - 24px));padding:12px 14px;border-radius:20px;background:color-mix(in srgb,var(--panel) 90%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--bd);box-shadow:var(--shadow-lg,0 10px 40px #0005);animation:chatIn .3s ease both}
+#callBar[hidden]{display:none}
+#callBar .cbTop{display:flex;align-items:center;gap:8px;font-size:14px}
+#callBar .cbDot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 0 #22c55e88;animation:agPulse 1.4s infinite}
+#callBar .cbClock{font-variant-numeric:tabular-nums;color:#22c55e;font-weight:700}
+#callBar .cbState{margin-left:auto;color:var(--mut);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+#callBar .cbSub{margin:8px 0 2px;font-size:15.5px;line-height:1.4;min-height:22px}
+#callBar .cbYou{font-size:13px;color:var(--mut);font-style:italic;min-height:16px}
+#callBar .cbTasks{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+#callBar .cbTasks:empty{display:none}
+#callBar .cbTask{font-size:12px;padding:3px 9px;border-radius:999px;background:color-mix(in srgb,var(--acc,#7c5cff) 14%,transparent)}
+#callBar .cbTask.done{background:color-mix(in srgb,#22c55e 16%,transparent)}
+#callBar .cbBtns{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:10px}
+#callBar .cbBtns button{border:1px solid var(--bd);background:var(--panel);color:var(--txt);border-radius:999px;cursor:pointer}
+#callBar .cbBarge{padding:7px 12px;font-size:13px;opacity:.6}#callBar .cbBarge.on{opacity:1;background:color-mix(in srgb,var(--acc,#7c5cff) 20%,var(--panel))}
+#callBar .cbMic{width:52px;height:52px;font-size:22px}
+#callBar[data-s=listen] .cbMic{background:var(--acc,#7c5cff);color:#fff;animation:micPulse 1.6s infinite}
+#callBar .cbEnd{width:52px;height:52px;display:grid;place-items:center;background:#ef4444!important;color:#fff!important;border-color:#ef4444!important}
+#callBar .cbEnd svg{transform:rotate(135deg);width:22px;height:22px}
+body.inCall #composer,body.inCall form#f{opacity:.35;pointer-events:none}
+@media(prefers-reduced-motion:reduce){#callBar .cbDot,#callBar[data-s=listen] .cbMic{animation:none}}
