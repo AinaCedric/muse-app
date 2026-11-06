@@ -653,3 +653,13 @@ body.inCall #composer,body.inCall form#f{opacity:.35;pointer-events:none}
 #callBar[data-s=fail] .cbSub{font-size:14px;color:var(--txt)}
 #callBar .cbBtns .cbTest,#callBar .cbBtns .cbRetry,#callBar .cbBtns .cbClose{padding:8px 14px;font-size:13.5px}
 #callBar .cbBtns .cbRetry{background:var(--acc,#7c5cff);color:#fff;border-color:transparent}
+/* 💬 Appel : la conversation s'écrit dans le chat ; la barre reste petite (nom, minuteur, ce que tu dis, boutons) */
+#callBar{padding:9px 12px}
+#callBar .cbSub{display:none}
+#callBar[data-s=fail] .cbSub{display:block}
+#callBar .cbNote{font-size:12px;color:var(--mut);margin-top:3px}#callBar .cbNote:empty{display:none}
+#callBar .cbYou{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;min-height:0}#callBar .cbYou:empty{display:none}
+#callBar .cbBtns{margin-top:7px;gap:10px}
+#callBar .cbMic,#callBar .cbEnd{width:44px;height:44px;font-size:19px}
+.m.callMsg{animation:chatIn .25s ease both}
+body.inCall #msgs{padding-bottom:150px}

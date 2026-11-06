@@ -649,7 +649,7 @@
     if (!cbar) {
       cbar = document.createElement('div'); cbar.id = 'callBar';
       cbar.innerHTML = `<div class="cbTop"><span class="cbDot"></span><b class="cbName"></b><span class="cbClock">00:00</span><span class="cbState"></span></div>
-        <div class="cbSub"></div><div class="cbYou"></div><div class="cbTasks"></div>
+        <div class="cbSub"></div><div class="cbNote"></div><div class="cbYou"></div><div class="cbTasks"></div>
         <div class="cbBtns"><button type="button" class="cbBarge on" title="Le couper simplement en parlant">✋ Couper en parlant</button><button type="button" class="cbMic" title="Parler / le couper">🎙️</button><button type="button" class="cbEnd" title="Raccrocher">${HANDSET}</button></div>`;
       document.body.appendChild(cbar);
       cbar.querySelector('.cbEnd').onclick = () => endCall('Appel terminé.');
@@ -657,7 +657,7 @@
       cbar.querySelector('.cbBarge').onclick = (e) => { CALL.barge = !CALL.barge; CALL.bargeFail = false; e.currentTarget.classList.toggle('on', CALL.barge); try { localStorage.setItem('museCallBarge', CALL.barge ? '1' : '0'); } catch {} };
     }
     cbar.querySelector('.cbName').textContent = `Appel · ${a.name}`;
-    cbar.querySelector('.cbSub').textContent = ''; cbar.querySelector('.cbYou').textContent = ''; cbar.querySelector('.cbTasks').innerHTML = '';
+    cbar.querySelector('.cbSub').textContent = ''; cbar.querySelector('.cbYou').textContent = ''; cbar.querySelector('.cbNote').textContent = ''; cbar.querySelector('.cbTasks').innerHTML = '';
     cbar.querySelector('.cbBarge').classList.toggle('on', CALL.barge);
     cbar.hidden = false; document.body.classList.add('inCall'); placeBar();
   }
@@ -696,6 +696,16 @@
     if (/\b(je ne sais pas|aucune idée|peut-être|ça dépend)\b/.test(t)) return head.gesture('shrug');
     if (/\?\s*$/.test(t) && Math.random() < 0.6) return head.gesture('tilt');
   }
+  // 💬 L'appel s'écrit DIRECTEMENT dans la discussion : tes phrases et les siennes deviennent des bulles du chat (pas de 2e fenêtre)
+  function cBubbleUser(t) { CALL.bot = null; try { add('user', t, 'callMsg'); } catch {} }
+  function cBubbleBot(t) {
+    if (!t) return;
+    try {
+      if (!CALL.bot || !CALL.bot.isConnected) { CALL.bot = add('bot', '', 'callMsg'); CALL.botText = ''; }
+      CALL.botText = (CALL.botText ? CALL.botText + ' ' : '') + String(t).trim();
+      CALL.bot.innerHTML = render(CALL.botText); msgs.scrollTop = msgs.scrollHeight;
+    } catch {}
+  }
   function cPlay(m) {
     const A = cctx(), bin = atob(m.b64), n = bin.length >> 1, buf = A.createBuffer(1, n, m.sr), ch = buf.getChannelData(0);
     for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v > 32767) v -= 65536; ch[i] = v / 32768; }
@@ -703,12 +713,12 @@
     const at = Math.max(A.currentTime + 0.05, CALL.playAt || 0); src.start(at); CALL.playAt = at + buf.duration;
     CALL.sources.push(src);
     if (!CALL.speaking) { CALL.speaking = true; cBargeWatch(); }
-    const txt = m.text || ''; setTimeout(() => { if (CALL.sources.includes(src) && cbar) { cbar.querySelector('.cbSub').textContent = txt; cGestureFor(txt); } }, Math.max(0, (at - A.currentTime) * 1000));
+    const txt = m.text || ''; setTimeout(() => { if (CALL.sources.includes(src)) { cBubbleBot(txt); cGestureFor(txt); } }, Math.max(0, (at - A.currentTime) * 1000));
     src.onended = () => { CALL.sources = CALL.sources.filter((x) => x !== src); if (!CALL.sources.length) cAfterSpeech(); };
   }
   function cSpeakFallback(text) {
     if (!window.speechSynthesis) return;
-    const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; CALL.speaking = true; CALL.fake = true; if (cbar) cbar.querySelector('.cbSub').textContent = text; cGestureFor(text);
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; CALL.speaking = true; CALL.fake = true; cBubbleBot(text); cGestureFor(text);
     u.onend = () => { CALL.fake = false; CALL.speaking = false; cAfterSpeech(); }; speechSynthesis.speak(u); cBargeWatch();
   }
   function cStopPlayback() {
@@ -754,7 +764,7 @@
   }
   function cAfterSpeech() {
     if (!CALL.doneSeen || CALL.sources.length || !CALL.on) return;
-    cStopGuard(); cVadStop(); CALL.speaking = false; CALL.thinking = false; cState('idle', 'À toi'); cListen();
+    cStopGuard(); cVadStop(); CALL.speaking = false; CALL.thinking = false; CALL.bot = null; if (cbar) cbar.querySelector('.cbYou').textContent = ''; cState('idle', 'À toi'); cListen();
   }
   // 👂 Écoute
   function cListen() {
@@ -772,6 +782,7 @@
   function cStopListening() { try { if (CALL.rec) CALL.rec.abort(); } catch {} CALL.listening = false; }
   function cSend(t) {
     if (C_QUIT.test(t) && !Object.values(CALL.tasks).some((x) => !x.done)) { endCall('À plus tard !'); return; }
+    cBubbleUser(t); if (cbar) cbar.querySelector('.cbYou').textContent = '';
     if (CALL.slow) return slowSend(t);
     cStopListening(); cStopGuard(); cStopPlayback(); CALL.doneSeen = false; CALL.thinking = true;
     if (head) head.gesture('nod'); cState('think', 'Il réfléchit…');
@@ -850,7 +861,7 @@
   function slowStart() {
     if (!CALL.on) return;
     const a = CALL.a; CALL.slow = true; CALL.ws = null; CALL.t0 = Date.now(); CALL.slowGen = 0;
-    if (cbar) cbar.querySelector('.cbYou').textContent = '🐢 PC et serveur vocal éteints : je passe par GitHub, chaque réponse prend 20 à 60 secondes.';
+    if (cbar) { const n = cbar.querySelector('.cbNote'); if (n) n.textContent = '🐢 PC éteint : réponses via GitHub (20 à 60 s)'; }
     if (head) { head.gesture('wave'); head.job(C_JOBS.includes(a.id) ? a.id : jobOf(a)); }
     slowSay(`Allô Cédric, c'est ${a.name}. Ton PC est éteint, alors je passe par le nuage : je serai un peu plus lent à répondre. Je t'écoute !`);
   }
