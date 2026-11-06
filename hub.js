@@ -406,7 +406,12 @@
     $d('#agRole').value = a ? a.role || '' : ''; $d('#agIns').value = a ? a.instructions || '' : ''; $d('#agMode').value = a ? a.mode || 'auto' : 'auto';
     look = A3.norm(a ? lookOf(a) : A3.random());
     $d('#agMsg').textContent = ''; dlg.showModal();
-    if (!prev) prev = A3.live($d('#agCv'), look, 220);
+    // Un canvas WebGL dont le contexte a été fermé ne peut plus servir : on en recrée un tout neuf à chaque ouverture
+    if (prev) { prev.dispose(); prev = null; }
+    const old = $d('#agCv'), cv = document.createElement('canvas');
+    cv.id = 'agCv'; cv.width = cv.height = 220; old.replaceWith(cv);
+    prev = A3.live(cv, look, 220);
+    if (!prev) $d('#agMsg').textContent = 'Aperçu 3D indisponible sur cet appareil (WebGL).';
     paint();
   }
   async function saveForm() {
