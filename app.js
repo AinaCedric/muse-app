@@ -937,7 +937,7 @@ const AP = {
     p.querySelector('.apT').textContent = Math.max(0, Math.round((Date.now() - (o.t0 || Date.now())) / 1000)) + ' s';
     const img = p.querySelector('.apImg'), ph = p.querySelector('.apPh');
     if (o.img && /^[A-Za-z0-9+/=]+$/.test(o.img)) { const src = 'data:image/jpeg;base64,' + o.img; if (img.src !== src) { img.src = src; $('#agentMini img').src = src; } img.hidden = false; ph.hidden = true; }
-    else { img.hidden = true; ph.hidden = false; p.querySelector('.apPhT').textContent = o.masked ? 'Capture masquée : page de connexion' : 'L’ordinateur démarre…'; }
+    else { img.hidden = true; img.removeAttribute('src'); ph.hidden = false; p.querySelector('.apPhT').textContent = o.masked ? 'Capture masquée : page de connexion' : /^Je (cherche|lis|regarde)/i.test(String(o.label || '')) && !url ? '🔎 Muse cherche sur le web : pas besoin du navigateur pour l’instant' : 'L’ordinateur démarre…'; }
     const lab = String(o.label || ''); p.querySelector('.apNow').textContent = lab;
     p.querySelector('.apHead b').textContent = o.src === 'pc' ? 'Ordinateur de Muse · sur ton PC' : 'Ordinateur de Muse';
     // 🖐️ Prise de main : Muse attend Cédric (CAPTCHA, connexion…)
