@@ -1,5 +1,6 @@
 // 🧸 Avatars 3D des agents (personnages originaux, Three.js) : forme, couleurs, matière, yeux, bouche, joues, accessoire.
-// API : Agent3D.snapshot(look, px) → image (mise en cache) · Agent3D.live(canvas, look, px) → { set(look), state(s), dispose() }
+// API : Agent3D.snapshot(look, px) → image (mise en cache) · Agent3D.live(canvas, look, px, job) → { set(look), state(s), busy(on), job(j), dispose() }
+// Au travail (state « working » ou busy), l'agent sort l'accessoire de son métier : chef, mails, messages, gyoo, odoo, recherche, star.
 // Un seul moteur WebGL sert à toutes les images fixes ; une vue animée n'existe que là où on la regarde (en-tête, éditeur).
 (function () {
   const T = window.THREE;
@@ -161,13 +162,56 @@
     } catch { return ''; }
   }
 
+  // ---------- 🛠️ Accessoires de travail : chaque métier a sa petite animation 3D quand l'agent travaille
+  const JOBS = ['chef', 'mails', 'messages', 'gyoo', 'odoo', 'recherche', 'star'];
+  const stdm = (c, e = 0.25, op = 1) => new T.MeshStandardMaterial({ color: c, roughness: 0.4, metalness: 0.1, emissive: c, emissiveIntensity: e, transparent: op < 1, opacity: op });
+  function makeProps(job) {
+    const g = new T.Group(), add = (geo, c, e, op) => { const m = new T.Mesh(geo, stdm(c, e, op)); g.add(m); return m; };
+    const fade = (m, o) => { m.material.transparent = true; m.material.opacity = o; };
+    let upd = () => {};
+    if (job === 'chef') {          // baguette de chef d'orchestre + notes qui montent
+      const pv = new T.Group(); pv.position.set(0.95, -0.25, 0.7); g.add(pv);
+      const stick = new T.Mesh(new T.CylinderGeometry(0.025, 0.035, 0.9, 8), stdm(0xf5f5f4, 0.15)); stick.position.y = 0.45; pv.add(stick);
+      const tip = new T.Mesh(new T.SphereGeometry(0.065, 12, 12), stdm(0xfbbf24, 0.7)); tip.position.y = 0.92; pv.add(tip);
+      const notes = [0, 1, 2].map(() => { const n = add(new T.SphereGeometry(0.08, 12, 12), 0xc4b5fd, 0.6); n.scale.set(1.1, 0.8, 0.5); return n; });
+      upd = (t) => { pv.rotation.z = -0.3 + Math.sin(t * 5) * 0.5; pv.rotation.x = Math.sin(t * 2.5) * 0.25; notes.forEach((n, i) => { const p = (t * 0.5 + i / 3) % 1; n.position.set(-1.05 + Math.sin(p * 6 + i * 2) * 0.16, -0.5 + p * 1.9, 0.6); fade(n, Math.sin(p * Math.PI)); }); };
+    } else if (job === 'mails') {  // enveloppes qui tournent autour
+      const env = [0, 1, 2].map(() => { const e = new T.Group(), body = new T.Mesh(new T.BoxGeometry(0.44, 0.3, 0.04), stdm(0xffffff, 0.3)), flap = new T.Mesh(new T.ConeGeometry(0.23, 0.15, 3), stdm(0x93c5fd, 0.35)); flap.rotation.z = Math.PI; flap.position.set(0, 0.075, 0.03); e.add(body, flap); g.add(e); return e; });
+      upd = (t) => env.forEach((e, i) => { const a = t * 1.7 + i * 2.094; e.position.set(Math.cos(a) * 1.3, Math.sin(t * 2 + i) * 0.22 + 0.1, Math.sin(a) * 0.9 + 0.5); e.rotation.y = -Math.cos(a) * 0.5; e.rotation.z = Math.sin(a) * 0.25; });
+    } else if (job === 'messages') { // bulles de discussion qui montent
+      const bub = [0, 1, 2].map((i) => add(new T.SphereGeometry(0.2, 16, 16), i === 1 ? 0x86efac : 0xffffff, 0.35));
+      upd = (t) => bub.forEach((m, i) => { const p = (t * 0.55 + i / 3) % 1, s = 0.7 + p * 0.5; m.position.set(0.95 + (i % 2) * 0.28 - 0.1, -0.6 + p * 1.9, 0.75); m.scale.set(1.35 * s, 0.9 * s, 0.5 * s); fade(m, Math.sin(p * Math.PI)); });
+    } else if (job === 'gyoo') {   // clap de cinéma + pop-corn
+      const base = add(new T.BoxGeometry(0.62, 0.38, 0.05), 0x1f2937, 0.15); base.position.set(1.06, -0.05, 0.75);
+      const top = new T.Group(); top.position.set(0.75, 0.14, 0.78); g.add(top);
+      const bar = new T.Mesh(new T.BoxGeometry(0.62, 0.1, 0.055), stdm(0xf9fafb, 0.2)); bar.position.x = 0.31; top.add(bar);
+      const corn = [0, 1, 2, 3].map(() => add(new T.SphereGeometry(0.07, 10, 10), 0xfde68a, 0.5));
+      upd = (t) => { top.rotation.z = Math.max(0, Math.sin(t * 4)) * 0.75; corn.forEach((c, i) => { const p = (t * 0.9 + i / 4) % 1; c.position.set(-1.0 + i * 0.16 - 0.2, -0.3 + Math.sin(p * Math.PI) * 1.1, 0.7); fade(c, 1 - p * 0.6); }); };
+    } else if (job === 'odoo') {   // engrenages
+      const gear = (rr, n, c) => { const gr = new T.Group(), body = new T.Mesh(new T.CylinderGeometry(rr, rr, 0.1, 18), stdm(c, 0.3)); body.rotation.x = Math.PI / 2; gr.add(body); for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, tooth = new T.Mesh(new T.BoxGeometry(rr * 0.45, rr * 0.34, 0.1), stdm(c, 0.3)); tooth.position.set(Math.cos(a) * rr * 1.1, Math.sin(a) * rr * 1.1, 0); tooth.rotation.z = a; gr.add(tooth); } g.add(gr); return gr; };
+      const g1 = gear(0.3, 8, 0xfbbf24), g2 = gear(0.2, 6, 0xf97316); g1.position.set(1.05, 0.25, 0.75); g2.position.set(0.62, -0.2, 0.85);
+      upd = (t) => { g1.rotation.z = t * 1.8; g2.rotation.z = -t * 2.7 + 0.3; };
+    } else if (job === 'recherche') { // loupe qui balaie
+      const mg = new T.Group(); g.add(mg);
+      mg.add(new T.Mesh(new T.TorusGeometry(0.3, 0.05, 12, 32), stdm(0xe2e8f0, 0.2)));
+      mg.add(new T.Mesh(new T.CircleGeometry(0.3, 24), new T.MeshStandardMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.3 })));
+      const h = new T.Mesh(new T.CylinderGeometry(0.045, 0.05, 0.42, 8), stdm(0x94a3b8, 0.1)); h.position.set(0.35, -0.35, 0); h.rotation.z = Math.PI / 4; mg.add(h);
+      upd = (t) => { mg.position.set(Math.sin(t * 1.8) * 0.85, 0.1 + Math.sin(t * 2.6) * 0.14, 0.95); mg.rotation.z = Math.sin(t * 1.8) * 0.2; };
+    } else {                       // étoiles qui tournent (agents personnalisés)
+      const st5 = [0, 1, 2, 3, 4].map(() => add(new T.OctahedronGeometry(0.1), 0xfde047, 0.7));
+      upd = (t) => st5.forEach((s, i) => { const a = t * 1.6 + i * 1.2566; s.position.set(Math.cos(a) * 1.25, Math.sin(a * 1.3) * 0.6 + 0.1, Math.sin(a) * 0.8 + 0.5); s.rotation.y = t * 3 + i; s.scale.setScalar(0.8 + Math.sin(t * 4 + i) * 0.3); });
+    }
+    return { g, upd, dispose: () => dispose(g) };
+  }
+
   // ---------- Vue animée (en-tête d'une discussion d'agent, éditeur)
-  function live(canvas, look, px = 88) {
+  function live(canvas, look, px = 88, job0 = 'star') {
     if (!T) return null;
     let r; try { r = new T.WebGLRenderer({ canvas, alpha: true, antialias: true }); } catch { return null; }
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); r.setSize(px, px, false); r.setClearColor(0x000000, 0);
     const scene = new T.Scene(); lights(scene); const cam = new T.PerspectiveCamera(34, 1, 0.1, 50);
     let b = build(look); scene.add(b.root); frame(cam, b.look);
+    let job = JOBS.includes(job0) ? job0 : 'star', P = makeProps(job), busy = false, pk = 0; scene.add(P.g); P.g.visible = false;
     let st = 'idle', stT = 0, blinkAt = performance.now() + 2500, alive = true, drag = null, spin = 0;
     const reduce = matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.35 : 1;
     canvas.addEventListener('pointerdown', (e) => { drag = e.clientX; canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId); });
@@ -176,12 +220,25 @@
     function tick(now) {
       if (!alive) return;
       const t = now / 1000, R = b.root, H = b.head;
-      const sp = st === 'working' ? 2.6 : st === 'thinking' ? 1.2 : 1.6;
+      const wk = st === 'working' || (busy && st !== 'happy' && st !== 'sad');
+      const sp = wk ? 2.6 : st === 'thinking' ? 1.2 : 1.6;
       R.position.y = Math.sin(t * sp) * 0.06 * reduce + (st === 'happy' ? Math.abs(Math.sin((now - stT) / 140)) * 0.25 : 0) - (st === 'sad' ? 0.12 : 0);
-      spin *= 0.94; R.rotation.y = -0.25 + Math.sin(t * 0.6) * 0.18 * reduce + spin + (st === 'working' ? Math.sin(t * 5) * 0.08 : 0);
+      spin *= 0.94; R.rotation.y = -0.25 + Math.sin(t * 0.6) * 0.18 * reduce + spin + (wk ? Math.sin(t * 5) * 0.08 : 0);
       H.rotation.z = st === 'thinking' ? Math.sin(t * 1.3) * 0.12 + 0.1 : st === 'sad' ? -0.15 : Math.sin(t * 0.9) * 0.04 * reduce;
       H.rotation.x = st === 'sad' ? 0.25 : st === 'thinking' ? -0.12 : 0;
       b.eyes.position.x = st === 'thinking' ? Math.sin(t * 1.1) * 0.04 : 0;
+      // 🛠️ accessoire du métier (apparaît en rebondissant, disparaît en douceur) + geste du corps propre à chaque métier
+      pk += ((wk ? 1 : 0) - pk) * 0.14; if (pk < 0.01 && !wk) pk = 0;
+      P.g.visible = pk > 0.02;
+      if (P.g.visible) { P.g.scale.setScalar(Math.max(0.01, pk * (1 + Math.sin(Math.min(pk, 1) * Math.PI) * 0.15))); P.upd(t); }
+      if (wk) {
+        if (job === 'messages') H.rotation.x += Math.sin(t * 6) * 0.08;
+        else if (job === 'odoo') H.rotation.x += Math.sin(t * 14) * 0.05;
+        else if (job === 'recherche') R.rotation.y += Math.sin(t * 1.8) * 0.3;
+        else if (job === 'gyoo') R.position.y += Math.abs(Math.sin(t * 6)) * 0.08;
+        else if (job === 'mails') H.rotation.z += Math.sin(t * 3) * 0.05;
+        else if (job === 'chef') R.rotation.z = Math.sin(t * 5) * 0.05;
+      }
       if (now > blinkAt) { b.eyes.scale.y = 0.12; if (now > blinkAt + 130) { b.eyes.scale.y = 1; blinkAt = now + 2200 + Math.random() * 3000; } }
       const bl = H.getObjectByName('blinker'); if (bl) bl.material.emissiveIntensity = 0.35 + Math.abs(Math.sin(t * 3)) * 0.6;
       if ((st === 'happy' || st === 'sad') && now - stT > 2200) st = 'idle';
@@ -191,8 +248,10 @@
     return {
       set(look2) { scene.remove(b.root); dispose(b.root); b = build(look2); scene.add(b.root); frame(cam, b.look); },
       state(s) { st = s || 'idle'; stT = performance.now(); },
-      dispose() { alive = false; scene.remove(b.root); dispose(b.root); try { r.dispose(); r.forceContextLoss && r.forceContextLoss(); } catch {} },
+      busy(on) { busy = !!on; },
+      job(j) { j = JOBS.includes(j) ? j : 'star'; if (j === job) return; job = j; scene.remove(P.g); P.dispose(); P = makeProps(job); P.g.visible = false; scene.add(P.g); },
+      dispose() { alive = false; scene.remove(b.root); dispose(b.root); P.dispose(); try { r.dispose(); r.forceContextLoss && r.forceContextLoss(); } catch {} },
     };
   }
-  window.Agent3D = { OPTIONS, PAIRS, PRESETS, DEF, random, norm, snapshot, live, ok: !!T };
+  window.Agent3D = { JOBS, OPTIONS, PAIRS, PRESETS, DEF, random, norm, snapshot, live, ok: !!T };
 })();

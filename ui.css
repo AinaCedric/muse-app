@@ -551,3 +551,26 @@ main.autoview #autos{padding-top:72px}
 @media(prefers-reduced-motion:reduce){.item.agWork .ci::before,.item.agWork .ciAv,.item .agLine,.agDots i{animation:none}}
 #instBar{position:fixed;left:12px;right:12px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:18px;background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--bd);box-shadow:var(--shadow);font-size:14px;animation:chatIn .3s ease both}
 #instBar span{flex:1}#instBar .btn{padding:8px 14px}#instBar .ghost{padding:6px 10px}
+
+/* 🛠️ Animations de travail par métier : petite icône qui vit autour de l'avatar (cartes + liste des discussions) */
+.agCard[data-job=chef],.item[data-job=chef]{--fx:'🎼';--fxa:fxNote}
+.agCard[data-job=mails],.item[data-job=mails]{--fx:'✉️';--fxa:fxOrbit}
+.agCard[data-job=messages],.item[data-job=messages]{--fx:'💬';--fxa:fxRise}
+.agCard[data-job=gyoo],.item[data-job=gyoo]{--fx:'🎬';--fxa:fxClap}
+.agCard[data-job=odoo],.item[data-job=odoo]{--fx:'⚙️';--fxa:fxSpin}
+.agCard[data-job=recherche],.item[data-job=recherche]{--fx:'🔍';--fxa:fxSweep}
+.agCard[data-job=star],.item[data-job=star]{--fx:'✨';--fxa:fxTwinkle}
+.agFx{position:absolute;inset:-8px;pointer-events:none}
+.agFx::before,.agFx::after{position:absolute;font-size:19px;line-height:1;opacity:0;content:''}
+.agCard.working .agFx::before{content:var(--fx);right:-6px;top:-4px;opacity:1;animation:var(--fxa) 1.7s ease-in-out infinite}
+.agCard.working .agFx::after{content:var(--fx);left:-6px;top:6px;font-size:13px;opacity:1;animation:var(--fxa) 1.7s ease-in-out -.85s infinite}
+.item.agWork .ci::after{content:var(--fx,'✨');position:absolute;right:-8px;top:-8px;font-size:14px;line-height:1;animation:var(--fxa,fxTwinkle) 1.7s ease-in-out infinite}
+@keyframes fxNote{0%{transform:translateY(8px) rotate(-10deg);opacity:0}30%{opacity:1}100%{transform:translateY(-14px) rotate(14deg);opacity:0}}
+@keyframes fxRise{0%{transform:translateY(8px) scale(.6);opacity:0}30%{opacity:1}100%{transform:translateY(-14px) scale(1.1);opacity:0}}
+@keyframes fxOrbit{0%{transform:translate(0,0) rotate(0)}25%{transform:translate(-9px,6px) rotate(-12deg)}50%{transform:translate(-14px,-2px) rotate(0)}75%{transform:translate(-6px,-10px) rotate(12deg)}100%{transform:translate(0,0) rotate(0)}}
+@keyframes fxSpin{to{transform:rotate(360deg)}}
+@keyframes fxClap{0%,40%,100%{transform:rotate(0)}20%{transform:rotate(-18deg) scale(1.15)}}
+@keyframes fxSweep{0%,100%{transform:translateX(0) rotate(0)}50%{transform:translateX(-16px) rotate(-18deg)}}
+@keyframes fxTwinkle{0%,100%{transform:scale(.5) rotate(0);opacity:.2}50%{transform:scale(1.15) rotate(25deg);opacity:1}}
+#agWk{margin-top:2px}
+@media(prefers-reduced-motion:reduce){.agCard.working .agFx::before,.agCard.working .agFx::after,.item.agWork .ci::after{animation:none}}

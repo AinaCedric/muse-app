@@ -8,6 +8,14 @@
   const rid = () => 'a' + Array.from(crypto.getRandomValues(new Uint8Array(3)), (x) => x.toString(16).padStart(2, '0')).join('');
   const MODES = [['auto', 'Auto (Muse choisit)'], ['polyvalent', 'Recherche web et réflexion'], ['perso', 'Agenda et e-mails (Google)'], ['phone', 'Téléphone (+ navigateur du PC)'], ['ordi', 'Agent (ordinateur virtuel)'], ['dev', 'Dev / Odoo'], ['compagnon', 'Compagnon (discussion)'], ['creatif', 'Création']];
   const modeLabel = (v) => (MODES.find((m) => m[0] === v) || [v, v || 'Auto'])[1];
+  // 🛠️ Quel métier → quelle animation de travail (accessoire 3D, petites icônes dans les cartes et la liste)
+  const jobOf = (a) => {
+    a = a || {}; if (['chef', 'mails', 'messages', 'gyoo', 'odoo', 'recherche'].includes(a.id)) return a.id;
+    const k = `${a.name || ''} ${a.role || ''}`.toLowerCase();
+    if (/chef|orchestre/.test(k)) return 'chef'; if (/mail|courrier|bo[iî]te/.test(k)) return 'mails'; if (/message|whatsapp|messenger/.test(k)) return 'messages';
+    if (/odoo|code|d[ée]velop|python|react|docker/.test(k)) return 'odoo'; if (/film|vid[ée]o|contenu|gyoo|anime|cin[ée]ma/.test(k)) return 'gyoo'; if (/cherch|recherche|veille|prix|compar/.test(k)) return 'recherche';
+    return 'star';
+  };
   const COLORS = ['#7c5cff', '#2f80ed', '#22c55e', '#f06ab0', '#f59e0b', '#06b6d4', '#ef4444', '#64748b'];
   const TEMPLATES = [
     { id: 'chef', emoji: '🧭', name: 'Chef', color: '#7c5cff', mode: 'auto', role: 'Chef d’orchestre : organise mes journées, fixe les priorités, répartit le travail entre les autres agents et me fait un point clair et court.' },
@@ -52,10 +60,11 @@
     for (const a of st.items) { const s = stat[a.id] || {}; if (s.state === 'working' && s.since && now - Date.parse(s.since) < 20 * 60000) work.add(a.id); }
     for (const id of prevWork) if (!work.has(id)) doneUntil[id] = now + 3200;
     prevWork = work;
+    { const ha = issueNo && st.items.find((x) => Number(x.issue) === Number(issueNo)); if (head && ha) head.busy(work.has(ha.id)); }   // l'avatar de l'en-tête sort son accessoire dès que l'agent travaille
     document.querySelectorAll('#list .item[data-n]').forEach((el) => {
       const a = st.items.find((x) => Number(x.issue) === Number(el.dataset.n));
       const w = a && work.has(a.id), done = a && !w && doneUntil[a.id] > now;
-      el.classList.toggle('agWork', !!w); el.classList.toggle('agDone', !!done);
+      el.classList.toggle('agWork', !!w); el.classList.toggle('agDone', !!done); if (a) el.dataset.job = jobOf(a);
       const b = el.querySelector('b'); if (!b) return;
       let wrap = el.querySelector('.nmW');
       if (w) {
@@ -228,8 +237,8 @@
   window.museChefIssue = () => { const a = st.items.find((x) => x.id === 'chef' && x.enabled !== false); return a && a.issue ? Number(a.issue) : 0; };
   window.museAgentImgById = (id) => { const a = st.items.find((x) => x.id === id); return a ? img(a, 64) : ''; };
   function renderAgents() {
-    const cards = st.items.map((a) => { const s = stat[a.id] || {}, wk = s.state === 'working' && s.since && Date.now() - Date.parse(s.since) < 20 * 60000, un = unreadOf(a); return `<article class="acard agCard${a.enabled === false ? ' off' : ''}${wk ? ' working' : ''}" data-id="${q(a.id)}">
-      <div class="ahead"><div class="atitle"><span class="agAvW">${av(a)}${un ? `<em class="agUn">${un > 9 ? '9+' : un}</em>` : ''}</span><div><b>${esc(a.name)}</b><small>${esc(modeLabel(a.mode))}</small></div></div>
+    const cards = st.items.map((a) => { const s = stat[a.id] || {}, wk = s.state === 'working' && s.since && Date.now() - Date.parse(s.since) < 20 * 60000, un = unreadOf(a); return `<article class="acard agCard${a.enabled === false ? ' off' : ''}${wk ? ' working' : ''}" data-id="${q(a.id)}" data-job="${jobOf(a)}">
+      <div class="ahead"><div class="atitle"><span class="agAvW">${av(a)}<span class="agFx"></span>${un ? `<em class="agUn">${un > 9 ? '9+' : un}</em>` : ''}</span><div><b>${esc(a.name)}</b><small>${esc(modeLabel(a.mode))}</small></div></div>
         <label class="sw" title="${a.enabled === false ? 'En pause' : 'Actif'}"><input type="checkbox" class="aon" ${a.enabled === false ? '' : 'checked'}><span></span></label></div>
       <div class="agStatus">${statusHtml(a)}</div>
       <p class="ains">${esc(a.role || '')}</p>
@@ -359,7 +368,7 @@
     dlg = document.createElement('dialog'); dlg.id = 'agDlg';
     dlg.innerHTML = `<h3 id="agT">Nouvel agent</h3>
       <div class="agStudio">
-        <div class="agStage"><canvas id="agCv" width="220" height="220"></canvas><button type="button" class="ghost" id="agRnd">🎲 Au hasard</button><small class="hint">Fais-le tourner avec le doigt</small></div>
+        <div class="agStage"><canvas id="agCv" width="220" height="220"></canvas><button type="button" class="ghost" id="agRnd">🎲 Au hasard</button><button type="button" class="ghost" id="agWk">🛠️ Voir au travail</button><small class="hint">Fais-le tourner avec le doigt</small></div>
         <div class="agOpts">
           <label>Forme</label>${chips('shape', O.shape)}
           <label>Couleurs</label><div class="agPairs">${A3.PAIRS.map(([a, b], k) => `<button type="button" class="agPair" data-k="${k}" style="--a:${a};--b:${b}" aria-label="couleurs ${k + 1}"></button>`).join('')}<input type="color" id="agC1" title="Couleur du haut"><input type="color" id="agC2" title="Couleur du bas"></div>
@@ -387,9 +396,10 @@
     $d('#agC2').oninput = (e) => { look.c2 = e.target.value; paint(); };
     $d('#agAccC').oninput = (e) => { look.accColor = e.target.value; paint(); };
     $d('#agCheeks').onchange = (e) => { look.cheeks = e.target.checked; paint(); };
+    $d('#agWk').onclick = () => { if (!prev) return; prev.job(jobOf({ id: editing && editing.id, name: $d('#agName').value, role: $d('#agRole').value })); prev.busy(true); clearTimeout(wkT); wkT = setTimeout(() => prev && prev.busy(false), 5000); };
     $d('#agRnd').onclick = () => { look = A3.random(); paint(); if (prev) prev.state('happy'); };
   }
-  let paintT = 0;
+  let paintT = 0, wkT = 0;
   function paint() {
     const $d = (x) => dlg.querySelector(x);
     dlg.querySelectorAll('.agChips').forEach((g) => g.querySelectorAll('button').forEach((b) => b.classList.toggle('on', look[g.dataset.k] === b.dataset.v)));
@@ -410,7 +420,7 @@
     if (prev) { prev.dispose(); prev = null; }
     const old = $d('#agCv'), cv = document.createElement('canvas');
     cv.id = 'agCv'; cv.width = cv.height = 220; old.replaceWith(cv);
-    prev = A3.live(cv, look, 220);
+    prev = A3.live(cv, look, 220, jobOf(a));
     if (!prev) $d('#agMsg').textContent = 'Aperçu 3D indisponible sur cet appareil (WebGL).';
     paint();
   }
@@ -439,7 +449,7 @@
     if (!a || !A3 || !A3.ok || !wrapEl) { if (museCv) museCv.style.display = ''; if (nameEl) nameEl.textContent = 'Muse'; return; }
     const cv = document.createElement('canvas'); cv.id = 'agHeadCv'; cv.width = cv.height = 88; cv.title = a.name;
     museCv.style.display = 'none'; wrapEl.appendChild(cv);
-    head = A3.live(cv, lookOf(a), 88);
+    head = A3.live(cv, lookOf(a), 88, jobOf(a));
     if (!head) { cv.remove(); museCv.style.display = ''; return; }
     if (nameEl) nameEl.textContent = a.name;
     cv.onclick = () => head && head.state('happy');
