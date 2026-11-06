@@ -17,7 +17,7 @@
     return 'star';
   };
   // 🔐 Permissions : ce que l'agent a le droit de faire (appliqué par le cerveau et les outils ; « lire » est toujours permis)
-  const PERM_KEYS = [['draft', '✍️ Préparer', 'brouillons, écrire sans envoyer'], ['send', '📤 Envoyer', 'e-mails, messages, rendez-vous'], ['act', '👆 Agir', 'toucher l’écran, ouvrir des applis, cliquer dans le navigateur'], ['files', '🗂️ Ranger les fichiers', 'déplacer, copier, renommer'], ['delete', '🗑️ Supprimer', 'corbeille, rendez-vous']];
+  const PERM_KEYS = [['draft', '✍️ Préparer', 'brouillons, écrire sans envoyer'], ['send', '📤 Envoyer', 'e-mails, messages, rendez-vous'], ['act', '👆 Agir', 'toucher l’écran, ouvrir des applis, cliquer dans le navigateur'], ['files', '🗂️ Ranger les fichiers', 'déplacer, copier, renommer'], ['delete', '🗑️ Supprimer', 'corbeille, rendez-vous'], ['autoCal', '⚡ Créer des rendez-vous sans confirmer', 'sans invités : créés tout de suite, sans « OUI » (il faut aussi « Envoyer »)']];
   const PERM_PRESETS = [['lecture', '🔒 Lecture seule', { draft: false, send: false, act: false, files: false, delete: false }], ['prudent', '✍️ Prudent', { draft: true, send: false, act: false, files: false, delete: false }], ['normal', '✅ Normal', { draft: true, send: true, act: true, files: true, delete: false }], ['tout', '🔓 Tout', { draft: true, send: true, act: true, files: true, delete: true }]];
   const routN = (a) => (st.routines || []).filter((m) => m.agent === a.id && m.enabled !== false).length;
   const permSame = (a, b) => PERM_KEYS.every(([k]) => !!a[k] === !!b[k]);
@@ -526,7 +526,7 @@
   async function saveForm() {
     const $d = (x) => dlg.querySelector(x), name = $d('#agName').value.trim(), role = $d('#agRole').value.trim();
     if (!name || !role) { $d('#agMsg').textContent = 'Donne au moins un nom et un métier.'; return; }
-    const data = { name, role, perms: { draft: !!perm.draft, send: !!perm.send, act: !!perm.act, files: !!perm.files, delete: !!perm.delete }, look: { ...look }, color: look.c1, instructions: $d('#agIns').value.trim(), mode: $d('#agMode').value };
+    const data = { name, role, perms: { draft: !!perm.draft, send: !!perm.send, act: !!perm.act, files: !!perm.files, delete: !!perm.delete, ...(perm.autoCal ? { autoCal: true } : {}) }, look: { ...look }, color: look.c1, instructions: $d('#agIns').value.trim(), mode: $d('#agMode').value };
     const before = st.items.map((x) => ({ ...x }));
     if (editing) { Object.assign(editing, data); delete editing.emoji; } else st.items.push({ id: rid(), ...data, enabled: true, created: new Date().toISOString() });
     const b = $d('#agSave'); b.disabled = true;
