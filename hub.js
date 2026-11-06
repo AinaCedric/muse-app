@@ -16,6 +16,12 @@
     if (/odoo|code|d[ée]velop|python|react|docker/.test(k)) return 'odoo'; if (/film|vid[ée]o|contenu|gyoo|anime|cin[ée]ma/.test(k)) return 'gyoo'; if (/cherch|recherche|veille|prix|compar/.test(k)) return 'recherche';
     return 'star';
   };
+  // 🔐 Permissions : ce que l'agent a le droit de faire (appliqué par le cerveau et les outils ; « lire » est toujours permis)
+  const PERM_KEYS = [['draft', '✍️ Préparer', 'brouillons, écrire sans envoyer'], ['send', '📤 Envoyer', 'e-mails, messages, rendez-vous'], ['act', '👆 Agir', 'toucher l’écran, ouvrir des applis, cliquer dans le navigateur'], ['files', '🗂️ Ranger les fichiers', 'déplacer, copier, renommer'], ['delete', '🗑️ Supprimer', 'corbeille, rendez-vous']];
+  const PERM_PRESETS = [['lecture', '🔒 Lecture seule', { draft: false, send: false, act: false, files: false, delete: false }], ['prudent', '✍️ Prudent', { draft: true, send: false, act: false, files: false, delete: false }], ['normal', '✅ Normal', { draft: true, send: true, act: true, files: true, delete: false }], ['tout', '🔓 Tout', { draft: true, send: true, act: true, files: true, delete: true }]];
+  const routN = (a) => (st.routines || []).filter((m) => m.agent === a.id && m.enabled !== false).length;
+  const permSame = (a, b) => PERM_KEYS.every(([k]) => !!a[k] === !!b[k]);
+  const permName = (p) => { if (!p) return ''; const m = PERM_PRESETS.find(([, , v]) => permSame(p, v)); return m ? (m[0] === 'tout' ? '' : m[1]) : '🔐 Sur mesure'; };
   const COLORS = ['#7c5cff', '#2f80ed', '#22c55e', '#f06ab0', '#f59e0b', '#06b6d4', '#ef4444', '#64748b'];
   const TEMPLATES = [
     { id: 'chef', emoji: '🧭', name: 'Chef', color: '#7c5cff', mode: 'auto', role: 'Chef d’orchestre : organise mes journées, fixe les priorités, répartit le travail entre les autres agents et me fait un point clair et court.' },
@@ -25,13 +31,15 @@
     { id: 'odoo', emoji: '🧑‍💻', name: 'Dev Odoo', color: '#f59e0b', mode: 'dev', role: 'Développeur Odoo 12 à 19, React, WordPress, Docker : code prêt à copier, revues, migrations, débogage, explications claires.' },
     { id: 'recherche', emoji: '🔎', name: 'Chercheur', color: '#06b6d4', mode: 'ordi', role: 'Recherches approfondies sur le web avec sources, comparatifs et prix à Madagascar, résultats vérifiés.' },
   ];
-  const st = { items: [], sha: null, loaded: false, meta: {} };
+  const st = { items: [], sha: null, loaded: false, meta: {}, routines: [] };
+  const MFILE = 'data/missions.json', MSFILE = 'data/missions-state.json';
 
   // ---------- Fichier des agents
   async function load() {
     try { const f = await gh(`/repos/${cfg.repo}/contents/${FILE}`); st.sha = f.sha; const d = JSON.parse(b64d(f.content)); st.items = Array.isArray(d.items) ? d.items : []; st.meta = d.meta || {}; }
     catch (e) { if (e.status !== 404) throw e; st.sha = null; st.items = []; }
     st.loaded = true;
+    readJson(MFILE).then((m) => { st.routines = ((m.data && m.data.items) || []).filter((x) => x.agent); }).catch(() => {});   // ⏰ routines (missions rattachées à un agent)
   }
   async function save(msg) {
     const body = { message: msg, content: b64e(JSON.stringify({ version: 1, meta: st.meta || {}, items: st.items }, null, 2)), ...(st.sha ? { sha: st.sha } : {}) };
@@ -241,6 +249,7 @@
       <div class="ahead"><div class="atitle"><span class="agAvW">${av(a)}<span class="agFx"></span>${un ? `<em class="agUn">${un > 9 ? '9+' : un}</em>` : ''}</span><div><b>${esc(a.name)}</b><small>${esc(modeLabel(a.mode))}</small></div></div>
         <label class="sw" title="${a.enabled === false ? 'En pause' : 'Actif'}"><input type="checkbox" class="aon" ${a.enabled === false ? '' : 'checked'}><span></span></label></div>
       <div class="agStatus">${statusHtml(a)}</div>
+      ${permName(a.perms) || routN(a) ? `<div class="agBadges">${permName(a.perms) ? `<span class="agPermB" title="Permissions de cet agent">${esc(permName(a.perms))}</span>` : ''}${routN(a) ? `<span class="agPermB rt" title="Routines de cet agent">⏰ ${routN(a)} routine${routN(a) > 1 ? 's' : ''}</span>` : ''}</div>` : ''}
       <p class="ains">${esc(a.role || '')}</p>
       ${a.instructions ? `<p class="asum">📝 ${esc(a.instructions.slice(0, 160))}${a.instructions.length > 160 ? '…' : ''}</p>` : ''}
       <div class="aact"><button class="btn agTalk" type="button">💬 Discuter</button><button class="ghost agEdit" type="button">Modifier</button><button class="ghost agMem" type="button">🧠 Mémoire</button><button class="ghost agDel" type="button">Supprimer</button></div>
@@ -276,7 +285,7 @@
   async function remove(a) {
     if (!confirm(`Retirer l’agent « ${a.name} » ? Sa discussion est gardée dans les archives.`)) return;
     const before = st.items.slice(); st.items = st.items.filter((x) => x.id !== a.id);
-    try { await save(`Agent retiré : ${a.name}`); if (a.issue) addLabel(a.issue, L_ARC, '9ca3af').catch(() => {}); renderAgents(); }
+    try { await save(`Agent retiré : ${a.name}`); if ((st.routines || []).some((m) => m.agent === a.id)) mutateMissions((items) => items.filter((x) => x.agent !== a.id), `Routines de ${a.name} retirées`).catch(() => {}); if (a.issue) addLabel(a.issue, L_ARC, '9ca3af').catch(() => {}); renderAgents(); }
     catch (e) { st.items = before; toast('' + e.message); renderAgents(); }
   }
   // Discussion d'un agent (créée au besoin) — utilisée aussi par les automatisations et le regroupement
@@ -383,6 +392,19 @@
       <label for="agRole">Son métier</label><textarea id="agRole" rows="3" placeholder="Trie mes e-mails, résume ce qui compte…"></textarea>
       <label for="agIns">Consignes (facultatif)</label><textarea id="agIns" rows="3" placeholder="Tutoie mes clients, signe « Cédric », jamais de rendez-vous avant 9 h…"></textarea>
       <label for="agMode">Ce qu’il peut utiliser</label><select id="agMode">${MODES.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select>
+      <label>Permissions <small class="hint">— ce que cet agent a le droit de faire</small></label>
+      <div class="agChips" id="agPresets">${PERM_PRESETS.map(([k, l]) => `<button type="button" data-p="${k}">${esc(l)}</button>`).join('')}</div>
+      <div class="agPerms">${PERM_KEYS.map(([k, l, h]) => `<label class="agTog"><input type="checkbox" data-perm="${k}"> <span><b>${esc(l)}</b> <small>${esc(h)}</small></span></label>`).join('')}</div>
+      <label>⏰ Routines <small class="hint">— ce qu’il fait tout seul, à heure fixe (heure de Madagascar)</small></label>
+      <div id="agRout" class="agRout"></div>
+      <div id="agRForm" class="agRForm">
+        <div class="agChips" id="agRIdeas"></div>
+        <div class="agRRow"><select id="rKind"><option value="daily">Tous les jours</option><option value="weekdays">Lundi → vendredi</option><option value="weekly">Certains jours</option><option value="hours">Toutes les N heures</option></select>
+          <input type="time" id="rTime" value="08:00"><input type="number" id="rEvery" min="1" max="168" value="6" title="Toutes les … heures"></div>
+        <div class="agChips" id="rDays">${['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'].map((d, i) => `<button type="button" data-d="${(i + 1) % 7}">${d}</button>`).join('')}</div>
+        <textarea id="rGoal" rows="2" placeholder="Ce qu’il doit faire à chaque passage (ex. : résume mes mails importants et prépare les réponses)"></textarea>
+        <button type="button" class="ghost" id="rAdd">➕ Ajouter cette routine</button>
+      </div>
       <div id="agMsg" class="hint"></div>
       <div class="row"><button class="ghost" id="agCancel" type="button">Annuler</button><button class="btn" id="agSave" type="button">Enregistrer</button></div>`;
     document.body.appendChild(dlg);
@@ -390,22 +412,97 @@
     $d('#agCancel').onclick = () => dlg.close();
     dlg.addEventListener('close', () => { if (prev) { prev.dispose(); prev = null; } });
     $d('#agSave').onclick = saveForm;
-    dlg.querySelectorAll('.agChips').forEach((g) => g.querySelectorAll('button').forEach((b) => (b.onclick = () => { look[g.dataset.k] = b.dataset.v; paint(); })));
+    dlg.querySelectorAll('.agChips[data-k]').forEach((g) => g.querySelectorAll('button').forEach((b) => (b.onclick = () => { look[g.dataset.k] = b.dataset.v; paint(); })));
     dlg.querySelectorAll('.agPair').forEach((b) => (b.onclick = () => { [look.c1, look.c2] = A3.PAIRS[+b.dataset.k]; paint(); }));
     $d('#agC1').oninput = (e) => { look.c1 = e.target.value; paint(); };
     $d('#agC2').oninput = (e) => { look.c2 = e.target.value; paint(); };
     $d('#agAccC').oninput = (e) => { look.accColor = e.target.value; paint(); };
     $d('#agCheeks').onchange = (e) => { look.cheeks = e.target.checked; paint(); };
     $d('#agWk').onclick = () => { if (!prev) return; prev.job(jobOf({ id: editing && editing.id, name: $d('#agName').value, role: $d('#agRole').value })); prev.busy(true); clearTimeout(wkT); wkT = setTimeout(() => prev && prev.busy(false), 5000); };
+    $d('#rKind').onchange = routUi;
+    $d('#rAdd').onclick = addRoutine;
+    dlg.querySelectorAll('#rDays button').forEach((b) => (b.onclick = () => b.classList.toggle('on')));
+    dlg.querySelectorAll('#agPresets button').forEach((b) => (b.onclick = () => { perm = { ...PERM_PRESETS.find((x) => x[0] === b.dataset.p)[2] }; paintPerm(); }));
+    dlg.querySelectorAll('[data-perm]').forEach((c) => (c.onchange = () => { perm[c.dataset.perm] = c.checked; paintPerm(); }));
     $d('#agRnd').onclick = () => { look = A3.random(); paint(); if (prev) prev.state('happy'); };
   }
-  let paintT = 0, wkT = 0;
+  let paintT = 0, wkT = 0, perm = { ...PERM_PRESETS[3][2] };
   function paint() {
     const $d = (x) => dlg.querySelector(x);
-    dlg.querySelectorAll('.agChips').forEach((g) => g.querySelectorAll('button').forEach((b) => b.classList.toggle('on', look[g.dataset.k] === b.dataset.v)));
+    dlg.querySelectorAll('.agChips[data-k]').forEach((g) => g.querySelectorAll('button').forEach((b) => b.classList.toggle('on', look[g.dataset.k] === b.dataset.v)));
     dlg.querySelectorAll('.agPair').forEach((b) => { const [x, y] = A3.PAIRS[+b.dataset.k]; b.classList.toggle('on', x === look.c1 && y === look.c2); });
     $d('#agC1').value = look.c1; $d('#agC2').value = look.c2; $d('#agAccC').value = look.accColor; $d('#agCheeks').checked = !!look.cheeks;
     clearTimeout(paintT); paintT = setTimeout(() => { if (prev) prev.set(look); }, 40);
+  }
+  // ⏰ Routines de l'agent : des missions (data/missions.json) rattachées à l'agent ; elles tournent dans SA discussion
+  const DAYN = ['dim', 'lun', 'mar', 'mer', 'jeu', 'ven', 'sam'];
+  const IDEAS = {
+    chef: [['🌆 Point du soir', 'Fais-moi un point court : ce que l’équipe a fait aujourd’hui, ce qui reste ou bloque, et les 3 priorités de demain.', 'weekdays', '18:30'], ['☀️ Priorités du matin', 'Regarde mon agenda et ce qui est en cours, et donne-moi les 3 priorités du jour en quelques lignes.', 'weekdays', '07:45']],
+    mails: [['☀️ Résumé du matin', 'Regarde mes e-mails reçus depuis hier : liste les importants (clients, factures, rendez-vous), prépare des brouillons de réponse pour ceux qui en demandent une, ignore les newsletters.', 'weekdays', '08:00'], ['📅 Agenda du jour', 'Regarde mon agenda d’aujourd’hui, repère les conflits et dis-moi ce qui demande de la préparation.', 'daily', '07:30']],
+    messages: [['💬 Messages en attente', 'Regarde mes notifications Messenger et WhatsApp : résume ce qui attend une réponse et prépare les réponses dans mon ton.', 'daily', '12:00']],
+    gyoo: [['🎬 Idées du jour', 'Cherche sur le web les nouveautés (films, séries, animes, K-dramas, jeux) pour mon public malgache et propose 3 idées de contenus.', 'daily', '09:00']],
+    odoo: [['🧰 Veille Odoo', 'Cherche les nouveautés Odoo 19 (versions, bugs connus, modules utiles) pour mes projets et résume en 5 points.', 'weekly', '09:00', [1]]],
+    recherche: [['📈 Mes recherches', 'Relance mes recherches de prix en cours et dis-moi ce qui a changé depuis la dernière fois.', 'weekly', '09:00', [1]]],
+    star: [['🌅 Point du matin', 'Fais le point sur ton domaine : ce qui est nouveau, ce qui demande mon attention aujourd’hui.', 'weekdays', '08:00']],
+  };
+  const whenOf = (m) => { const s = m.schedule || {}, t = s.time || '08:00'; return s.kind === 'daily' ? `Tous les jours à ${t}` : s.kind === 'weekdays' ? `Lun → ven à ${t}` : s.kind === 'weekly' ? `${(s.days || [1]).map((d) => DAYN[d]).join(', ')} à ${t}` : s.kind === 'hours' ? `Toutes les ${s.every || 6} h` : s.kind === 'once' ? 'Une fois' : ''; };
+  let rState = {};
+  async function mutateMissions(fn, msg) {
+    for (let i = 0; i < 3; i++) {
+      const cur = await readJson(MFILE), items = (cur.data && Array.isArray(cur.data.items)) ? cur.data.items : [];
+      const out = fn(items) || items;
+      try { await writeJson(MFILE, cur.sha, { version: 1, items: out }, msg); st.routines = out.filter((x) => x.agent); return; }
+      catch (e) { if (!(e.status === 409 || e.status === 422) || i === 2) throw e; }
+    }
+  }
+  function routUi() {
+    const k = dlg.querySelector('#rKind').value;
+    dlg.querySelector('#rTime').hidden = k === 'hours'; dlg.querySelector('#rEvery').hidden = k !== 'hours'; dlg.querySelector('#rDays').hidden = k !== 'weekly';
+  }
+  function renderRout() {
+    const box = dlg.querySelector('#agRout'), form = dlg.querySelector('#agRForm');
+    if (!editing) { box.innerHTML = '<p class="hint">Enregistre d’abord cet agent, puis rouvre-le avec « Modifier » pour lui ajouter des routines.</p>'; form.hidden = true; return; }
+    form.hidden = false;
+    const mine = (st.routines || []).filter((m) => m.agent === editing.id);
+    box.innerHTML = mine.length ? mine.map((m) => { const s = (rState.items || {})[m.id] || {}; return `<div class="agRI${m.enabled === false ? ' off' : ''}" data-id="${q(m.id)}"><div class="agRT"><b>⏰ ${esc(whenOf(m))}</b><small>${esc(String(m.goal || '').slice(0, 130))}</small>${s.lastRun ? `<small class="agRL">Dernier passage ${ago(s.lastRun)} ${s.status === 'error' ? '❌' : s.status === 'running' ? '⏳' : '✅'}</small>` : '<small class="agRL">Pas encore passé</small>'}</div>
+        <label class="sw" title="Actif / en pause"><input type="checkbox" class="rOn" ${m.enabled === false ? '' : 'checked'}><span></span></label><button class="ghost rDel" type="button" aria-label="Supprimer">🗑️</button></div>`; }).join('') : '<p class="hint">Aucune routine pour l’instant.</p>';
+    box.querySelectorAll('.agRI').forEach((row) => {
+      const id = row.dataset.id;
+      row.querySelector('.rOn').onchange = async (e) => { try { await mutateMissions((items) => { const m = items.find((x) => x.id === id); if (m) m.enabled = e.target.checked; }, `Routine ${e.target.checked ? 'activée' : 'en pause'}`); renderRout(); renderAgents(); } catch (er) { dlg.querySelector('#agMsg').textContent = '' + er.message; } };
+      row.querySelector('.rDel').onclick = async () => { if (!confirm('Supprimer cette routine ?')) return; try { await mutateMissions((items) => items.filter((x) => x.id !== id), 'Routine supprimée'); renderRout(); renderAgents(); } catch (er) { dlg.querySelector('#agMsg').textContent = '' + er.message; } };
+    });
+    const ideas = (IDEAS[jobOf(editing)] || IDEAS.star), ib = dlg.querySelector('#agRIdeas');
+    ib.innerHTML = ideas.map((x, i) => `<button type="button" data-i="${i}">${esc(x[0])}</button>`).join('');
+    ib.querySelectorAll('button').forEach((b) => (b.onclick = () => { const x = ideas[+b.dataset.i]; dlg.querySelector('#rKind').value = x[2]; dlg.querySelector('#rTime').value = x[3]; dlg.querySelector('#rGoal').value = x[1]; dlg.querySelectorAll('#rDays button').forEach((d) => d.classList.toggle('on', (x[4] || [1]).includes(+d.dataset.d))); routUi(); }));
+    routUi();
+  }
+  async function loadRout() {
+    renderRout();
+    try {
+      const [m, s] = await Promise.all([readJson(MFILE), readJson(MSFILE).catch(() => ({ data: null }))]);
+      st.routines = ((m.data && m.data.items) || []).filter((x) => x.agent); rState = s.data || {}; if (dlg.open) renderRout();
+    } catch {}
+  }
+  async function addRoutine() {
+    const $d = (x) => dlg.querySelector(x), msg = $d('#agMsg'), goal = $d('#rGoal').value.trim(), kind = $d('#rKind').value;
+    if (!editing) return;
+    if (!goal) { msg.textContent = 'Écris ce que l’agent doit faire à chaque passage.'; return; }
+    const schedule = { kind };
+    if (kind !== 'hours') schedule.time = $d('#rTime').value || '08:00';
+    if (kind === 'hours') schedule.every = Math.max(1, Math.min(168, parseInt($d('#rEvery').value, 10) || 6));
+    if (kind === 'weekly') { schedule.days = [...dlg.querySelectorAll('#rDays button.on')].map((b) => +b.dataset.d); if (!schedule.days.length) { msg.textContent = 'Choisis au moins un jour.'; return; } }
+    const b = $d('#rAdd'); b.disabled = true; msg.textContent = '';
+    try {
+      const had = editing.issue; await ensureIssue(editing); if (!had) await save(`Agent ${editing.name} : discussion`);
+      const m = { id: 'r' + Array.from(crypto.getRandomValues(new Uint8Array(4)), (x) => x.toString(16).padStart(2, '0')).join(''), name: `${editing.name} · ${goal.replace(/\s+/g, ' ').slice(0, 40)}`, goal, agent: editing.id, issue: editing.issue, mode: editing.mode && editing.mode !== 'auto' ? editing.mode : 'polyvalent', schedule, enabled: true, created: new Date().toISOString() };
+      await mutateMissions((items) => { items.push(m); }, `Routine ajoutée : ${editing.name}`);
+      $d('#rGoal').value = ''; renderRout(); renderAgents(); toast('Routine ajoutée');
+    } catch (e) { msg.textContent = '' + e.message; }
+    b.disabled = false;
+  }
+  function paintPerm() {
+    dlg.querySelectorAll('[data-perm]').forEach((c) => { c.checked = !!perm[c.dataset.perm]; });
+    dlg.querySelectorAll('#agPresets button').forEach((b) => b.classList.toggle('on', permSame(perm, PERM_PRESETS.find((x) => x[0] === b.dataset.p)[2])));
   }
   function edit(a) {
     if (!A3 || !A3.ok) { toast('3D indisponible sur cet appareil'); }
@@ -415,6 +512,8 @@
     $d('#agName').value = a ? a.name : '';
     $d('#agRole').value = a ? a.role || '' : ''; $d('#agIns').value = a ? a.instructions || '' : ''; $d('#agMode').value = a ? a.mode || 'auto' : 'auto';
     look = A3.norm(a ? lookOf(a) : A3.random());
+    perm = a && a.perms ? { ...a.perms } : { ...PERM_PRESETS[a ? 3 : 2][2] };   // agent existant sans réglage = tout permis (comme avant) · nouvel agent = « Normal »
+    paintPerm(); rState = {}; loadRout();
     $d('#agMsg').textContent = ''; dlg.showModal();
     // Un canvas WebGL dont le contexte a été fermé ne peut plus servir : on en recrée un tout neuf à chaque ouverture
     if (prev) { prev.dispose(); prev = null; }
@@ -427,7 +526,7 @@
   async function saveForm() {
     const $d = (x) => dlg.querySelector(x), name = $d('#agName').value.trim(), role = $d('#agRole').value.trim();
     if (!name || !role) { $d('#agMsg').textContent = 'Donne au moins un nom et un métier.'; return; }
-    const data = { name, role, look: { ...look }, color: look.c1, instructions: $d('#agIns').value.trim(), mode: $d('#agMode').value };
+    const data = { name, role, perms: { draft: !!perm.draft, send: !!perm.send, act: !!perm.act, files: !!perm.files, delete: !!perm.delete }, look: { ...look }, color: look.c1, instructions: $d('#agIns').value.trim(), mode: $d('#agMode').value };
     const before = st.items.map((x) => ({ ...x }));
     if (editing) { Object.assign(editing, data); delete editing.emoji; } else st.items.push({ id: rid(), ...data, enabled: true, created: new Date().toISOString() });
     const b = $d('#agSave'); b.disabled = true;
@@ -545,8 +644,39 @@
   async function health(refresh) {
     const body = view.querySelector('#acBody');
     const linked = window.museRelay && museRelay.linked();
-    let cloud = {};
-    try { const it = await techIssue('muse-sante'); if (it) { const cs = await tailComments(it, 100); const c = cs.find((x) => x.body.startsWith('<!--muse-ctl--><!--health:cloud-->')); if (c) cloud = JSON.parse(c.body.slice(c.body.indexOf('\n') + 1)); } } catch {}
+    let cloud = {}, stt = null, sIssue = null;
+    try { const it = await techIssue('muse-sante'); sIssue = it; if (it) { const cs = await tailComments(it, 100); const c = cs.find((x) => x.body.startsWith('<!--muse-ctl--><!--health:cloud-->')); if (c) cloud = JSON.parse(c.body.slice(c.body.indexOf('\n') + 1)); const t = cs.find((x) => x.body.startsWith('<!--muse-ctl--><!--selftest-->')); if (t) stt = JSON.parse(t.body.slice(t.body.indexOf('\n') + 1)); } } catch {}
+    // 🧪 Auto-test de la nuit (écrit par le cerveau : GitHub Actions « Muse - auto-test »)
+    const selftestHtml = () => {
+      const btn = '<div class="aact"><button class="ghost" id="hTest" type="button">▶️ Lancer un auto-test maintenant</button></div>';
+      if (!stt) return `<h4 class="agH">🧪 Auto-test</h4><p class="hint">Pas encore lancé. Chaque nuit à 02 h 30, Muse se teste toute seule (cerveau, chaque agent, téléphone, PC, Google) et te prévient le matin à 07 h 30 <b>seulement</b> s’il reste un problème. Tu peux le lancer maintenant : résultat en 2 à 3 minutes.</p>${btn}`;
+      const bad = (stt.checks || []).filter((c) => !c.ok && !c.warn).length + (stt.agents || []).filter((a) => !a.ok).length;
+      const row = (ic, name, msg, fix) => `<li><span class="stI">${ic}</span><div><b>${esc(name)}</b> <span class="stM">${esc(msg || '')}</span>${fix ? `<small class="stF">👉 ${esc(fix)}</small>` : ''}</div></li>`;
+      const rows = (stt.checks || []).map((c) => row(c.skip ? '➖' : c.ok ? '✅' : c.warn ? '⚠️' : '❌', c.label, c.msg, c.ok ? '' : c.fix));
+      const ag = (stt.agents || []).map((a) => row(a.ok ? (a.degraded ? '⚠️' : '✅') : '❌', a.name, `${a.ok ? `${Math.max(1, Math.round((a.ms || 0) / 1000))} s · ` : ''}${a.msg || ''}${a.degraded ? ` · gêné : ${a.degraded.join(', ')} indisponible` : ''}`));
+      const dots = (stt.history || []).map((h) => `<i class="${h.ok ? 'ok' : 'ko'}" title="${esc(ago(h.at))}${h.ok ? '' : ` · ${h.n} problème(s)`}"></i>`).join('');
+      return `<h4 class="agH">🧪 Auto-test</h4><div class="hSum ${bad ? 'ko' : 'ok'}">${bad ? `⚠️ ${bad} point${bad > 1 ? 's' : ''} à régler` : '✅ Tout allait bien'} <small>· ${stt.mode === 'morning' ? 'matin' : stt.mode === 'now' ? 'à la demande' : 'cette nuit'}, ${esc(ago(stt.at))}</small><span class="stDots">${dots}</span></div>
+        <ul class="stList">${rows.join('')}${ag.length ? `<li class="stSep">Agents</li>${ag.join('')}` : ''}</ul>${btn}`;
+    };
+    async function runSelftest() {
+      const b = view.querySelector('#hTest'); if (b) { b.disabled = true; b.textContent = '⏳ Test lancé… (2 à 3 minutes)'; }
+      try {
+        let n = sIssue && sIssue.number;
+        if (!n) {
+          await gh(`/repos/${cfg.repo}/labels`, { method: 'POST', body: JSON.stringify({ name: 'muse-sante', color: '22c55e' }) }).catch(() => {});
+          n = (await gh(`/repos/${cfg.repo}/issues`, { method: 'POST', body: JSON.stringify({ title: '🩺 Santé de Muse', body: 'État des appareils et des connexions de Muse. Lu par l’appli : onglet Activité → Santé.', labels: ['muse-sante'] }) })).number;
+        }
+        const t0 = Date.now(), before = stt && stt.at;
+        await gh(`/repos/${cfg.repo}/issues/${n}/comments`, { method: 'POST', body: JSON.stringify({ body: '<!--muse-ctl--><!--selftest-now-->' }) });
+        toast('Auto-test lancé : résultat dans 2 à 3 minutes');
+        const poll = async () => {
+          if (tab !== 'health' || !view.querySelector('#acBody') || Date.now() - t0 > 8 * 60000) return;
+          try { const it = await techIssue('muse-sante'); const cs = await tailComments(it, 100); const t = cs.find((x) => x.body.startsWith('<!--muse-ctl--><!--selftest-->')); if (t) { const j = JSON.parse(t.body.slice(t.body.indexOf('\n') + 1)); if (j.at !== before) { stt = j; sIssue = it; draw(); toast('Auto-test terminé'); return; } } } catch {}
+          setTimeout(poll, 15000);
+        };
+        setTimeout(poll, 30000);
+      } catch (e) { toast('' + e.message); if (b) { b.disabled = false; b.textContent = '▶️ Lancer un auto-test maintenant'; } }
+    }
     const draw = () => {
       const cards = [], problems = [];
       // 📱 Téléphone
@@ -578,7 +708,8 @@
       if (g) { const bad = !g.ok; if (bad) problems.push('Google'); cards.push(card('🔐', 'Google (Gmail, Agenda, Drive)', bad ? 'ko' : 'ok', [bad ? `${g.state === 'expired' ? 'Connexion expirée' : 'Erreur'} : ${esc(g.msg || '')}` : 'Connecté', `Vu ${ago(g.at)}`], bad ? ['Touche l’avatar en haut → <b>Applications</b> → <b>Gmail</b> → touche le compte « Connexion expirée ».'] : []));
       } else cards.push(card('🔐', 'Google (Gmail, Agenda, Drive)', 'warn', ['Pas encore vérifié : l’état apparaîtra après la prochaine demande qui touche aux mails ou à l’agenda.']));
       const sum = !linked ? '' : problems.length ? `<div class="hSum ko">⚠️ ${problems.length} point${problems.length > 1 ? 's' : ''} à régler : ${esc(problems.join(', '))}</div>` : Object.keys(live).length >= 3 ? '<div class="hSum ok">✅ Tout fonctionne : Muse peut travailler sans blocage.</div>' : '';
-      body.innerHTML = `${sum}<div class="hGrid">${cards.join('')}</div><div class="aact"><button class="ghost" id="hRe" type="button">🔄 Tout retester</button></div>`;
+      body.innerHTML = `${sum}<div class="hGrid">${cards.join('')}</div>${selftestHtml()}<div class="aact"><button class="ghost" id="hRe" type="button">🔄 Tout retester</button></div>`;
+      const tb = body.querySelector('#hTest'); if (tb) tb.onclick = runSelftest;
       body.querySelector('#hRe').onclick = () => { live = {}; health(true); };
       body.querySelectorAll('.acCmd').forEach((c) => (c.onclick = () => { navigator.clipboard && navigator.clipboard.writeText(c.textContent).then(() => toast('Commande copiée'), () => {}); }));
       body.querySelectorAll('.hSites').forEach((b) => (b.onclick = async () => { b.disabled = true; b.textContent = '⏳ Vérification (≈ 30 s)…'; const r = await museRelay.call(b.dataset.k, 'site_check', {}, 90000).catch(() => null); if (r && r.state === 'ok' && live[b.dataset.k] && live[b.dataset.k].data) live[b.dataset.k].data.sites = r.data.sites || {}; draw(); }));

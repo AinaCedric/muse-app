@@ -574,3 +574,40 @@ main.autoview #autos{padding-top:72px}
 @keyframes fxTwinkle{0%,100%{transform:scale(.5) rotate(0);opacity:.2}50%{transform:scale(1.15) rotate(25deg);opacity:1}}
 #agWk{margin-top:2px}
 @media(prefers-reduced-motion:reduce){.agCard.working .agFx::before,.agCard.working .agFx::after,.item.agWork .ci::after{animation:none}}
+
+/* 🔐 Permissions des agents */
+.agPerms{display:grid;gap:6px;margin:8px 0 4px}
+.agPerms .agTog{display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border:1px solid var(--bd);border-radius:12px;cursor:pointer;font-size:14px;color:var(--txt)}
+.agPerms .agTog input{width:auto;margin:3px 0 0}
+.agPerms .agTog small{display:block;color:var(--mut);font-size:12.5px;margin-top:1px}
+#agPresets{margin:6px 0}
+.agPermB{display:inline-block;margin:4px 0 0;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--acc,#7c5cff) 12%,transparent);color:var(--acc,#7c5cff);font-size:12px;font-weight:600}
+
+/* 🧪 Auto-test (onglet Santé) */
+.stList{list-style:none;padding:0;margin:8px 0 10px;display:grid;gap:6px}
+.stList li{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border:1px solid var(--bd);border-radius:12px;font-size:14px}
+.stList .stI{flex:none;width:22px;text-align:center}
+.stList .stM{color:var(--mut)}
+.stList .stF{display:block;margin-top:3px;color:var(--mut);font-size:12.5px;word-break:break-word}
+.stList .stSep{border:0;padding:6px 2px 0;font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.hSum small{font-weight:500;opacity:.85}
+.stDots{display:inline-flex;gap:3px;margin-left:10px;vertical-align:middle}
+.stDots i{width:8px;height:8px;border-radius:50%;background:#16a34a}.stDots i.ko{background:#ef4444}
+
+/* ⏰ Routines des agents */
+.agBadges{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 0}
+.agPermB.rt{background:color-mix(in srgb,#f59e0b 14%,transparent);color:#d97706}
+.agRout{display:grid;gap:6px;margin:6px 0}
+.agRI{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--bd);border-radius:12px}
+.agRI.off{opacity:.55}
+.agRT{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:14px}
+.agRT small{color:var(--mut);font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
+.agRT .agRL{font-size:12px}
+.agRI .rDel{padding:4px 8px}
+.agRForm{display:grid;gap:8px;margin:6px 0 4px;padding:12px;border:1px dashed var(--bd);border-radius:14px}
+.agRForm[hidden]{display:none}
+.agRRow{display:flex;gap:8px}
+.agRRow select,.agRRow input{width:auto!important;margin:0!important;flex:1}
+.agRRow input[type=number]{max-width:90px}
+.agRForm textarea{height:auto!important;min-height:64px}
+.agRForm [hidden]{display:none!important}
