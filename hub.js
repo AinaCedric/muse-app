@@ -548,6 +548,17 @@
     } catch { return null; }
   }
   // Le démon du PC publie lui-même son lien dans « 🩺 Santé de Muse » : l'appli le récupère toute seule (plus de code à coller)
+  async function fetchLiveLinks() {   // 📞 tous les liens publiés : PC (<!--live-link-->) et serveur 24 h/24 (<!--live-link-server-->)
+    try {
+      const it = await techIssue('muse-sante'); if (!it) return [];
+      const cs = await tailComments(it, 200), out = [];
+      for (const [mark, role] of [['<!--muse-ctl--><!--live-link-->\n', 'pc'], ['<!--muse-ctl--><!--live-link-server-->\n', 'server']]) {
+        const c = cs.find((x) => x.body.startsWith(mark)); if (!c) continue;
+        try { const j = JSON.parse(c.body.slice(c.body.indexOf('\n') + 1)); if (/^wss?:\/\/[\w.:-]+/.test(j.u || '') && String(j.t || '').length >= 20) out.push({ u: j.u, t: j.t, role }); } catch {}
+      }
+      return out;
+    } catch { return []; }
+  }
   async function fetchLiveLink() {
     try {
       const it = await techIssue('muse-sante'); if (!it) return null;
@@ -579,14 +590,15 @@
   }
   async function callAgent(a) {
     if (!a) return;
+    try { cctx(); } catch {}   // 🔊 débloque le son du téléphone pendant le toucher (sinon Chrome le garde muet)
     try { if (!a.issue) { await ensureIssue(a); await save(`Agent ${a.name} : discussion`); } } catch (e) { toast('' + e.message); return; }
     if (CALL.on) return endCall('Appel terminé.');
-    const L = (await fetchLiveLink()) || liveLink();
-    if (L) return startCall(a, L);   // 📞 c'est la mascotte de l'agent, ici, qui répond
-    if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) { const u = 'http://127.0.0.1:8790/avatar' + `?agent=${encodeURIComponent(a.id)}&issue=${encodeURIComponent(a.issue)}`; if (!window.open(u, '_blank', 'noopener')) location.href = u; return; }   // secours : page du PC
-    askLiveCode(a);
+    const links = await fetchLiveLinks(), own = liveLink();
+    if (own && !links.some((l) => l.u === own.u)) links.push({ ...own, role: 'code' });
+    startCall(a, links);   // 📞 c'est la mascotte de l'agent, ici, qui répond (PC, sinon serveur 24 h/24, sinon secours par GitHub)
   }
   window.museCallAgent = (id) => callAgent(st.items.find((x) => x.id === id));
+  window.museCallSay = (t) => { if (CALL.on && t) cSend(String(t)); };   // parler par écrit pendant un appel (et tests)
   const callBtn = (() => {
     const tr = document.querySelector('#top .tr') || document.querySelector('.tr'); if (!tr) return null;
     const b = document.createElement('button'); b.type = 'button'; b.id = 'agCall'; b.className = 'agCall'; b.hidden = true;
@@ -736,6 +748,7 @@
   }
   function cStopGuard() { const g = CALL.guard; CALL.guard = null; try { if (g) { g.onend = null; g.abort(); } } catch {} }
   function cInterrupt() {
+    if (CALL.slow) CALL.slowGen++;   // mode secours : on oublie la réponse en attente
     cStopGuard(); cStopPlayback(); try { CALL.ws.send(JSON.stringify({ type: 'stop' })); } catch {}
     CALL.thinking = false; CALL.doneSeen = true; if (head) head.gesture('nod'); cState('idle', 'Je t’écoute'); setTimeout(cListen, 280);
   }
@@ -759,6 +772,7 @@
   function cStopListening() { try { if (CALL.rec) CALL.rec.abort(); } catch {} CALL.listening = false; }
   function cSend(t) {
     if (C_QUIT.test(t) && !Object.values(CALL.tasks).some((x) => !x.done)) { endCall('À plus tard !'); return; }
+    if (CALL.slow) return slowSend(t);
     cStopListening(); cStopGuard(); cStopPlayback(); CALL.doneSeen = false; CALL.thinking = true;
     if (head) head.gesture('nod'); cState('think', 'Il réfléchit…');
     try { CALL.ws.send(JSON.stringify({ type: 'say', text: t })); } catch {}
@@ -778,23 +792,30 @@
     if (CALL.t0) { const s = Math.floor((Date.now() - CALL.t0) / 1000), mm = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); if (CALL.clock !== mm) { CALL.clock = mm; if (cbar) cbar.querySelector('.cbClock').textContent = mm; const stEl = $('#status'); if (stEl) stEl.textContent = '📞 ' + mm; } }
     requestAnimationFrame(cLoop);
   }
-  async function startCall(a, L) {
+  async function startCall(a, links) {
     if (CALL.on) return;
     if (Number(issueNo) !== Number(a.issue)) await openConv(a.issue);
     let barge = true; try { barge = localStorage.getItem('museCallBarge') !== '0'; } catch {}
-    Object.assign(CALL, { on: true, a, ws: null, rec: null, guard: null, vad: null, sources: [], playAt: 0, speaking: false, thinking: false, listening: false, fake: false, doneSeen: true, t0: 0, clock: '', tasks: {}, barge, bargeFail: false, state: '' });
-    cctx(); bigHead(a); callBarUi(a); cState('think', 'Je joins ton PC…'); syncHeader();
+    Object.assign(CALL, { on: true, a, ws: null, rec: null, guard: null, vad: null, sources: [], playAt: 0, speaking: false, thinking: false, listening: false, fake: false, doneSeen: true, t0: 0, clock: '', tasks: {}, slow: false, slowGen: 0, cands: [], ci: -1, via: '', barge, bargeFail: false, state: '' });
+    cctx(); bigHead(a); callBarUi(a); cState('think', 'Ça sonne…'); syncHeader();
     $('#who').dataset.call = '1'; if (nameEl) nameEl.textContent = a.name;
     requestAnimationFrame(cLoop);
-    // 🔎 D'abord : le PC est-il joignable depuis cet appareil ? (sinon on explique précisément quoi faire)
-    const base = L.u.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/live\/?$/, '');
-    let ping = null;
-    try { const r = await fetch(base + '/ping', { cache: 'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined }); ping = await r.json(); } catch { ping = null; }
+    // 🔎 Qui répond ? On teste tous les liens en même temps ; ceux qui répondent d'abord, le PC avant le serveur
+    const baseOf = (L) => L.u.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/live\/?$/, '');
+    const pingOk = async (L) => { try { const r = await fetch(baseOf(L) + '/ping', { cache: 'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined }); return !!(await r.json()).ok; } catch { return false; } };
+    const oks = await Promise.all(links.map(pingOk));
     if (!CALL.on) return;
-    if (!ping || !ping.ok) return callFail('unreach', base);
-    CALL.pinged = true;
-    const ws = liveTransport(L, base, (data) => onMsg(data), () => { if (CALL.on && CALL.ws === ws) { if (CALL.t0) endCall('Appel coupé : le PC ne répond plus.'); else callFail('refused', base); } });
-    CALL.ws = ws;
+    CALL.cands = links.map((l, i) => ({ l, ok: oks[i] })).sort((x, y) => (y.ok - x.ok) || ((x.l.role === 'pc' ? 0 : 1) - (y.l.role === 'pc' ? 0 : 1))).map((x) => x.l);
+    CALL.ci = -1; connectNext();
+  }
+  function connectNext() {
+    if (!CALL.on) return;
+    const a = CALL.a; CALL.ci++;
+    if (CALL.ci >= CALL.cands.length) return slowStart();   // ni PC ni serveur : secours par GitHub
+    const L = CALL.cands[CALL.ci], base = L.u.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/live\/?$/, '');
+    cState('think', L.role === 'server' ? 'Je joins le serveur…' : 'Je joins ton PC…');
+    const ws = liveTransport(L, base, (data) => onMsg(data), () => { if (CALL.on && CALL.ws === ws) { if (CALL.t0) endCall('Appel coupé : la liaison ne répond plus.'); else { CALL.ws = null; connectNext(); } } });
+    CALL.ws = ws; CALL.via = L.role;
     ws.send(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: a.id, issue: a.issue }));
     const onMsg = (data) => {
       let m; try { m = JSON.parse(data); } catch { return; }
@@ -814,42 +835,79 @@
     };
   }
   // 🔌 Liaison avec le PC : WebSocket d'abord ; si rien n'arrive en 4 s (proxy Tailscale + Chrome), on passe en « flux » (SSE + envois POST), qui passe partout.
+  // 🐢 Mode secours (PC et serveur vocal éteints) : ta phrase part dans la discussion de l'agent, GitHub y répond,
+  // et la mascotte lit la réponse avec la voix du téléphone. Plus lent (20 à 60 s), mais ça marche toujours.
+  const speakText = (b) => String(b || '').replace(/<!--[\s\S]*?-->/g, ' ').replace(/```[\s\S]*?```/g, ' ').replace(/\[\[[\s\S]*?\]\]/g, ' ')
+    .replace(/<details[\s\S]*?<\/details>/g, ' ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '').replace(/^\s*[-•*]\s+/gm, '').replace(/[*_`#>|]/g, '').replace(/\s+/g, ' ').trim().slice(0, 900);
+  function slowSay(text) {
+    if (!CALL.on || !text) return;
+    CALL.doneSeen = true; CALL.thinking = false; if (head) head.busy(false);
+    const t = String(text); if (head) head.mood(/désolé|malheureusement|problème|erreur|impossible/i.test(t) ? 'inquiete' : /!/.test(t) ? 'joie' : 'calme');
+    cState('speak', 'Il parle'); cSpeakFallback(t);
+    if (!window.speechSynthesis) cAfterSpeech();
+  }
+  function slowStart() {
+    if (!CALL.on) return;
+    const a = CALL.a; CALL.slow = true; CALL.ws = null; CALL.t0 = Date.now(); CALL.slowGen = 0;
+    if (cbar) cbar.querySelector('.cbYou').textContent = '🐢 PC et serveur vocal éteints : je passe par GitHub, chaque réponse prend 20 à 60 secondes.';
+    if (head) { head.gesture('wave'); head.job(C_JOBS.includes(a.id) ? a.id : jobOf(a)); }
+    slowSay(`Allô Cédric, c'est ${a.name}. Ton PC est éteint, alors je passe par le nuage : je serai un peu plus lent à répondre. Je t'écoute !`);
+  }
+  async function slowSend(t) {
+    const a = CALL.a, g = ++CALL.slowGen;
+    cStopListening(); cStopGuard(); cStopPlayback(); CALL.doneSeen = false; CALL.thinking = true;
+    if (head) { head.gesture('nod'); head.busy(true); } cState('think', 'Il réfléchit… (≈ 30 s)');
+    try {
+      const c = await gh(`/repos/${cfg.repo}/issues/${a.issue}/comments`, { method: 'POST', body: JSON.stringify({ body: `📞 ${t}\n\n<!--vocal--><!--mode:auto-->` }) });
+      const t0 = Date.now();
+      while (CALL.on && g === CALL.slowGen && Date.now() - t0 < 4 * 60 * 1000) {
+        await new Promise((r) => setTimeout(r, 3000));
+        if (!CALL.on || g !== CALL.slowGen) return;
+        const cs = await gh(`/repos/${cfg.repo}/issues/${a.issue}/comments?per_page=50&since=${encodeURIComponent(c.created_at)}`).catch(() => []);
+        const rep = (cs || []).find((x) => x.id > c.id && /<!--muse-(reply|error)-->/.test(x.body) && !x.body.includes('<!--muse-voice-->'));
+        if (rep) { if (rep.body.includes('<!--muse-error-->')) return slowSay('Petit souci de mon côté : ' + speakText(rep.body)); return slowSay(speakText(rep.body) || 'C’est fait, regarde dans le chat.'); }
+      }
+      if (CALL.on && g === CALL.slowGen) slowSay('Ça prend plus de temps que prévu. Je te mets la réponse dans le chat.');
+    } catch (e) { if (CALL.on && g === CALL.slowGen) slowSay('Je n’arrive pas à envoyer ta demande : ' + e.message); }
+  }
   function liveTransport(L, base, onMsg, onClose) {
     const tok = encodeURIComponent(L.t), out = [];
     let mode = 'ws', ws = null, es = null, sid = '', got = false, dead = false, timer = 0;
-    const T = { readyState: 0, send(str) { if (dead) return; if (mode === 'ws' && ws && ws.readyState === 1) ws.send(str); else if (mode === 'sse' && sid) post(str); else out.push(str); }, close() { dead = true; T.readyState = 3; clearTimeout(timer); try { if (ws) ws.close(); } catch {} try { if (es) es.close(); } catch {} } };
+    const T = { trace: [], readyState: 0, send(str) { if (dead) return; if (mode === 'ws' && ws && ws.readyState === 1) ws.send(str); else if (mode === 'sse' && sid) post(str); else out.push(str); }, close() { dead = true; T.readyState = 3; clearTimeout(timer); try { if (ws) ws.close(); } catch {} try { if (es) es.close(); } catch {} } };
     const post = (str) => fetch(`${base}/live/send?t=${tok}&sid=${sid}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: str }).then((r) => { if (!r.ok && r.status !== 404) throw new Error(r.status); if (r.status === 404 && !dead) { T.close(); onClose(); } }).catch(() => {});
     const flush = () => { while (out.length) T.send(out.shift()); };
     const fail = () => { if (dead) return; T.close(); onClose(); };
     function sse() {
       mode = 'sse'; try { if (ws) { ws.onclose = null; ws.close(); } } catch {} ws = null;
-      es = new EventSource(`${base}/live/sse?t=${tok}`);
-      es.addEventListener('sid', (e) => { sid = e.data; T.readyState = 1; flush(); });
+      T.trace.push('flux'); es = new EventSource(`${base}/live/sse?t=${tok}`);
+      es.addEventListener('sid', (e) => { sid = e.data; T.readyState = 1; T.trace.push('flux ouvert'); flush(); });
       es.onmessage = (e) => { got = true; if (!dead) onMsg(e.data); };
-      es.onerror = () => { if (!dead && (es.readyState === 2 || !sid || got)) fail(); };
-      timer = setTimeout(() => { if (!got && !dead) fail(); }, 9000);
+      es.onerror = () => { T.trace.push('flux erreur'); if (!dead && (es.readyState === 2 || !sid || got)) fail(); };
+      timer = setTimeout(() => { if (!got && !dead) fail(); }, 7000);
     }
     try {
       ws = new WebSocket(L.u.replace(/\/live\/?$/, '') + '/live?t=' + tok);
-      ws.onopen = () => { T.readyState = 1; flush(); };
-      ws.onmessage = (ev) => { if (!got) { got = true; clearTimeout(timer); } if (!dead) onMsg(ev.data); };
+      T.trace.push('ws');
+      ws.onopen = () => { T.readyState = 1; T.trace.push('ws ouvert'); flush(); };
+      ws.onmessage = (ev) => { if (!got) { got = true; clearTimeout(timer); T.trace.push('ws reçoit'); } if (!dead) onMsg(ev.data); };
       ws.onerror = () => {};
-      ws.onclose = () => { if (dead || mode !== 'ws') return; if (!got) { out.length = 0; out.push(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: CALL.a && CALL.a.id, issue: CALL.a && CALL.a.issue })); sse(); } else fail(); };
+      ws.onclose = (e) => { T.trace.push(`ws fermé ${e && e.code}`); if (dead || mode !== 'ws') return; if (!got) { out.length = 0; out.push(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: CALL.a && CALL.a.id, issue: CALL.a && CALL.a.issue })); sse(); } else fail(); };
       timer = setTimeout(() => { if (!got && !dead) { out.length = 0; out.push(JSON.stringify({ type: 'hello', role: 'talk', avatar: true, agent: CALL.a && CALL.a.id, issue: CALL.a && CALL.a.issue })); sse(); } }, 4000);
     } catch { sse(); }
     return T;
   }
   // ❌ L'appel n'a pas pu commencer : on garde la barre ouverte avec l'explication et des boutons pour régler ça
-  function callFail(kind, base) {
+  function callFail(kind, base, trace) {
     const a = CALL.a; CALL.on = false;
     cStopListening(); cStopGuard(); cStopPlayback(); try { if (CALL.ws) CALL.ws.close(); } catch {}
     const host = base.replace(/^https?:\/\//, '');
     const txt = kind === 'unreach'
-      ? `📵 Cet appareil n'arrive pas à joindre ton PC (${host}). Vérifie : ① l'appli Tailscale de cet appareil est activée (« Connected ») ; ② le PC est allumé, avec le démon Muse lancé ; ③ Chrome a le droit d'accéder aux appareils du réseau local (🔒 à gauche de l'adresse → Autorisations).`
+      ? `📵 Cet appareil n'arrive pas à joindre ton PC (${host}). Vérifie : ① l'appli Tailscale de cet appareil est activée (« Connected ») ; ② le PC est allumé, avec le démon Muse lancé ; ③ si Chrome demande l'accès aux « appareils du réseau local », accepte (sinon : 🔒 à gauche de l'adresse → Autorisations → Réseau local → Autoriser).`
       : `🔐 Ton PC répond, mais il refuse l'appel (lien expiré ou démon pas à jour). Sur le PC : systemctl --user restart muse-daemon, attends une minute, puis réessaie.`;
     if (cbar) {
       cbar.dataset.s = 'fail'; cbar.querySelector('.cbState').textContent = 'Appel impossible';
-      cbar.querySelector('.cbSub').textContent = txt; cbar.querySelector('.cbYou').textContent = '';
+      cbar.querySelector('.cbSub').textContent = txt; cbar.querySelector('.cbYou').textContent = trace && trace.length ? `Détail technique : ${trace.join(' → ')}` : '';
       cbar.querySelector('.cbBtns').innerHTML = `<button type="button" class="cbTest">🔎 Tester le lien</button><button type="button" class="cbRetry">🔁 Réessayer</button><button type="button" class="cbClose">Fermer</button>`;
       cbar.querySelector('.cbTest').onclick = () => window.open(base + '/ping', '_blank', 'noopener');
       cbar.querySelector('.cbRetry').onclick = () => { resetBar(); callAgent(a); };
