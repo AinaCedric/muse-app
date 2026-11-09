@@ -87,8 +87,20 @@ function mdTables(h) {
   });
 }
 const TAG_CLS = (t) => (/(v[ée]rifi|confirm[ée]|officiel|ouvert|disponible|gratuit)/i.test(t) && !/à confirmer/i.test(t) ? 'ok' : /(à confirmer|attention|incertain|ferm|risque|rumeur|non publi|cher)/i.test(t) ? 'warn' : 'est');
+// 🎬 Carte « vidéo regardée » : vignette, lien, durée, langue et TRANSCRIPTION complète (horodatée, repliable)
+function videoCard(b) {
+  let v; try { v = JSON.parse(decodeURIComponent(escape(atob(b.replace(/-/g, '+').replace(/_/g, '/'))))); } catch { return ''; }
+  const mm = (n) => `${Math.floor(n / 60)}:${String(Math.round(n) % 60).padStart(2, '0')}`;
+  const url = /^https?:\/\//i.test(v.u || '') ? v.u : '', th = /^[A-Za-z0-9+/=]+$/.test(v.th || '') ? v.th : '';
+  const rows = String(v.tr || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const lines = rows.map((l) => { const m = l.match(/^\[(\d+:\d{2})\]\s*(.*)$/); return m ? `<div class="vtL"><span class="vtT">${esc(m[1])}</span><span>${esc(m[2])}</span></div>` : `<div class="vtL"><span>${esc(l)}</span></div>`; }).join('');
+  const meta = [v.a, v.d ? mm(v.d) : '', v.l ? `langue : ${v.l}` : ''].filter(Boolean).map(esc).join(' · ');
+  const thumb = `${th ? `<img src="data:image/jpeg;base64,${th}" alt="">` : '<span class="vidPh">🎬</span>'}<span class="vidPlay">▶</span>`;
+  return `<span class="vidCard"><span class="vidTop">${url ? `<a class="vidTh" href="${esc(url)}" target="_blank" rel="noopener">${thumb}</a>` : `<span class="vidTh">${thumb}</span>`}<span class="vidMeta"><b>🎬 ${esc(v.t || 'Vidéo regardée')}</b><small>${meta}</small>${url ? `<a class="vidOpen" href="${esc(url)}" target="_blank" rel="noopener">▶️ Ouvrir la vidéo</a>` : ''}</span></span>${lines ? `<details class="vidTr"><summary>📝 Transcription · ${rows.length} ligne${rows.length > 1 ? 's' : ''}</summary><span class="vtBox">${lines}</span></details>` : v.n ? `<span class="vidNote">${esc(v.n)}</span>` : ''}</span>`;
+}
 function render(text) {
   let h = esc(text);
+  const vids = []; h = h.replace(/\[\[VIDEO:([A-Za-z0-9_-]+)\]\]/g, (_, b) => { vids.push(b); return `\u0001${vids.length - 1}\u0001`; });
   h = h.replace(/```(\w*)\n([\s\S]*?)(```|$)/g, (_, l, c) => `<pre><code>${c}</code></pre>`);
   h = mdTables(h);
   h = h.replace(/\[\[TAG:([^\]]{1,30})\]\]/g, (_, t) => `<span class="tag ${TAG_CLS(t)}">${t}</span>`);
@@ -100,6 +112,7 @@ function render(text) {
   h = h.replace(/\[\[SRC:([^\]]+)\]\]/g, (_, inner) => { srcs.push(inner); return `\u0000${srcs.length - 1}\u0000`; });
   h = h.replace(/\b(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   h = h.replace(/\u0000(\d+)\u0000/g, (_, i) => srcHtml(srcs[+i]));
+  h = h.replace(/\n*\u0001(\d+)\u0001\n*/g, (_, i) => videoCard(vids[+i]));
   return h;
 }
 // Mosaïque d'ouverture (1 grande + 2 petites, « +N » pour voir les autres), comme un guide de voyage
@@ -1436,7 +1449,7 @@ const TTS = (() => {
   // Texte « parlable » : sans markdown, emojis, liens, code ni lignes techniques
   T.clean = (md) => {
     let t = String(md || '')
-      .replace(/\n?[ \t]*\[\[\+\]\][ \t]*\n?/g, '\n\n').replace(/<!--[\s\S]*?-->/g, ' ').replace(/\[\[IMG:[^\]]*\]\]/g, ' ').replace(/\[\[REMEMBER:[\s\S]*?\]\]/g, ' ')
+      .replace(/\n?[ \t]*\[\[\+\]\][ \t]*\n?/g, '\n\n').replace(/<!--[\s\S]*?-->/g, ' ').replace(/\[\[(IMG|VIDEO):[^\]]*\]\]/g, ' ').replace(/\[\[REMEMBER:[\s\S]*?\]\]/g, ' ')
       .replace(/^[ \t]*(🧭|ℹ️|🧠|📎)[^\n]*$/gm, ' ')
       .replace(/^[ \t]*Code de confirmation\s*:[^\n]*$/gim, ' ')
       .replace(/^[ \t]*Sources?\s*:[\s\S]*$/im, ' ')
