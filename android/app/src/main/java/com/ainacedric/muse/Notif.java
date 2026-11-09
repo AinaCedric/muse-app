@@ -146,6 +146,7 @@ class Notif {
             if (face != null) b.setLargeIcon(face);
         }
         b.setNumber(1);
+        b.setBadgeIconType(Notification.BADGE_ICON_SMALL);   // 🔴 le lanceur compte cette notification sur l'icône « Muse »
         Notification built = b.build();
         try {   // MIUI (Xiaomi) : compteur de l'icône
             Object extra = built.getClass().getDeclaredField("extraNotification").get(built);
@@ -160,13 +161,13 @@ class Notif {
     private static void channels(NotificationManager nm) {
         NotificationChannel r = new NotificationChannel("replies", "Réponses de Muse", NotificationManager.IMPORTANCE_HIGH);
         r.setDescription("Quand Muse a fini de répondre, et ton programme du matin");
-        r.setLightColor(ACCENT); r.enableLights(true);
+        r.setLightColor(ACCENT); r.enableLights(true); r.setShowBadge(true);
         NotificationChannel w = new NotificationChannel("watch", "Alertes de la veille", NotificationManager.IMPORTANCE_HIGH);
         w.setDescription("Ce que la veille proactive a repéré d'important");
-        w.setLightColor(0xFFFF9A3C); w.enableLights(true);
+        w.setLightColor(0xFFFF9A3C); w.enableLights(true); w.setShowBadge(true);
         NotificationChannel k = new NotificationChannel("confirm", "Accords à donner", NotificationManager.IMPORTANCE_HIGH);
         k.setDescription("Muse attend ton OUI avant d'envoyer un message ou de faire une action sensible");
-        k.setLightColor(ACCENT); k.enableLights(true); k.enableVibration(true);
+        k.setLightColor(ACCENT); k.enableLights(true); k.enableVibration(true); k.setShowBadge(true);
         k.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
         nm.createNotificationChannel(r); nm.createNotificationChannel(w); nm.createNotificationChannel(k);
     }

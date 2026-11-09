@@ -55,10 +55,8 @@
             android:icon="@mipmap/ic_launcher"
             android:roundIcon="@mipmap/ic_launcher"
             android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <!-- Plus d'icône séparée : UNE seule icône « Muse » sur l'écran d'accueil, pour que le chiffre rouge s'y affiche.
+                 Les réglages s'ouvrent par un appui long sur « Muse » → Réglages (ou automatiquement tant que l'appli n'est pas reliée). -->
         </activity>
 
         <!-- Icône « Muse » : ouvre le chat ; le chiffre rouge des discussions non lues s'affiche dessus -->
@@ -76,6 +74,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
         <receiver

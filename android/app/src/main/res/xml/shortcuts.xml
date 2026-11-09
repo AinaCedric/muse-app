@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Appui long sur l'icône « Muse » : accès aux réglages techniques (ancienne icône « Muse Tél. ») -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="reglages"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/sc_settings"
+        android:shortcutLongLabel="@string/sc_settings_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.ainacedric.muse"
+            android:targetClass="com.ainacedric.muse.MainActivity" />
+    </shortcut>
+</shortcuts>

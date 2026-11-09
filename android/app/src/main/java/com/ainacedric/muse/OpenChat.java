@@ -8,6 +8,8 @@ import android.os.Bundle;
 public class OpenChat extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        // Pas encore relié (premier lancement) : on ouvre les réglages ; sinon le chat
+        if (!Store.linked(this)) { try { startActivity(new android.content.Intent(this, MainActivity.class)); } catch (Throwable ignore) { } finish(); overridePendingTransition(0, 0); return; }
         Chat.open(this);
         finish();
         overridePendingTransition(0, 0);
