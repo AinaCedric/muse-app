@@ -40,14 +40,20 @@
         </intent>
     </queries>
 
+    <!-- Le nom et l'icône de l'APPLI (ceux que montrent les notifications, Paramètres → Applis) : « Muse ».
+         Le réglage technique garde son propre nom « Muse Tél. » sur l'écran d'accueil. -->
     <application
-        android:label="Muse Tél."
-        android:icon="@mipmap/ic_launcher"
+        android:label="Muse"
+        android:icon="@mipmap/ic_muse_chat"
+        android:roundIcon="@mipmap/ic_muse_chat"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
             android:name=".MainActivity"
+            android:label="Muse Tél."
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
